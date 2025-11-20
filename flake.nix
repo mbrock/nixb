@@ -5,7 +5,7 @@
 
   outputs = { self, nixpkgs }:
     let
-      systems = [ "x86_64-linux" "aarch64-linux" ];
+      systems = [ "x86_64-linux" "aarch64-linux" "aarch64-darwin" ];
       forAllSystems = f: nixpkgs.lib.genAttrs systems (system: f system);
     in
     {
@@ -14,21 +14,32 @@
           pkgs = import nixpkgs { inherit system; };
         in
         {
-          default = pkgs.mkShell {
+          default = pkgs.mkShellNoCC {
+            buildInputs = with pkgs; [
+              nix.dev pkg-config boost
+            ];
             packages = with pkgs; [
               meson
               ninja
               cmake
-              pkg-config
-              clang
-              clang-tools
               python3
               git
+              nixd              
             ];
-
             shellHook = ''
-              export CC=clang
-              export CXX=clang++
+              unset MACOSX_DEPLOYMENT_TARGET
+
+              store_include=$(pkg-config --variable=includedir nix-store 2>/dev/null || true)
+              util_include=$(pkg-config --variable=includedir nix-util 2>/dev/null || true)
+              expr_include=$(pkg-config --variable=includedir nix-expr 2>/dev/null || true)
+
+              if [ -n "$store_include" ] && [ -n "$util_include" ]; then
+                export NIX_API_INPUTS="''${store_include}/nix/store ''${util_include}/nix/util"
+              fi
+
+              if [ -n "$store_include" ] && [ -n "$util_include" ] && [ -n "$expr_include" ]; then
+                export NIX_API_INCLUDE_PATH="''${store_include} ''${util_include} ''${expr_include}"
+              fi
             '';
           };
         });

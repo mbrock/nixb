@@ -10,7 +10,16 @@ project('nixb', 'cpp',
 fmt_dep = dependency('fmt', fallback : ['fmt', 'fmt_dep'])
 simdjson_dep = dependency('simdjson', fallback : ['simdjson', 'simdjson_dep'])
 cli11_dep = dependency('cli11', fallback : ['cli11', 'CLI11_dep'])
+nix_store_dep = dependency('nix-store')
+nix_expr_dep = dependency('nix-expr')
+boost_dep = dependency('boost')
 
-executable('nixb', 'src/main.cpp',
-  dependencies : [fmt_dep, simdjson_dep, cli11_dep],
+add_project_arguments(
+  '-Wno-missing-field-initializers',
+  '-Wno-unused-parameter',
+  language: 'cpp'
+)
+
+executable('nixb', ['src/main.cpp', 'src/nix_log_parser.cpp'],
+  dependencies : [fmt_dep, simdjson_dep, cli11_dep, nix_store_dep, nix_expr_dep, boost_dep],
   install : true)

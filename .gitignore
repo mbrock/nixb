@@ -17,4 +17,10 @@
 *.so.*
 *.ninja
 *.pc
+.DS_Store
 result*
+.cache
+build.log
+
+# Generated documentation
+/docs/nix-api/

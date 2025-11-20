@@ -1,4 +1,4 @@
-.PHONY: all setup build clean
+.PHONY: all setup build clean docs
 
 # Default build dir
 BUILDDIR ?= build
@@ -17,3 +17,5 @@ $(BUILDDIR)/build.ninja:
 
 clean:
 	rm -rf $(BUILDDIR) meson-logs meson-private compile_commands.json
+
+docs:; doxygen docs/Doxyfile.nix-api
