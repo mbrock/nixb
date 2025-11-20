@@ -1,0 +1,13 @@
+[wrap-file]
+directory = simdjson-3.10.1
+source_url = https://github.com/simdjson/simdjson/archive/refs/tags/v3.10.1.tar.gz
+source_filename = simdjson-3.10.1.tar.gz
+source_hash = 1e8f881cb2c0f626c56cd3665832f1e97b9d4ffc648ad9e1067c134862bba060
+patch_filename = simdjson_3.10.1-1_patch.zip
+patch_url = https://wrapdb.mesonbuild.com/v2/simdjson_3.10.1-1/get_patch
+patch_hash = d3173ab3f56ab3c86a598f2493a426bfba528183b1510f56ca27e64b7519c92c
+source_fallback_url = https://github.com/mesonbuild/wrapdb/releases/download/simdjson_3.10.1-1/simdjson-3.10.1.tar.gz
+wrapdb_version = 3.10.1-1
+
+[provide]
+simdjson = simdjson_dep

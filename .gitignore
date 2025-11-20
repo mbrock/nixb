@@ -1,0 +1,20 @@
+# Build outputs
+/build/
+/meson-logs/
+/meson-private/
+/compile_commands.json
+
+# Wrap-extracted subprojects
+/subprojects/*-*/
+
+# Direnv / local env
+/.direnv/
+
+# Misc
+*.o
+*.a
+*.so
+*.so.*
+*.ninja
+*.pc
+result*
