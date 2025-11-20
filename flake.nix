@@ -22,6 +22,7 @@
               pkg-config
               clang
               clang-tools
+              python3
               git
             ];
 
