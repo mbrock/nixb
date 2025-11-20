@@ -1,4 +1,8 @@
-.PHONY: all setup build clean docs
+.PHONY: all setup build clean docs test
+
+ifndef IN_NIX_SHELL
+$(error You need to run this under 'nix develop')
+endif
 
 # Default build dir
 BUILDDIR ?= build
@@ -19,3 +23,6 @@ clean:
 	rm -rf $(BUILDDIR) meson-logs meson-private compile_commands.json
 
 docs:; doxygen docs/Doxyfile.nix-api
+
+test: build
+	./test.sh

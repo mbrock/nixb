@@ -9,46 +9,24 @@
 #include <vector>
 
 #include <boost/describe/enum.hpp>
+#include <nix/util/logging.hh>
+
+BOOST_DESCRIBE_ENUM(nix::ActivityType, actUnknown, actCopyPath, actFileTransfer,
+                    actRealise, actCopyPaths, actBuilds, actBuild,
+                    actOptimiseStore, actVerifyPaths, actSubstitute,
+                    actQueryPathInfo, actPostBuildHook, actBuildWaiting,
+                    actFetchTree)
+
+BOOST_DESCRIBE_ENUM(nix::ResultType, resFileLinked, resBuildLogLine,
+                    resUntrustedPath, resCorruptedPath, resSetPhase,
+                    resProgress, resSetExpected, resPostBuildLogLine,
+                    resFetchStatus)
 
 namespace nixb {
 
-enum class ActivityType {
-  Unknown = 0,
-  CopyPath = 100,
-  FileTransfer = 101,
-  Realise = 102,
-  CopyPaths = 103,
-  Builds = 104,
-  Build = 105,
-  OptimiseStore = 106,
-  VerifyPaths = 107,
-  Substitute = 108,
-  QueryPathInfo = 109,
-  PostBuildHook = 110,
-  BuildWaiting = 111,
-  FetchTree = 112,
-};
-
-BOOST_DESCRIBE_ENUM(ActivityType, Unknown, CopyPath, FileTransfer, Realise,
-                    CopyPaths, Builds, Build, OptimiseStore, VerifyPaths,
-                    Substitute, QueryPathInfo, PostBuildHook, BuildWaiting,
-                    FetchTree)
-
-enum class ResultType {
-  FileLinked = 100,
-  BuildLogLine = 101,
-  UntrustedPath = 102,
-  CorruptedPath = 103,
-  SetPhase = 104,
-  Progress = 105,
-  SetExpected = 106,
-  PostBuildLogLine = 107,
-  FetchStatus = 108,
-};
-
-BOOST_DESCRIBE_ENUM(ResultType, FileLinked, BuildLogLine, UntrustedPath,
-                    CorruptedPath, SetPhase, Progress, SetExpected,
-                    PostBuildLogLine, FetchStatus)
+using ActivityType = nix::ActivityType;
+using ResultType = nix::ResultType;
+using ActivityId = nix::ActivityId;
 
 struct StartEvent {
   int64_t id;
@@ -56,21 +34,32 @@ struct StartEvent {
   ActivityType type;
   std::string text;
   std::vector<std::string> fields;
+
+  std::string format() const;
 };
 
 struct StopEvent {
   int64_t id;
+
+  std::string format(std::string_view type_name, std::string_view activity_text,
+                     bool build_success) const;
 };
 
 struct ResultEvent {
   int64_t id;
   ResultType type;
   std::vector<std::variant<int64_t, std::string>> fields;
+
+  std::optional<std::string_view> get_string(size_t idx) const;
+  std::optional<int64_t> get_int(size_t idx) const;
+  std::string format() const;
 };
 
 struct MsgEvent {
   int64_t level;
   std::string msg;
+
+  std::string format() const;
 };
 
 using LogEvent = std::variant<StartEvent, StopEvent, ResultEvent, MsgEvent>;

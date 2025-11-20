@@ -1,8 +1,13 @@
 #include "nix_log_parser.hpp"
 
+#include <fmt/color.h>
+#include <fmt/core.h>
+
 #include <boost/describe/enum_to_string.hpp>
 #include <boost/describe/enumerators.hpp>
 #include <boost/mp11/algorithm.hpp>
+
+#include <iterator>
 
 namespace nixb {
 
@@ -17,14 +22,31 @@ template <typename Enum> std::optional<Enum> enum_from_int(int64_t v) {
       });
   return result;
 }
+
+std::string_view trim_trailing_newline(std::string_view text) {
+  while (!text.empty() && (text.back() == '\n' || text.back() == '\r')) {
+    text.remove_suffix(1);
+  }
+  return text;
+}
 } // namespace
 
 std::string_view NixLogParser::activity_type_name(ActivityType t) {
-  return boost::describe::enum_to_string(t, "Unknown");
+  std::string_view name = boost::describe::enum_to_string(t, "Unknown");
+  constexpr std::string_view prefix = "act";
+  if (name.rfind(prefix, 0) == 0) {
+    name.remove_prefix(prefix.size());
+  }
+  return name;
 }
 
 std::string_view NixLogParser::result_type_name(ResultType t) {
-  return boost::describe::enum_to_string(t, "UnknownResult");
+  std::string_view name = boost::describe::enum_to_string(t, "UnknownResult");
+  constexpr std::string_view prefix = "res";
+  if (name.rfind(prefix, 0) == 0) {
+    name.remove_prefix(prefix.size());
+  }
+  return name;
 }
 
 std::optional<LogEvent> NixLogParser::parse_line(std::string_view line) {
@@ -54,8 +76,8 @@ std::optional<LogEvent> NixLogParser::parse_line(std::string_view line) {
     if (auto v = doc["level"].get_int64(); !v.error())
       event.level = v.value();
     if (auto v = doc["type"].get_int64(); !v.error()) {
-      event.type = enum_from_int<ActivityType>(v.value()).value_or(
-          ActivityType::Unknown);
+      event.type =
+          enum_from_int<ActivityType>(v.value()).value_or(nix::actUnknown);
     } else {
       return std::nullopt;
     }
@@ -85,7 +107,7 @@ std::optional<LogEvent> NixLogParser::parse_line(std::string_view line) {
       return std::nullopt;
     if (auto v = doc["type"].get_int64(); !v.error()) {
       event.type =
-          enum_from_int<ResultType>(v.value()).value_or(ResultType::FileLinked);
+          enum_from_int<ResultType>(v.value()).value_or(nix::resFileLinked);
     } else {
       return std::nullopt;
     }
@@ -110,6 +132,145 @@ std::optional<LogEvent> NixLogParser::parse_line(std::string_view line) {
   }
 
   return std::nullopt;
+}
+
+std::string StartEvent::format() const {
+  fmt::memory_buffer buf;
+  fmt::format_to(std::back_inserter(buf), "{} ",
+                 fmt::styled("[start]", fmt::fg(fmt::terminal_color::blue)));
+  fmt::format_to(std::back_inserter(buf), "{} ",
+                 NixLogParser::activity_type_name(type));
+  if (!text.empty()) {
+    fmt::format_to(std::back_inserter(buf), "{}",
+                   fmt::styled(text, fmt::fg(fmt::terminal_color::white)));
+  }
+  fmt::format_to(std::back_inserter(buf), "\n");
+  return fmt::to_string(buf);
+}
+
+std::string StopEvent::format(std::string_view type_name,
+                              std::string_view activity_text,
+                              bool build_success) const {
+  fmt::memory_buffer buf;
+  fmt::format_to(std::back_inserter(buf), "{} {}",
+                 fmt::styled("[stop]", fmt::fg(fmt::terminal_color::red)),
+                 type_name);
+  if (build_success) {
+    fmt::format_to(std::back_inserter(buf), " {}",
+                   fmt::styled("OK", fmt::fg(fmt::terminal_color::green)));
+  }
+  if (!activity_text.empty()) {
+    fmt::format_to(std::back_inserter(buf), " {}", activity_text);
+  }
+  fmt::format_to(std::back_inserter(buf), "\n");
+  return fmt::to_string(buf);
+}
+
+std::string MsgEvent::format() const {
+  return fmt::format(
+      "{} {}\n", fmt::styled("[msg]", fmt::fg(fmt::terminal_color::cyan)), msg);
+}
+
+std::optional<std::string_view> ResultEvent::get_string(size_t idx) const {
+  if (idx >= fields.size() ||
+      !std::holds_alternative<std::string>(fields[idx])) {
+    return std::nullopt;
+  }
+  return std::get<std::string>(fields[idx]);
+}
+
+std::optional<int64_t> ResultEvent::get_int(size_t idx) const {
+  if (idx >= fields.size() || !std::holds_alternative<int64_t>(fields[idx])) {
+    return std::nullopt;
+  }
+  return std::get<int64_t>(fields[idx]);
+}
+
+std::string ResultEvent::format() const {
+  fmt::memory_buffer buf;
+  bool printed_compact = false;
+
+  auto print_log_line = [&](std::string_view msg_view) {
+    auto faint_style =
+        fmt::fg(fmt::terminal_color::white) | fmt::emphasis::faint;
+    fmt::format_to(std::back_inserter(buf), "{}\n",
+                   fmt::styled(fmt::format("> {}", msg_view), faint_style));
+    printed_compact = true;
+  };
+
+  if (type == nix::resBuildLogLine || type == nix::resPostBuildLogLine ||
+      type == nix::resFetchStatus) {
+    if (auto msg = get_string(0)) {
+      print_log_line(trim_trailing_newline(*msg));
+    }
+  } else if (type == nix::resSetPhase) {
+    if (auto phase = get_string(0)) {
+      fmt::format_to(
+          std::back_inserter(buf), "{} {}\n",
+          fmt::styled("[phase]", fmt::fg(fmt::terminal_color::magenta)),
+          *phase);
+      printed_compact = true;
+    }
+  }
+
+  if (printed_compact) {
+    return fmt::to_string(buf);
+  }
+
+  // Verbose output
+  fmt::format_to(std::back_inserter(buf), "{} {}",
+                 fmt::styled("[result]", fmt::fg(fmt::terminal_color::yellow)),
+                 NixLogParser::result_type_name(type));
+
+  auto append_str = [&](const char *label, size_t idx) {
+    if (auto value = get_string(idx)) {
+      fmt::format_to(std::back_inserter(buf), " {}=\"{}\"", label, *value);
+    }
+  };
+
+  auto append_int = [&](const char *label, size_t idx) {
+    if (auto value = get_int(idx)) {
+      fmt::format_to(std::back_inserter(buf), " {}={}", label, *value);
+    }
+  };
+
+  switch (type) {
+  case nix::resBuildLogLine:
+  case nix::resPostBuildLogLine:
+  case nix::resFetchStatus:
+    fmt::format_to(std::back_inserter(buf), " ");
+    append_str("msg", 0);
+    break;
+  case nix::resSetPhase:
+    fmt::format_to(std::back_inserter(buf), " ");
+    append_str("phase", 0);
+    break;
+  case nix::resProgress:
+    fmt::format_to(std::back_inserter(buf), " ");
+    append_int("done", 0);
+    append_int("expected", 1);
+    append_int("running", 2);
+    append_int("failed", 3);
+    break;
+  case nix::resSetExpected:
+    append_int("activity_type", 0);
+    append_int("expected", 1);
+    break;
+  case nix::resFileLinked:
+    append_int("done", 0);
+    append_int("total", 1);
+    break;
+  case nix::resUntrustedPath:
+  case nix::resCorruptedPath:
+    fmt::format_to(std::back_inserter(buf), " ");
+    append_str("path", 0);
+    break;
+  default:
+    break;
+  }
+
+  fmt::format_to(std::back_inserter(buf), "\n");
+  return fmt::to_string(buf);
 }
 
 } // namespace nixb

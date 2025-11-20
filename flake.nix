@@ -31,14 +31,13 @@
 
               store_include=$(pkg-config --variable=includedir nix-store 2>/dev/null || true)
               util_include=$(pkg-config --variable=includedir nix-util 2>/dev/null || true)
-              expr_include=$(pkg-config --variable=includedir nix-expr 2>/dev/null || true)
 
               if [ -n "$store_include" ] && [ -n "$util_include" ]; then
                 export NIX_API_INPUTS="''${store_include}/nix/store ''${util_include}/nix/util"
               fi
 
-              if [ -n "$store_include" ] && [ -n "$util_include" ] && [ -n "$expr_include" ]; then
-                export NIX_API_INCLUDE_PATH="''${store_include} ''${util_include} ''${expr_include}"
+              if [ -n "$store_include" ] && [ -n "$util_include" ]; then
+                export NIX_API_INCLUDE_PATH="''${store_include} ''${util_include}"
               fi
             '';
           };
