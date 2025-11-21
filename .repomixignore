@@ -6,3 +6,7 @@ testdata
 subprojects
 docs
 
+.clang-format
+*.md
+*.lock
+.envrc

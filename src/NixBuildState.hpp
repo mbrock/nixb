@@ -36,6 +36,7 @@ struct ActivityInfo
   std::string current_phase;
   bool is_finished = false;
   std::optional<std::chrono::steady_clock::time_point> finish_time;
+  std::vector<nix::StorePath> input_drv_paths; // Build dependencies
 
   std::string to_json () const;
 };

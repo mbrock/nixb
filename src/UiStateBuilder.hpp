@@ -4,6 +4,7 @@
 #include "UiTypes.hpp"
 
 #include <cstdint>
+#include <map>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -69,6 +70,12 @@ private:
 
   // Root activity IDs (no parent or parent not in activities)
   std::vector<int64_t> roots_;
+
+  // Dependency tracking: derivation path -> activity ID
+  std::map<std::string, int64_t> drv_path_to_activity_;
+
+  // Dependency tracking: activity ID -> activities that depend on it
+  std::unordered_map<int64_t, std::vector<int64_t>> dependents_;
 
   // The UiState being built
   UiState result_;

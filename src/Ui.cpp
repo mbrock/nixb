@@ -393,21 +393,17 @@ UiSession::UiSession (std::unique_ptr<UiBackend> backend)
 UiSession::~UiSession () = default;
 
 UiSession
-UiSession::create (bool force)
+UiSession::create (bool enable)
 {
-  // TTY detection logic (rationalized - only here, not in TerminalUi)
-  if (!force)
+  if (!enable || !::isatty (STDOUT_FILENO))
     {
-      if (!::isatty (STDOUT_FILENO))
-        {
-          return UiSession (std::make_unique<DumbBackend> ());
-        }
+      return UiSession (std::make_unique<DumbBackend> ());
+    }
 
-      const char *term = std::getenv ("TERM");
-      if (!term || std::string_view (term) == "dumb")
-        {
-          return UiSession (std::make_unique<DumbBackend> ());
-        }
+  const char *term = std::getenv ("TERM");
+  if (!term || std::string_view (term) == "dumb")
+    {
+      return UiSession (std::make_unique<DumbBackend> ());
     }
 
   // Get terminal size

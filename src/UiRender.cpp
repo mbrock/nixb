@@ -333,13 +333,51 @@ render_activity_line (HudRaster &raster, int row, const UiActivityLine &line,
       return;
     }
 
-  // No progress - just render label
-  if (static_cast<int> (label.size ()) > cols)
+  // No progress - render label with dependency info
+  std::string dep_suffix;
+  if (line.num_input_deps > 0 || line.num_dependents > 0)
     {
-      label = ellipsize_middle (label, cols);
+      if (line.num_input_deps > 0 && line.num_dependents > 0)
+        {
+          dep_suffix
+              = fmt::format (" [↓{} ↑{}]", line.num_input_deps, line.num_dependents);
+        }
+      else if (line.num_input_deps > 0)
+        {
+          dep_suffix = fmt::format (" [↓{}]", line.num_input_deps);
+        }
+      else
+        {
+          dep_suffix = fmt::format (" [↑{}]", line.num_dependents);
+        }
     }
 
-  raster.write_text (row, 0, label);
+  std::string full_label = label + dep_suffix;
+  if (static_cast<int> (full_label.size ()) > cols)
+    {
+      // Try ellipsizing just the label part if that would fit
+      int needed_width = cols - dep_suffix.size ();
+      if (needed_width > 10)
+        {
+          label = ellipsize_middle (label, needed_width);
+          full_label = label + dep_suffix;
+        }
+      else
+        {
+          full_label = ellipsize_middle (full_label, cols);
+        }
+    }
+
+  int col = 0;
+  raster.write_text (row, col, label);
+  col += label.size ();
+
+  if (!dep_suffix.empty () && col < cols)
+    {
+      // Render dependency info in dim color
+      fmt::rgb dim_color (150, 150, 170);
+      raster.write_text (row, col, dep_suffix, dim_color);
+    }
 }
 
 // Blend foreground color towards background based on alpha

@@ -37,6 +37,8 @@ struct UiActivityLine
   bool is_finished = false;
   double fade_factor = 0.0; // 0.0 = just finished (bright green), 1.0 = about
                             // to vanish (faded out)
+  size_t num_input_deps = 0;    // Number of input dependencies
+  size_t num_dependents = 0;    // Number of activities that depend on this one
 };
 
 struct UiState

@@ -109,11 +109,37 @@ main (int argc, char **argv)
 
       try
         {
+          // construct a fake log line like "@nix { ... }" with type unknown
+          // and id=666
+          nlohmann::json json;
+          json["action"] = "start";
+          json["type"] = nix::actUnknown;
+          json["id"] = 666;
+          json["parent"] = 0;
+          json["text"] = "fake start event";
+          std::string log_line
+              = "@nix "
+                + json.dump (-1, ' ', false,
+                             nlohmann::json::error_handler_t::replace);
+          watcher.process_log_line (log_line);
+
           auto drv_json = nixb::NixLogWatcher::show_derivation (installable);
           watcher.finish ();
           for (const auto &doc : drv_json)
             {
-              std::cout << doc << std::endl;
+              // construct a fake log line like "@nix { ... }" with type
+              // unknown and text being the JSON string doc
+              nlohmann::json json;
+              json["action"] = "result";
+              json["type"] = nix::resBuildLogLine;
+              json["id"] = 667;
+              json["parent"] = 666;
+              json["fields"] = { doc };
+              std::string log_line
+                  = "@nix "
+                    + json.dump (-1, ' ', false,
+                                 nlohmann::json::error_handler_t::replace);
+              watcher.process_log_line (log_line);
             }
           return 0;
         }

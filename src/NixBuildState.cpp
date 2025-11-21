@@ -64,7 +64,18 @@ NixBuildState::process_store_ref (const StartEvent &e, ActivityInfo &info)
       info.store_path = path;
 
       if (auto drv_path = store_->getBuildDerivationPath (*path))
-        info.derivation_path = drv_path;
+        {
+          info.derivation_path = drv_path;
+          try
+            {
+              info.derivation = store_->readDerivation (*drv_path);
+            }
+          catch (...)
+            {
+              // Ignore errors when reading derivation
+              // (may happen when paths are not valid in current store context)
+            }
+        }
     }
 
   if (e.store_ref->base_url)
@@ -196,6 +207,11 @@ NixBuildState::update_progress (const ResultEvent &e)
 std::string
 NixBuildState::format_activity_label (const ActivityInfo &info) const
 {
+  if (info.derivation)
+    {
+      return std::string{ info.derivation->name } + " "
+             + info.derivation->platform;
+    }
   if (info.store_path)
     {
       return std::string{ info.store_path->name () };

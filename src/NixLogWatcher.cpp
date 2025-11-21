@@ -69,6 +69,9 @@ NixLogWatcher::NixLogWatcher (bool quiet, UiMode ui_mode,
 
 NixLogWatcher::~NixLogWatcher ()
 {
+  if (stop_flag_)
+    stop_flag_->store (true, std::memory_order_relaxed);
+
   if (render_thread_ && render_thread_->joinable ())
     {
       render_thread_->join ();
@@ -113,7 +116,7 @@ NixLogWatcher::show_derivation (const std::string &installable)
   for (auto &drvpath : drvpaths)
     {
       auto drv = store->readDerivation (drvpath);
-      drv_json.push_back (drv.toJSON (store->config).dump ());
+      drv_json.push_back (drv.toJSON (store->config).dump (2));
     }
 
   return drv_json;
@@ -185,6 +188,26 @@ NixLogWatcher::handle_start_event (const StartEvent &e)
   {
     std::lock_guard<std::mutex> lock (state_mutex_);
     state_->start_activity (e);
+
+    // Cache input derivations for dependency tracking
+    try
+      {
+        auto activity
+            = const_cast<ActivityInfo *> (state_->get_activity (e.id));
+        if (activity && activity->derivation)
+          {
+            for (const auto &[inputDrv, inputNode] :
+                 activity->derivation->inputDrvs.map)
+              {
+                activity->input_drv_paths.push_back (inputDrv);
+              }
+          }
+      }
+    catch (...)
+      {
+        // Ignore errors when accessing input derivations
+        // (may happen when paths are not valid in current store context)
+      }
   }
 
   // Simple: just print the event text
@@ -282,6 +305,10 @@ NixLogWatcher::render_loop ()
           = std::chrono::milliseconds (static_cast<int> (1000.0 / fps));
       std::this_thread::sleep_for (frame_interval);
     }
+
+  ui_.log ().println (fmt::format (
+      "exiting at {} UNIX time",
+      std::chrono::system_clock::now ().time_since_epoch ().count () / 1000));
 }
 
 void

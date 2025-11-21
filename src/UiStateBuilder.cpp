@@ -6,6 +6,7 @@
 #include <cctype>
 #include <fmt/core.h>
 #include <limits>
+#include <unordered_set>
 
 namespace nixb
 {
@@ -40,18 +41,78 @@ UiStateBuilder::build_activity_tree ()
 {
   const auto &activities = state_.activities ();
 
-  // Build parent-child relationships
-  for (const auto &kv : activities)
+  children_.clear ();
+  roots_.clear ();
+  drv_path_to_activity_.clear ();
+  dependents_.clear ();
+
+  // First pass: build derivation path -> activity ID mapping
+  for (const auto &[id, info] : activities)
     {
-      const auto &info = kv.second;
-      std::optional<int64_t> parent = info.parent;
-      if (parent && activities.count (*parent))
+      if (info.derivation_path)
         {
-          children_[*parent].push_back (kv.first);
+          try
+            {
+              std::string drv_str
+                  = std::string{ info.derivation_path->to_string () };
+              drv_path_to_activity_[drv_str] = id;
+            }
+          catch (const std::exception &)
+            {
+              // Ignore errors when converting store paths to strings
+            }
         }
-      else
+    }
+
+  // Second pass: build dependency relationships
+  for (const auto &[id, info] : activities)
+    {
+      // For each input derivation this activity depends on,
+      // find the activity building that derivation
+      for (const auto &input_drv : info.input_drv_paths)
         {
-          roots_.push_back (kv.first);
+          try
+            {
+              std::string input_drv_str
+                  = std::string{ input_drv.to_string () };
+              auto it = drv_path_to_activity_.find (input_drv_str);
+              if (it != drv_path_to_activity_.end ())
+                {
+                  int64_t dep_activity_id = it->second;
+                  // This activity (id) depends on dep_activity_id
+                  // So dep_activity_id has id as a dependent
+                  dependents_[dep_activity_id].push_back (id);
+                }
+            }
+          catch (const std::exception &)
+            {
+              // Ignore errors when converting store paths to strings
+            }
+        }
+    }
+
+  // Use dependency relationships as the hierarchy
+  children_ = dependents_;
+
+  std::unordered_set<int64_t> seen_children;
+  for (const auto &[parent_id, child_ids] : children_)
+    {
+      seen_children.insert (child_ids.begin (), child_ids.end ());
+    }
+
+  for (const auto &[id, info] : activities)
+    {
+      if (!seen_children.contains (id))
+        {
+          roots_.push_back (id);
+        }
+    }
+
+  if (roots_.empty ())
+    {
+      for (const auto &[id, info] : activities)
+        {
+          roots_.push_back (id);
         }
     }
 
@@ -70,6 +131,8 @@ UiStateBuilder::build_activity_tree ()
   for (auto &kv : children_)
     {
       std::sort (kv.second.begin (), kv.second.end (), order_cmp);
+      kv.second.erase (std::unique (kv.second.begin (), kv.second.end ()),
+                       kv.second.end ());
     }
   std::sort (roots_.begin (), roots_.end (), order_cmp);
 }
@@ -99,7 +162,7 @@ UiStateBuilder::should_hide_activity (int64_t id) const
     {
       return true; // Hide activities we can't find
     }
-
+  return false;
   if (info->type == nix::actRealise || info->type == nix::actBuilds
       || info->type == nix::actSubstitute || info->type == nix::actFileTransfer
       || info->type == nix::actUnknown)
@@ -120,10 +183,21 @@ UiStateBuilder::format_display_label (
 
   if (info.type == nix::actBuild || info.type == nix::actBuildWaiting)
     {
-      if (info.derivation_path)
+      if (info.derivation)
+        {
+          display_label = std::string{ info.derivation->name } + " "
+                          + info.derivation->platform;
+        }
+      else if (info.derivation_path)
         display_label = info.derivation_path->name ();
       else if (info.store_path)
         display_label = info.store_path->name ();
+    }
+
+  std::string indent_prefix;
+  if (visible_depth > 0)
+    {
+      indent_prefix.assign (static_cast<size_t> (visible_depth) * 2, ' ');
     }
 
   std::string name_part;
@@ -137,7 +211,7 @@ UiStateBuilder::format_display_label (
     }
 
   // Return just the name part - URL will be rendered separately
-  return name_part;
+  return indent_prefix + name_part;
 }
 
 void
@@ -212,9 +286,18 @@ UiStateBuilder::emit_tree_node (int64_t id, int visible_depth)
           fade_factor = std::min (1.0, elapsed_ms / 2000.0);
         }
 
-      result_.activity_lines.push_back (
-          UiActivityLine{ id, std::move (display), url_part, progress,
-                          info->is_finished, fade_factor });
+      // Get dependency counts
+      size_t num_input_deps = info->input_drv_paths.size ();
+      size_t num_dependents = 0;
+      auto dep_it = dependents_.find (id);
+      if (dep_it != dependents_.end ())
+        {
+          num_dependents = dep_it->second.size ();
+        }
+
+      result_.activity_lines.push_back (UiActivityLine{
+          id, std::move (display), url_part, progress, info->is_finished,
+          fade_factor, num_input_deps, num_dependents });
 
       next_visible_depth = visible_depth + 1;
     }
