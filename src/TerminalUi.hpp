@@ -17,26 +17,17 @@ struct ActivityProgress
   int64_t failed = 0;
 };
 
-struct SingleBuildState
+struct UiActivityLine
 {
   int64_t id = 0;
   std::string label;
-  std::string status; // queued/running
-};
-
-struct SingleTransferState
-{
-  int64_t id = 0;
-  std::string label;
-  ActivityProgress progress;
+  std::optional<ActivityProgress> progress;
 };
 
 struct UiState
 {
-  std::optional<ActivityProgress> builds_aggregate;
   std::string current_phase;
-  std::vector<SingleBuildState> active_builds;
-  std::vector<SingleTransferState> active_transfers;
+  std::vector<UiActivityLine> activity_lines;
 };
 
 // Wraps ANSI terminal control required for the bottom progress bar UI.

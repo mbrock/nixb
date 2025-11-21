@@ -36,6 +36,7 @@ NixBuildState::start_activity (const StartEvent &e)
 {
   ActivityInfo info{ e.type, e.text };
   info.parent = e.parent;
+  info.start_order = next_activity_order_++;
 
   if (e.store_ref)
     {
@@ -111,6 +112,15 @@ NixBuildState::update_progress (const ResultEvent &e)
       if (expected_val)
         {
           set_builds_expected (*expected_val);
+          if (builds_activity_)
+            {
+              auto builds_it = activities_.find (*builds_activity_);
+              if (builds_it != activities_.end ())
+                {
+                  builds_it->second.progress.expected = *expected_val;
+                  builds_it->second.has_progress = true;
+                }
+            }
         }
       return;
     }
@@ -144,6 +154,8 @@ NixBuildState::update_progress (const ResultEvent &e)
     progress.running = *v;
   if (auto v = e.get_int (3))
     progress.failed = *v;
+  it->second.progress = progress;
+  it->second.has_progress = true;
 
   switch (it->second.type)
     {

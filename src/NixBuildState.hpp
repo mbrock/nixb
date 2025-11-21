@@ -3,6 +3,7 @@
 #include "NixLogParser.hpp"
 #include "TerminalUi.hpp"
 
+#include <cstddef>
 #include <cstdint>
 #include <nix/store/path.hh>
 #include <optional>
@@ -26,6 +27,9 @@ struct ActivityInfo
   std::optional<std::string> store_base_url;
   std::string label;
   std::optional<int64_t> parent;
+  ActivityProgress progress;
+  bool has_progress = false;
+  size_t start_order = 0;
 };
 
 class NixBuildState
@@ -102,6 +106,7 @@ private:
   std::unordered_set<int64_t> active_transfers_;
   std::unordered_map<int64_t, ActivityProgress> transfer_progress_;
   BuildsProgress builds_progress_;
+  size_t next_activity_order_ = 0;
 };
 
 } // namespace nixb

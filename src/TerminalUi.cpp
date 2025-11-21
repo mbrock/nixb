@@ -22,7 +22,15 @@ std::string
 render_progress_line (std::string_view label, const ActivityProgress &p,
                       int cols)
 {
-  int64_t total = p.done + p.expected + p.running + p.failed;
+  int64_t total = p.expected;
+  if (total <= 0)
+    {
+      total = p.done + p.running + p.failed;
+    }
+  if (total < p.done)
+    {
+      total = p.done;
+    }
   if (total <= 0)
     {
       return fmt::format ("{} waiting...", label);
@@ -74,21 +82,18 @@ ellipsize_middle (std::string_view text, int max_width)
 }
 
 std::string
-render_build_line (const SingleBuildState &b, int cols)
+render_activity_line (const UiActivityLine &line, int cols)
 {
-  std::string base = fmt::format ("[{}] {}", b.status, b.label);
-  if (static_cast<int> (base.size ()) <= cols)
+  std::string label = line.label;
+  if (static_cast<int> (label.size ()) > cols)
     {
-      return base;
+      label = ellipsize_middle (label, cols);
     }
-  return ellipsize_middle (base, cols);
-}
-
-std::string
-render_transfer_line (const SingleTransferState &t, int cols)
-{
-  std::string label = fmt::format ("[dl] {}", t.label);
-  return render_progress_line (label, t.progress, cols);
+  if (line.progress)
+    {
+      return render_progress_line (label, *line.progress, cols);
+    }
+  return label;
 }
 } // namespace
 
@@ -159,40 +164,30 @@ TerminalUi::redraw (const UiState &state)
       ++row;
     };
 
-  if (state.builds_aggregate)
+  int phase_lines = state.current_phase.empty () ? 0 : 1;
+  int activity_budget = status_lines_ - phase_lines;
+  if (activity_budget < 0)
     {
-      draw_line (
-          render_progress_line ("[builds]", *state.builds_aggregate, cols_));
-    }
-  else
-    {
-      draw_line ("[builds] waiting...");
+      activity_budget = 0;
     }
 
-  for (const auto &b : state.active_builds)
+  int activity_count
+      = static_cast<int> (std::min<std::size_t> (activity_budget,
+                                                 state.activity_lines.size ()));
+
+  for (int i = 0; i < activity_count && row <= rows_; ++i)
     {
-      draw_line (render_build_line (b, cols_));
+      draw_line (render_activity_line (state.activity_lines[i], cols_));
     }
 
-  if (!state.active_transfers.empty ())
-    {
-      for (const auto &t : state.active_transfers)
-        {
-          draw_line (render_transfer_line (t, cols_));
-        }
-    }
-  else
-    {
-      draw_line ("[downloads] waiting...");
-    }
-
-  if (!state.current_phase.empty ())
-    {
-      draw_line (state.current_phase);
-    }
-  else
+  for (int i = activity_count; i < activity_budget && row <= rows_; ++i)
     {
       draw_line ("");
+    }
+
+  if (!state.current_phase.empty () && row <= rows_)
+    {
+      draw_line (state.current_phase);
     }
 
   while (row <= rows_)

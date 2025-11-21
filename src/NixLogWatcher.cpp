@@ -10,7 +10,10 @@
 
 #include <algorithm>
 #include <iostream>
+#include <limits>
 #include <string>
+#include <unordered_map>
+#include <vector>
 
 namespace nixb
 {
@@ -340,50 +343,182 @@ NixLogWatcher::emit_log (const std::string &block)
 void
 NixLogWatcher::rebuild_ui_state ()
 {
-  // Rebuild active builds
-  ui_state_.active_builds.clear ();
-  for (const auto &kv : state_->activities ())
+  ui_state_.activity_lines.clear ();
+
+  const auto &activities = state_->activities ();
+  if (activities.empty ())
+    {
+      ui_state_.current_phase.clear ();
+      return;
+    }
+
+  std::unordered_map<int64_t, std::vector<int64_t>> children;
+  std::vector<int64_t> roots;
+
+  for (const auto &kv : activities)
     {
       const auto &info = kv.second;
-      if (info.type == nix::actBuild || info.type == nix::actBuildWaiting)
+      if (info.parent && activities.count (*info.parent))
         {
-          std::string label = state_->format_activity_label (info);
-          std::string status
-              = info.type == nix::actBuildWaiting ? "queued" : "running";
-          ui_state_.active_builds.push_back (SingleBuildState{
-              kv.first, std::move (label), std::move (status) });
+          children[*info.parent].push_back (kv.first);
+        }
+      else
+        {
+          roots.push_back (kv.first);
         }
     }
-  std::sort (ui_state_.active_builds.begin (), ui_state_.active_builds.end (),
-             [] (const SingleBuildState &a, const SingleBuildState &b)
-               { return a.id < b.id; });
 
-  // Rebuild active transfers
-  ui_state_.active_transfers.clear ();
-  for (int64_t id : state_->active_transfers ())
+  auto order_for_id = [&] (int64_t id) -> size_t
     {
+      if (const auto *info = state_->get_activity (id))
+        {
+          return info->start_order;
+        }
+      return std::numeric_limits<size_t>::max ();
+    };
+
+  auto order_cmp = [&] (int64_t a, int64_t b)
+    {
+      size_t order_a = order_for_id (a);
+      size_t order_b = order_for_id (b);
+      if (order_a == order_b)
+        {
+          return a < b;
+        }
+      return order_a < order_b;
+    };
+
+  for (auto &kv : children)
+    {
+      std::sort (kv.second.begin (), kv.second.end (), order_cmp);
+    }
+  std::sort (roots.begin (), roots.end (), order_cmp);
+
+  std::unordered_map<int64_t, std::optional<ActivityProgress>> progress_cache;
+  std::function<std::optional<ActivityProgress> (int64_t)> compute_progress;
+
+  compute_progress = [&] (int64_t id) -> std::optional<ActivityProgress>
+    {
+      auto cache_it = progress_cache.find (id);
+      if (cache_it != progress_cache.end ())
+        {
+          return cache_it->second;
+        }
+
       const auto *info = state_->get_activity (id);
       if (!info)
         {
-          continue;
+          progress_cache[id] = std::nullopt;
+          return std::nullopt;
         }
-      auto prog_it = state_->transfer_progress ().find (id);
-      ActivityProgress progress
-          = prog_it != state_->transfer_progress ().end ()
-                ? prog_it->second
-                : ActivityProgress{};
-      std::string label = state_->format_activity_label (*info);
-      ui_state_.active_transfers.push_back (
-          SingleTransferState{ id, std::move (label), progress });
+
+      if (info->has_progress)
+        {
+          progress_cache[id] = info->progress;
+          return info->progress;
+        }
+
+      ActivityProgress aggregate{};
+      bool have_child = false;
+      if (auto it = children.find (id); it != children.end ())
+        {
+          for (int64_t child_id : it->second)
+            {
+              if (auto child_prog = compute_progress (child_id))
+                {
+                  aggregate.done += child_prog->done;
+                  aggregate.expected += child_prog->expected;
+                  aggregate.running += child_prog->running;
+                  aggregate.failed += child_prog->failed;
+                  have_child = true;
+                }
+            }
+        }
+
+      if (!have_child)
+        {
+          progress_cache[id] = std::nullopt;
+          return std::nullopt;
+        }
+
+      progress_cache[id] = aggregate;
+      return aggregate;
+    };
+
+  auto format_label = [&] (const ActivityInfo &info, int depth)
+    {
+      std::string tag;
+      switch (info.type)
+        {
+        case nix::actBuilds:
+          tag = "[builds]";
+          break;
+        case nix::actBuild:
+          tag = "[build]";
+          break;
+        case nix::actBuildWaiting:
+          tag = "[queued]";
+          break;
+        case nix::actFileTransfer:
+          tag = "[dl]";
+          break;
+        case nix::actCopyPath:
+          tag = "[copy]";
+          break;
+        case nix::actSubstitute:
+          tag = "[substitute]";
+          break;
+        case nix::actQueryPathInfo:
+          tag = "[query]";
+          break;
+        case nix::actFetchTree:
+          tag = "[fetch]";
+          break;
+        default:
+          tag = fmt::format ("[{}]",
+                             NixLogParser::activity_type_name (info.type));
+          break;
+        }
+
+      std::string label = state_->format_activity_label (info);
+      if (label.empty ())
+        {
+          label = "activity";
+        }
+
+      std::string indent (static_cast<std::size_t> (depth) * 2, ' ');
+      return fmt::format ("{}{} {}", indent, tag, label);
+    };
+
+  std::function<void (int64_t, int)> emit_node
+      = [&] (int64_t id, int depth)
+  {
+    const auto *info = state_->get_activity (id);
+    if (!info)
+      {
+        return;
+      }
+
+    auto progress = compute_progress (id);
+    ui_state_.activity_lines.push_back (UiActivityLine{
+        id, format_label (*info, depth), progress });
+
+    if (auto it = children.find (id); it != children.end ())
+      {
+        for (int64_t child_id : it->second)
+          {
+            emit_node (child_id, depth + 1);
+          }
+      }
+  };
+
+  for (int64_t root_id : roots)
+    {
+      emit_node (root_id, 0);
     }
-  std::sort (ui_state_.active_transfers.begin (),
-             ui_state_.active_transfers.end (),
-             [] (const SingleTransferState &a, const SingleTransferState &b)
-               { return a.id < b.id; });
 
   // Copy builds progress
   const auto &bp = state_->builds_progress ();
-  ui_state_.builds_aggregate = bp.aggregate;
   if (!bp.current_phase.empty ())
     {
       ui_state_.current_phase = fmt::format ("[phase] {}", bp.current_phase);
@@ -405,28 +540,13 @@ NixLogWatcher::refresh_ui ()
   rebuild_ui_state ();
 
   int max_footer = ui_->max_status_lines ();
-  if (max_footer <= 0)
+  int desired_lines = static_cast<int> (ui_state_.activity_lines.size ())
+                      + (ui_state_.current_phase.empty () ? 0 : 1);
+  desired_lines = std::max (1, desired_lines);
+  if (max_footer > 0)
     {
-      max_footer = 1;
+      desired_lines = std::min (desired_lines, max_footer);
     }
-
-  int reserve_header = 1;
-  int reserve_phase = ui_state_.current_phase.empty () ? 0 : 1;
-  int transfers_lines
-      = ui_state_.active_transfers.empty ()
-            ? 1
-            : static_cast<int> (ui_state_.active_transfers.size ());
-
-  int space_for_builds = std::max (
-      0, max_footer - (reserve_header + reserve_phase + transfers_lines));
-  if (space_for_builds < static_cast<int> (ui_state_.active_builds.size ()))
-    {
-      ui_state_.active_builds.resize (space_for_builds);
-    }
-
-  int desired_lines = reserve_header + reserve_phase + transfers_lines
-                      + static_cast<int> (ui_state_.active_builds.size ());
-  desired_lines = std::max (2, desired_lines);
 
   ui_->update_status_height (desired_lines, ui_state_);
 }
