@@ -23,6 +23,9 @@ int main(int argc, char **argv) {
       app.add_option("--play", play_file,
                      "Replay a recorded file (honors recorded timing)");
   record_opt->excludes(play_opt);
+  double play_speed = 1.0;
+  app.add_option("--play-speed", play_speed,
+                 "Playback speed multiplier (0 = no delays, 2 = 2x faster)");
   CLI11_PARSE(app, argc, argv);
 
   nixb::NixLogWatcher::UiMode ui_mode = nixb::NixLogWatcher::UiMode::Auto;
@@ -39,7 +42,7 @@ int main(int argc, char **argv) {
   nixb::NixLogWatcher watcher(quiet, ui_mode, record_path);
 
   if (!play_file.empty()) {
-    watcher.process_playback_file(play_file);
+    watcher.process_playback_file(play_file, play_speed);
   } else {
     watcher.process_input();
   }

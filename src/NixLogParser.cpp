@@ -75,6 +75,8 @@ std::optional<LogEvent> NixLogParser::parse_line(std::string_view line) {
       return std::nullopt;
     if (auto v = doc["level"].get_int64(); !v.error())
       event.level = v.value();
+    if (auto v = doc["parent"].get_int64(); !v.error())
+      event.parent = v.value();
     if (auto v = doc["type"].get_int64(); !v.error()) {
       event.type =
           enum_from_int<ActivityType>(v.value()).value_or(nix::actUnknown);
@@ -138,6 +140,18 @@ std::string StartEvent::format() const {
   fmt::memory_buffer buf;
   fmt::format_to(std::back_inserter(buf), "{} ",
                  fmt::styled("[start]", fmt::fg(fmt::terminal_color::blue)));
+  auto id_style = style_for_id(static_cast<uint64_t>(id));
+  fmt::format_to(std::back_inserter(buf), "(id={} ",
+                 fmt::styled(hashed_id_token(static_cast<uint64_t>(id)),
+                             id_style));
+  if (parent) {
+    fmt::format_to(std::back_inserter(buf),
+                   "p={}) ",
+                   fmt::styled(hashed_id_token(static_cast<uint64_t>(*parent)),
+                               style_for_id(static_cast<uint64_t>(*parent))));
+  } else {
+    fmt::format_to(std::back_inserter(buf), "p=-) ");
+  }
   fmt::format_to(std::back_inserter(buf), "{} ",
                  NixLogParser::activity_type_name(type));
   if (!text.empty()) {
@@ -150,10 +164,21 @@ std::string StartEvent::format() const {
 
 std::string StopEvent::format(std::string_view type_name,
                               std::string_view activity_text,
-                              bool build_success) const {
+                              bool build_success,
+                              std::optional<uint64_t> parent_id) const {
   fmt::memory_buffer buf;
-  fmt::format_to(std::back_inserter(buf), "{} {}",
+  auto id_style = style_for_id(static_cast<uint64_t>(id));
+  std::string parent_token = "-";
+  if (parent_id) {
+    parent_token = fmt::format(
+        "{}", fmt::styled(hashed_id_token(static_cast<uint64_t>(*parent_id)),
+                          style_for_id(static_cast<uint64_t>(*parent_id))));
+  }
+  fmt::format_to(std::back_inserter(buf), "{} (id={} p={}) {}",
                  fmt::styled("[stop]", fmt::fg(fmt::terminal_color::red)),
+                 fmt::styled(hashed_id_token(static_cast<uint64_t>(id)),
+                             id_style),
+                 parent_token,
                  type_name);
   if (build_success) {
     fmt::format_to(std::back_inserter(buf), " {}",

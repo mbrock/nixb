@@ -12,11 +12,33 @@
 #include <cstdio>
 #include <fstream>
 #include <iostream>
+#include <string>
 #include <string_view>
 #include <utility>
 #include <thread>
 
 namespace nixb {
+
+namespace {
+std::string styled_id(uint64_t id) {
+  return fmt::format("{}", fmt::styled(hashed_id_token(id), style_for_id(id)));
+}
+
+std::string styled_parent(std::optional<int64_t> parent) {
+  if (!parent) {
+    return fmt::format("{}", fmt::styled("-", fmt::fg(fmt::terminal_color::white)));
+  }
+  return styled_id(static_cast<uint64_t>(*parent));
+}
+
+std::string url_basename(std::string_view text) {
+  auto pos = text.rfind('/');
+  if (pos == std::string_view::npos || pos + 1 >= text.size()) {
+    return std::string{text};
+  }
+  return std::string{text.substr(pos + 1)};
+}
+} // namespace
 
 NixLogWatcher::NixLogWatcher(bool quiet, UiMode ui_mode,
                              std::optional<std::string> record_path)
@@ -80,7 +102,14 @@ void NixLogWatcher::process_line(const std::string &line) {
 }
 
 void NixLogWatcher::handle_start_event(const StartEvent &e) {
-  activities_[e.id] = ActivityInfo{e.type, e.text};
+  ActivityInfo info{e.type, e.text};
+  info.parent = e.parent;
+
+  if (auto path = parse_store_path_from_fields(e.type, e.fields)) {
+    info.store_path = path;
+    info.label = std::string{path->name()};
+  }
+  activities_[e.id] = std::move(info);
   if (e.type == nix::actBuilds) {
     builds_activity_ = e.id;
   }
@@ -90,11 +119,44 @@ void NixLogWatcher::handle_start_event(const StartEvent &e) {
   if (ui_ && ui_->enabled()) {
     refresh_ui();
   }
+  auto it = activities_.find(e.id);
+  if (it != activities_.end()) {
+    if (e.type == nix::actCopyPath) {
+      std::string label = format_activity_label(it->second);
+      std::string parent_token = styled_parent(e.parent);
+      emit_log(fmt::format(
+          "{} (id={} p={}) copying {}\n",
+          fmt::styled("[start]", fmt::fg(fmt::terminal_color::blue)),
+          styled_id(static_cast<uint64_t>(e.id)), parent_token, label));
+      return;
+    }
+    if (e.type == nix::actFileTransfer) {
+      std::string label = format_activity_label(it->second);
+      std::string parent_token = styled_parent(e.parent);
+      if (label.empty()) {
+        label = url_basename(it->second.text);
+      }
+      emit_log(fmt::format(
+          "{} (id={} p={}) downloading {}\n",
+          fmt::styled("[start]", fmt::fg(fmt::terminal_color::blue)),
+          styled_id(static_cast<uint64_t>(e.id)), parent_token, label));
+      return;
+    }
+  }
+
   emit_log(e.format());
 }
 
 void NixLogWatcher::handle_result_event(const ResultEvent &e) {
   bool ui_on = ui_ && ui_->enabled();
+
+  if (e.type == nix::resSetExpected) {
+    update_progress(e);
+    if (ui_on) {
+      refresh_ui();
+    }
+    return;
+  }
 
   if (ui_on && e.type == nix::resProgress) {
     update_success_tokens(e);
@@ -115,9 +177,14 @@ void NixLogWatcher::handle_stop_event(const StopEvent &e) {
   std::string_view type_name = "Unknown";
   std::string activity_text;
   bool build_success = false;
+  std::optional<int64_t> parent;
+  ActivityType stopped_type = nix::actUnknown;
+
+  std::optional<ActivityInfo> stopped_info;
 
   if (auto it = activities_.find(e.id); it != activities_.end()) {
     type_name = NixLogParser::activity_type_name(it->second.type);
+    stopped_type = it->second.type;
     if (it->second.type == nix::actBuild && success_tokens_ > 0) {
       build_success = true;
       --success_tokens_;
@@ -131,6 +198,8 @@ void NixLogWatcher::handle_stop_event(const StopEvent &e) {
       note_transfer_stop(e.id);
     }
     activity_text = it->second.text;
+    parent = it->second.parent;
+    stopped_info = it->second;
     activities_.erase(it);
   }
 
@@ -138,7 +207,33 @@ void NixLogWatcher::handle_stop_event(const StopEvent &e) {
     refresh_ui();
   }
 
-  emit_log(e.format(type_name, activity_text, build_success));
+  if (stopped_type == nix::actCopyPath || stopped_type == nix::actFileTransfer) {
+    std::string label = activity_text;
+    if (stopped_info) {
+      label = format_activity_label(*stopped_info);
+      if (label.empty()) {
+        label = url_basename(stopped_info->text);
+      }
+    } else if (!activity_text.empty()) {
+      label = url_basename(activity_text);
+    }
+    std::string action =
+        stopped_type == nix::actCopyPath ? "copying" : "downloading";
+    emit_log(fmt::format("{} (id={} p={}) {} {}\n",
+                         fmt::styled("[stop]",
+                                     fmt::fg(fmt::terminal_color::red)),
+                         styled_id(static_cast<uint64_t>(e.id)),
+                         styled_parent(parent),
+                         action, label));
+    return;
+  }
+
+  std::optional<uint64_t> parent_id;
+  if (parent) {
+    parent_id = static_cast<uint64_t>(*parent);
+  }
+
+  emit_log(e.format(type_name, activity_text, build_success, parent_id));
 }
 
 void NixLogWatcher::handle_msg_event(const MsgEvent &e) {
@@ -292,14 +387,54 @@ void NixLogWatcher::note_transfer_stop(int64_t id) {
   transfer_progress_.erase(id);
 }
 
+std::optional<nix::StorePath> NixLogWatcher::parse_store_path_from_fields(
+    ActivityType type, const std::vector<std::string> &fields) const {
+  if (!store_) {
+    return std::nullopt;
+  }
+
+  switch (type) {
+  case nix::actCopyPath:
+  case nix::actQueryPathInfo:
+  case nix::actSubstitute:
+    if (!fields.empty()) {
+      if (auto p = store_->maybeParseStorePath(fields[0])) {
+        return p;
+      }
+    }
+    break;
+  default:
+    break;
+  }
+  return std::nullopt;
+}
+
+std::string NixLogWatcher::format_activity_label(
+    const ActivityInfo &info) const {
+  if (info.store_path) {
+    return std::string{info.store_path->name()};
+  }
+  if (!info.label.empty()) {
+    return info.label;
+  }
+  if (info.type == nix::actFileTransfer) {
+    if (!info.text.empty()) {
+      return url_basename(info.text);
+    }
+  }
+  if (!info.text.empty()) {
+    return info.text;
+  }
+  return "activity";
+}
+
 void NixLogWatcher::rebuild_active_builds() {
   ui_state_.active_builds.clear();
 
   for (const auto &kv : activities_) {
     const auto &info = kv.second;
     if (info.type == nix::actBuild || info.type == nix::actBuildWaiting) {
-      std::string label =
-          info.text.empty() ? fmt::format("build {}", kv.first) : info.text;
+      std::string label = format_activity_label(info);
       std::string status = info.type == nix::actBuildWaiting ? "queued"
                                                              : "running";
       ui_state_.active_builds.push_back(
@@ -326,9 +461,7 @@ void NixLogWatcher::rebuild_active_transfers() {
     ActivityProgress progress = prog_it != transfer_progress_.end()
                                     ? prog_it->second
                                     : ActivityProgress{};
-    std::string label = info.text.empty()
-                            ? fmt::format("transfer {}", id)
-                            : info.text;
+    std::string label = format_activity_label(info);
     ui_state_.active_transfers.push_back(
         SingleTransferState{id, std::move(label), progress});
   }
@@ -346,7 +479,7 @@ void NixLogWatcher::refresh_ui() {
   }
 
   rebuild_active_builds();
-   rebuild_active_transfers();
+  rebuild_active_transfers();
 
   int max_footer = ui_->max_status_lines();
   if (max_footer <= 0) {
@@ -355,9 +488,9 @@ void NixLogWatcher::refresh_ui() {
 
   int reserve_header = 1;
   int reserve_phase = ui_state_.current_phase.empty() ? 0 : 1;
-  int transfers_lines =
-      ui_state_.active_transfers.empty() ? 1
-                                         : static_cast<int>(ui_state_.active_transfers.size());
+  int transfers_lines = ui_state_.active_transfers.empty()
+                            ? 1
+                            : static_cast<int>(ui_state_.active_transfers.size());
 
   int space_for_builds =
       std::max(0, max_footer - (reserve_header + reserve_phase + transfers_lines));
@@ -373,10 +506,18 @@ void NixLogWatcher::refresh_ui() {
 }
 
 void NixLogWatcher::process_playback_file(const std::string &path) {
+  process_playback_file(path, 1.0);
+}
+
+void NixLogWatcher::process_playback_file(const std::string &path,
+                                          double speedup) {
   std::ifstream in(path);
   if (!in) {
     fmt::print(stderr, "Failed to open playback file: {}\n", path);
     return;
+  }
+  if (speedup < 0.0) {
+    speedup = 1.0;
   }
 
   int64_t last_ms = 0;
@@ -407,7 +548,15 @@ void NixLogWatcher::process_playback_file(const std::string &path) {
 
     int64_t delta = first ? timestamp_ms : (timestamp_ms - last_ms);
     if (delta > 0) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(delta));
+      if (speedup <= 0.0) {
+        // no delay
+      } else {
+        double adjusted = static_cast<double>(delta) / speedup;
+        if (adjusted > 0.0) {
+          std::this_thread::sleep_for(
+              std::chrono::milliseconds(static_cast<int64_t>(adjusted)));
+        }
+      }
     }
     last_ms = timestamp_ms;
     first = false;

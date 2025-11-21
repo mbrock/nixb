@@ -1,6 +1,7 @@
 #pragma once
 
 #include "NixLogParser.hpp"
+#include "IdColor.hpp"
 #include "TerminalUi.hpp"
 
 #include <chrono>
@@ -11,6 +12,7 @@
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <nix/store/path.hh>
 
 namespace nix {
 class Store;
@@ -28,11 +30,15 @@ public:
 
   void process_input();
   void process_playback_file(const std::string &path);
+  void process_playback_file(const std::string &path, double speedup);
 
 private:
   struct ActivityInfo {
     ActivityType type;
     std::string text;
+    std::optional<nix::StorePath> store_path;
+    std::string label;
+    std::optional<int64_t> parent;
   };
 
   void process_line(const std::string &line);
@@ -49,6 +55,10 @@ private:
   void rebuild_active_transfers();
   void note_transfer_start(int64_t id);
   void note_transfer_stop(int64_t id);
+  std::string format_activity_label(const ActivityInfo &info) const;
+  std::optional<nix::StorePath>
+  parse_store_path_from_fields(ActivityType type,
+                               const std::vector<std::string> &fields) const;
 
   bool quiet_;
   NixLogParser parser_;
