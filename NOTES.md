@@ -42,6 +42,21 @@ Numeric codes mapped to names and field meaning:
 
 Unknown codes are labeled `UnknownResult`.
 
+### Progress (result.type 105) details
+`Progress` carries an `ActivityProgress{done, expected, running, failed}` (see `nix-output-monitor/lib/NOM/NixMessage/JSON.hs`). nixb and the reference implementation in `~/2025/nix-output-monitor` interpret it differently per activity:
+- Builds aggregate (type 104, `id` 3488063200165898 in `testdata/nom.json`): the stream counts down expected builds or downloads (`[0,36,0,0] … [0,1,1,0] … [1,1,0,0]`). The delta of `done` seeds the success-token heuristic in nixb and in upstream `Update.hs`.
+- File transfers (type 101): upstream `printTransferProgress` sums `done`/`expected` as bytes for in-flight downloads/uploads. In `testdata/nom.json` narinfo fetches report `[243,0,0,0]` or `[34,0,0,0]` (unknown totals, so `expected` is 0).
+- CopyPaths (type 103): still emit `Progress`, but `nom.json` stayed `[0,0,0,0]` because nothing needed copying.
+
+In `testdata/hello.json` (long run that substitutes a lot, then builds GNU hello):
+- SetExpected (type 106) arrives for the enclosing Realise activity with `[101,<bytes>]` and `[100,<bytes>]`, then FileTransfer progress ticks up with the same `expected` (e.g. nar downloads climb to `[35783,33057956,0,0]`).
+- CopyPaths aggregate (type 103, `id` 72009421684748) counts how many paths will be copied: it rises `[0,1,1,0] → [1,1,0,0]` and finishes at `[22,22,0,0]`.
+- Builds aggregate (type 104, `id` 72009421684747) shows queued/running counts: starts `[0,1,0,0]`, briefly `[0,2,0,0]`, then `[0,1,1,0]` while the drv runs, and ends `[0,1,0,1]` because the build was marked non-deterministic.
+
+In `testdata/hello2.json` (offline build, no substitutes, hello succeeds):
+- No FileTransfer or CopyPaths progression: aggregates stay `[0,0,0,0]`.
+- Builds aggregate (type 104, `id` 151440546856962) counts a single build: `[0,1,1,0]` while running, then `[1,2,0,0]` when finished successfully (expected was bumped to 2 during evaluation).
+
 ## Minimal state logic in nixb
 - Tracks `id -> {type, text}` from `start`.
 - Remembers the global `Builds` activity id (type 104).

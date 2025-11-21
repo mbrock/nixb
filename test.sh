@@ -9,6 +9,9 @@ if [[ ! -x build/nixb ]]; then
   exit 1
 fi
 
-echo "Running nixb smoke test against testdata/nom.json..."
-build/nixb < testdata/nom.json > /dev/null
-echo "OK"
+for fixture in nom hello hello2; do
+  path="testdata/${fixture}.json"
+  echo "Running nixb smoke test against ${path}..."
+  build/nixb < "${path}" > /dev/null
+  echo "OK (${fixture})"
+done

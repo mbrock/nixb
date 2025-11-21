@@ -1,4 +1,4 @@
-.PHONY: all setup build clean docs test
+.PHONY: all setup build build-opt clean docs test
 
 ifndef IN_NIX_SHELL
 $(error You need to run this under 'nix develop')
@@ -18,6 +18,10 @@ setup: $(BUILDDIR)/build.ninja
 
 $(BUILDDIR)/build.ninja:
 	$(MESON) setup $(BUILDDIR) $(SETUP_FLAGS)
+
+build-opt: $(BUILDDIR)/build.ninja
+	$(MESON) setup $(BUILDDIR) $(SETUP_FLAGS) --buildtype=release -Doptimization=3 -Db_ndebug=true --reconfigure
+	$(MESON) compile -C $(BUILDDIR)
 
 clean:
 	rm -rf $(BUILDDIR) meson-logs meson-private compile_commands.json

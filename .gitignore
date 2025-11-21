@@ -24,3 +24,5 @@ build.log
 
 # Generated documentation
 /docs/nix-api/
+repomix-output.xml
+
