@@ -1,4 +1,6 @@
 #include "NixLogWatcher.hpp"
+#include "src/IdColor.hpp"
+#include "src/NixLogPlayer.hpp"
 
 #include <fmt/color.h>
 #include <fmt/core.h>
@@ -7,16 +9,8 @@
 #include <nix/store/store-open.hh>
 
 #include <algorithm>
-#include <cctype>
-#include <chrono>
-#include <cstdio>
-#include <fstream>
-#include <functional>
 #include <iostream>
 #include <string>
-#include <string_view>
-#include <thread>
-#include <utility>
 
 namespace nixb
 {
@@ -108,6 +102,8 @@ NixLogWatcher::NixLogWatcher (bool quiet, UiMode ui_mode,
   fmt::print (stderr, "Yay! Nix store opened successfully: {}\n",
               store_->config.getHumanReadableURI ());
 
+  state_ = std::make_unique<NixBuildState> (store_);
+
   if (ui_mode != UiMode::Off)
     {
       bool force = ui_mode == UiMode::On;
@@ -120,16 +116,7 @@ NixLogWatcher::NixLogWatcher (bool quiet, UiMode ui_mode,
 
   if (record_path)
     {
-      record_stream_.open (*record_path, std::ios::out | std::ios::trunc);
-      if (record_stream_)
-        {
-          recording_enabled_ = true;
-        }
-      else
-        {
-          fmt::print (stderr, "Failed to open record file: {}\n",
-                      *record_path);
-        }
+      recorder_ = std::make_unique<NixLogRecorder> (*record_path);
     }
 }
 
@@ -154,7 +141,10 @@ NixLogWatcher::process_input ()
 void
 NixLogWatcher::process_line (const std::string &line)
 {
-  record_line (line);
+  if (recorder_)
+    {
+      recorder_->record (line);
+    }
 
   auto event_opt = parser_.parse_line (line);
 
@@ -190,49 +180,21 @@ NixLogWatcher::process_line (const std::string &line)
 void
 NixLogWatcher::handle_start_event (const StartEvent &e)
 {
-  ActivityInfo info{ e.type, e.text };
-  info.parent = e.parent;
+  state_->start_activity (e);
 
-  if (e.store_ref)
-    {
-      if (store_)
-        {
-          if (auto path = store_->maybeParseStorePath (e.store_ref->path))
-            {
-              info.store_path = path;
-              info.label = std::string{ path->name () };
-            }
-        }
-      if (info.label.empty ())
-        {
-          info.label = e.store_ref->path;
-        }
-      if (e.store_ref->base_url)
-        {
-          info.store_base_url = *e.store_ref->base_url;
-        }
-    }
-  activities_[e.id] = std::move (info);
-  if (e.type == nix::actBuilds)
-    {
-      builds_activity_ = e.id;
-    }
-  if (e.type == nix::actFileTransfer || e.type == nix::actCopyPath)
-    {
-      note_transfer_start (e.id);
-    }
   if (ui_ && ui_->enabled ())
     {
       refresh_ui ();
     }
-  auto it = activities_.find (e.id);
-  if (it != activities_.end ())
+
+  const auto *info = state_->get_activity (e.id);
+  if (info)
     {
       auto log_line = format_activity_log_line (
-          ">>>", fmt::terminal_color::blue, e.id, e.parent, it->second,
+          ">>>", fmt::terminal_color::blue, e.id, e.parent, *info,
           [this] (const ActivityInfo &info)
             {
-              std::string label = format_activity_label (info);
+              std::string label = state_->format_activity_label (info);
               if (label.empty ())
                 {
                   label = url_basename (info.text);
@@ -254,9 +216,10 @@ NixLogWatcher::handle_result_event (const ResultEvent &e)
 {
   bool ui_on = ui_ && ui_->enabled ();
 
+  state_->update_progress (e);
+
   if (e.type == nix::resSetExpected)
     {
-      update_progress (e);
       if (ui_on)
         {
           refresh_ui ();
@@ -266,15 +229,11 @@ NixLogWatcher::handle_result_event (const ResultEvent &e)
 
   if (ui_on && e.type == nix::resProgress)
     {
-      update_success_tokens (e);
-      update_progress (e);
       refresh_ui ();
       return;
     }
 
   emit_log (e.format ());
-  update_success_tokens (e);
-  update_progress (e);
   if (ui_on)
     {
       refresh_ui ();
@@ -292,30 +251,21 @@ NixLogWatcher::handle_stop_event (const StopEvent &e)
 
   std::optional<ActivityInfo> stopped_info;
 
-  if (auto it = activities_.find (e.id); it != activities_.end ())
+  if (const auto *info = state_->get_activity (e.id))
     {
-      type_name = NixLogParser::activity_type_name (it->second.type);
-      stopped_type = it->second.type;
-      if (it->second.type == nix::actBuild && success_tokens_ > 0)
+      type_name = NixLogParser::activity_type_name (info->type);
+      stopped_type = info->type;
+      if (info->type == nix::actBuild && state_->success_tokens () > 0)
         {
           build_success = true;
-          --success_tokens_;
+          state_->decrement_success_tokens ();
         }
-      if (it->second.type == nix::actBuilds)
-        {
-          ui_state_.builds_aggregate.reset ();
-          builds_activity_.reset ();
-        }
-      if (it->second.type == nix::actFileTransfer
-          || it->second.type == nix::actCopyPath)
-        {
-          note_transfer_stop (e.id);
-        }
-      activity_text = it->second.text;
-      parent = it->second.parent;
-      stopped_info = it->second;
-      activities_.erase (it);
+      activity_text = info->text;
+      parent = info->parent;
+      stopped_info = *info;
     }
+
+  state_->stop_activity (e.id);
 
   if (ui_ && ui_->enabled ())
     {
@@ -328,7 +278,7 @@ NixLogWatcher::handle_stop_event (const StopEvent &e)
     {
       auto label_fn = [this, &activity_text] (const ActivityInfo &info)
         {
-          std::string label = format_activity_label (info);
+          std::string label = state_->format_activity_label (info);
           if (label.empty ())
             {
               label = url_basename (info.text);
@@ -376,137 +326,6 @@ NixLogWatcher::handle_msg_event (const MsgEvent &e)
 }
 
 void
-NixLogWatcher::update_success_tokens (const ResultEvent &e)
-{
-  if (e.type != nix::resProgress || !builds_activity_
-      || *builds_activity_ != e.id)
-    {
-      return;
-    }
-  if (auto done = e.get_int (0))
-    {
-      if (*done > last_progress_done_)
-        {
-          success_tokens_ += (*done - last_progress_done_);
-          last_progress_done_ = *done;
-        }
-    }
-}
-
-void
-NixLogWatcher::update_progress (const ResultEvent &e)
-{
-  if (!ui_ || !ui_->enabled ())
-    {
-      return;
-    }
-
-  if (e.type == nix::resSetExpected)
-    {
-      auto type_val = e.get_int (0);
-      auto expected_val = e.get_int (1);
-      if (!expected_val)
-        {
-          return;
-        }
-
-      auto has_activity = [&] (ActivityType t)
-        {
-          return std::any_of (activities_.begin (), activities_.end (),
-                              [&] (const auto &kv)
-                                { return kv.second.type == t; });
-        };
-
-      bool touched = false;
-
-      auto set_expected = [&] (std::optional<ActivityProgress> &slot)
-        {
-          if (*expected_val <= 0)
-            {
-              slot.reset ();
-              touched = true;
-              return;
-            }
-          if (!slot)
-            {
-              slot = ActivityProgress{};
-            }
-          slot->expected = *expected_val;
-          if (slot->done > slot->expected)
-            {
-              slot->done = slot->expected;
-            }
-          slot->running = 0;
-          slot->failed = 0;
-          touched = true;
-        };
-
-      if (type_val)
-        {
-          ActivityType atype = static_cast<ActivityType> (*type_val);
-          switch (atype)
-            {
-            case nix::actBuilds:
-              if (has_activity (nix::actBuilds))
-                {
-                  set_expected (ui_state_.builds_aggregate);
-                }
-              break;
-            default:
-              break;
-            }
-        }
-      if (touched)
-        {
-          refresh_ui ();
-        }
-      return;
-    }
-
-  if (e.type == nix::resSetPhase)
-    {
-      if (auto phase = e.get_string (0))
-        {
-          ui_state_.current_phase = fmt::format ("[phase] {}", *phase);
-        }
-      return;
-    }
-
-  auto it = activities_.find (e.id);
-
-  if (e.type != nix::resProgress || it == activities_.end ())
-    {
-      return;
-    }
-
-  ActivityProgress progress;
-  if (auto v = e.get_int (0))
-    progress.done = *v;
-  if (auto v = e.get_int (1))
-    progress.expected = *v;
-  if (auto v = e.get_int (2))
-    progress.running = *v;
-  if (auto v = e.get_int (3))
-    progress.failed = *v;
-
-  switch (it->second.type)
-    {
-    case nix::actBuilds:
-      ui_state_.builds_aggregate = progress;
-      break;
-    case nix::actFileTransfer:
-    case nix::actCopyPath:
-      if (active_transfers_.count (e.id))
-        {
-          transfer_progress_[e.id] = progress;
-        }
-      break;
-    default:
-      break;
-    }
-}
-
-void
 NixLogWatcher::emit_log (const std::string &block)
 {
   if (ui_ && ui_->enabled ())
@@ -519,121 +338,60 @@ NixLogWatcher::emit_log (const std::string &block)
 }
 
 void
-NixLogWatcher::record_line (const std::string &line)
+NixLogWatcher::rebuild_ui_state ()
 {
-  if (!recording_enabled_ || !record_stream_)
-    {
-      return;
-    }
-  if (!start_time_set_)
-    {
-      start_time_ = std::chrono::steady_clock::now ();
-      start_time_set_ = true;
-    }
-
-  auto now = std::chrono::steady_clock::now ();
-  auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds> (
-                        now - start_time_)
-                        .count ();
-  record_stream_ << fmt::format ("{:013d} {}\n", elapsed_ms, line);
-}
-
-void
-NixLogWatcher::note_transfer_start (int64_t id)
-{
-  if (!active_transfers_.insert (id).second)
-    {
-      return;
-    }
-  transfer_progress_.emplace (id, ActivityProgress{});
-}
-
-void
-NixLogWatcher::note_transfer_stop (int64_t id)
-{
-  auto it = active_transfers_.find (id);
-  if (it == active_transfers_.end ())
-    {
-      return;
-    }
-  active_transfers_.erase (it);
-  transfer_progress_.erase (id);
-}
-
-std::string
-NixLogWatcher::format_activity_label (const ActivityInfo &info) const
-{
-  if (info.store_path)
-    {
-      return std::string{ info.store_path->name () };
-    }
-  if (!info.label.empty ())
-    {
-      return info.label;
-    }
-  if (info.type == nix::actFileTransfer)
-    {
-      if (!info.text.empty ())
-        {
-          return url_basename (info.text);
-        }
-    }
-  if (!info.text.empty ())
-    {
-      return info.text;
-    }
-  return "activity";
-}
-
-void
-NixLogWatcher::rebuild_active_builds ()
-{
+  // Rebuild active builds
   ui_state_.active_builds.clear ();
-
-  for (const auto &kv : activities_)
+  for (const auto &kv : state_->activities ())
     {
       const auto &info = kv.second;
       if (info.type == nix::actBuild || info.type == nix::actBuildWaiting)
         {
-          std::string label = format_activity_label (info);
+          std::string label = state_->format_activity_label (info);
           std::string status
               = info.type == nix::actBuildWaiting ? "queued" : "running";
           ui_state_.active_builds.push_back (SingleBuildState{
               kv.first, std::move (label), std::move (status) });
         }
     }
-
   std::sort (ui_state_.active_builds.begin (), ui_state_.active_builds.end (),
              [] (const SingleBuildState &a, const SingleBuildState &b)
                { return a.id < b.id; });
-}
 
-void
-NixLogWatcher::rebuild_active_transfers ()
-{
+  // Rebuild active transfers
   ui_state_.active_transfers.clear ();
-
-  for (int64_t id : active_transfers_)
+  for (int64_t id : state_->active_transfers ())
     {
-      auto info_it = activities_.find (id);
-      if (info_it == activities_.end ())
+      const auto *info = state_->get_activity (id);
+      if (!info)
         {
           continue;
         }
-      const auto &info = info_it->second;
-      auto prog_it = transfer_progress_.find (id);
-      ActivityProgress progress = prog_it != transfer_progress_.end ()
-                                      ? prog_it->second
-                                      : ActivityProgress{};
-      std::string label = format_activity_label (info);
+      auto prog_it = state_->transfer_progress ().find (id);
+      ActivityProgress progress
+          = prog_it != state_->transfer_progress ().end ()
+                ? prog_it->second
+                : ActivityProgress{};
+      std::string label = state_->format_activity_label (*info);
       ui_state_.active_transfers.push_back (
           SingleTransferState{ id, std::move (label), progress });
     }
-
   std::sort (ui_state_.active_transfers.begin (),
              ui_state_.active_transfers.end (),
              [] (const SingleTransferState &a, const SingleTransferState &b)
                { return a.id < b.id; });
+
+  // Copy builds progress
+  const auto &bp = state_->builds_progress ();
+  ui_state_.builds_aggregate = bp.aggregate;
+  if (!bp.current_phase.empty ())
+    {
+      ui_state_.current_phase = fmt::format ("[phase] {}", bp.current_phase);
+    }
+  else
+    {
+      ui_state_.current_phase.clear ();
+    }
 }
 
 void
@@ -644,8 +402,7 @@ NixLogWatcher::refresh_ui ()
       return;
     }
 
-  rebuild_active_builds ();
-  rebuild_active_transfers ();
+  rebuild_ui_state ();
 
   int max_footer = ui_->max_status_lines ();
   if (max_footer <= 0)
@@ -683,79 +440,9 @@ NixLogWatcher::process_playback_file (const std::string &path)
 void
 NixLogWatcher::process_playback_file (const std::string &path, double speedup)
 {
-  std::ifstream in (path);
-  if (!in)
-    {
-      fmt::print (stderr, "Failed to open playback file: {}\n", path);
-      return;
-    }
-  if (speedup < 0.0)
-    {
-      speedup = 1.0;
-    }
-
-  int64_t last_ms = 0;
-  bool first = true;
-  std::string line;
-  while (std::getline (in, line))
-    {
-      if (stop_requested ())
-        break;
-      size_t pos = 0;
-      while (pos < line.size ()
-             && std::isdigit (static_cast<unsigned char> (line[pos])))
-        {
-          ++pos;
-        }
-
-      int64_t timestamp_ms = 0;
-      std::string payload = line;
-
-      if (pos > 0)
-        {
-          try
-            {
-              timestamp_ms = std::stoll (line.substr (0, pos));
-              if (pos < line.size () && line[pos] == ' ')
-                {
-                  payload = line.substr (pos + 1);
-                }
-              else
-                {
-                  payload = line.substr (pos);
-                }
-            }
-          catch (const std::exception &)
-            {
-              // fall back to treating the whole line as payload
-              payload = line;
-            }
-        }
-
-      int64_t delta = first ? timestamp_ms : (timestamp_ms - last_ms);
-      if (delta > 0)
-        {
-          if (speedup <= 0.0)
-            {
-              // no delay
-            }
-          else
-            {
-              double adjusted = static_cast<double> (delta) / speedup;
-              if (adjusted > 0.0)
-                {
-                  std::this_thread::sleep_for (std::chrono::milliseconds (
-                      static_cast<int64_t> (adjusted)));
-                }
-            }
-        }
-      last_ms = timestamp_ms;
-      first = false;
-
-      process_line (payload);
-      if (stop_requested ())
-        break;
-    }
+  NixLogPlayer player ([this] (const std::string &line)
+                         { process_line (line); }, stop_flag_);
+  player.play (path, speedup);
 
   if (ui_ && ui_->enabled ())
     {

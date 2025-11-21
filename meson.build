@@ -20,6 +20,14 @@ add_project_arguments(
   language: 'cpp'
 )
 
-executable('nixb', ['src/main.cpp', 'src/NixLogParser.cpp', 'src/NixLogWatcher.cpp', 'src/TerminalUi.cpp'],
+executable('nixb', [
+    'src/main.cpp',
+    'src/NixBuildState.cpp',
+    'src/NixLogParser.cpp',
+    'src/NixLogPlayer.cpp',
+    'src/NixLogRecorder.cpp',
+    'src/NixLogWatcher.cpp',
+    'src/TerminalUi.cpp'
+  ],
   dependencies : [fmt_dep, simdjson_dep, cli11_dep, nix_store_dep, nix_expr_dep, boost_dep],
   install : true)
