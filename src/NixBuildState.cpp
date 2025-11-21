@@ -7,20 +7,6 @@
 namespace nixb
 {
 
-namespace
-{
-std::string
-url_basename (std::string_view text)
-{
-  auto pos = text.rfind ('/');
-  if (pos == std::string_view::npos || pos + 1 >= text.size ())
-    {
-      return std::string{ text };
-    }
-  return std::string{ text.substr (pos + 1) };
-}
-} // namespace
-
 NixBuildState::NixBuildState (std::shared_ptr<nix::Store> store)
     : store_ (std::move (store))
 {
@@ -42,8 +28,13 @@ NixBuildState::start_activity (const StartEvent &e)
   info.start_order = next_activity_order_++;
 
   process_store_ref (e, info);
-
   process_text_fallback (e, inferred_type, info);
+
+  if (info.type == nix::actCopyPath)
+    {
+      info.has_progress = true;
+      info.progress.unit = ProgressUnit::Bytes;
+    }
 
   activities_[e.id] = std::move (info);
 }
@@ -111,7 +102,43 @@ NixBuildState::extract_label_from_quotes (std::string_view text,
 void
 NixBuildState::stop_activity (int64_t id)
 {
-  activities_.erase (id);
+  auto it = activities_.find (id);
+  if (it == activities_.end ())
+    return;
+
+  // For file transfer/download activities, mark as finished instead of erasing
+  if (it->second.type == nix::actFileTransfer
+      || it->second.type == nix::actCopyPath)
+    {
+      it->second.is_finished = true;
+      it->second.finish_time = std::chrono::steady_clock::now ();
+    }
+  else
+    {
+      // For other activities, erase immediately
+      activities_.erase (it);
+    }
+}
+
+void
+NixBuildState::cleanup_finished_activities ()
+{
+  auto now = std::chrono::steady_clock::now ();
+  constexpr auto timeout = std::chrono::milliseconds (2000); // 1 second
+
+  for (auto it = activities_.begin (); it != activities_.end ();)
+    {
+      if (it->second.is_finished && it->second.finish_time)
+        {
+          auto elapsed = now - *it->second.finish_time;
+          if (elapsed >= timeout)
+            {
+              it = activities_.erase (it);
+              continue;
+            }
+        }
+      ++it;
+    }
 }
 
 void
@@ -177,10 +204,6 @@ NixBuildState::format_activity_label (const ActivityInfo &info) const
     {
       return info.label;
     }
-  if (!info.text.empty ())
-    {
-      return info.text;
-    }
   if (info.derivation_path)
     {
       if (info.derivation)
@@ -193,7 +216,31 @@ NixBuildState::format_activity_label (const ActivityInfo &info) const
           return std::string{ info.derivation_path->name () };
         }
     }
+  if (!info.text.empty ())
+    {
+      return info.text;
+    }
   return "";
+}
+
+std::string
+ActivityInfo::to_json () const
+{
+  return nlohmann::json{
+    { "type", type },
+    { "text", text },
+    { "store_path",
+      store_path.transform ([] (const nix::StorePath &path) -> std::string
+                              { return std::string{ path.to_string () }; }) },
+    { "derivation_path", derivation_path.transform (
+                             [] (const nix::StorePath &path) -> std::string
+                               { return std::string{ path.to_string () }; }) },
+    { "derivation",
+      derivation.transform ([] (const nix::Derivation &drv) -> std::string
+                              { return std::string{ drv.name }; }) },
+    { "store_base_url", store_base_url },
+    { "label", label }
+  }.dump ();
 }
 
 } // namespace nixb

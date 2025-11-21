@@ -54,7 +54,8 @@ class TerminalBackend : public UiBackend
 {
 public:
   explicit TerminalBackend (int rows, int cols)
-      : status_lines_ (0), rows_ (rows), cols_ (cols)
+      : status_lines_ (0), smoothed_status_lines_ (0.0f), rows_ (rows),
+        cols_ (cols)
   {
     // Caller has already validated that this is a TTY with valid dimensions
     reconfigure_scroll_region ();
@@ -86,7 +87,25 @@ public:
     last_state_ = state;
 
     int needed_lines = static_cast<int> (state.activity_lines.size ());
-    int new_status_lines = std::clamp (needed_lines, 0, rows_ - 1);
+    int clamped_needed = std::clamp (needed_lines, 0, rows_ - 8);
+
+    // Asymmetric dampening: immediate increase, smoothed decrease
+    // Apply EMA on every frame tick for time-based smoothing
+    if (clamped_needed > smoothed_status_lines_)
+      {
+        // Jump up immediately
+        smoothed_status_lines_ = static_cast<float> (clamped_needed);
+      }
+    else
+      {
+        // Always smooth toward target (happens every frame)
+        constexpr double alpha = 0.3;
+        smoothed_status_lines_ = static_cast<float> (
+            alpha * clamped_needed + (1.0 - alpha) * smoothed_status_lines_);
+      }
+
+    int new_status_lines
+        = static_cast<int> (std::round (smoothed_status_lines_));
     if (new_status_lines != status_lines_)
       {
         apply_status_resize (new_status_lines);
@@ -145,35 +164,71 @@ private:
   draw_status_lines (const UiState &state)
   {
     int first_status_row = rows_ - status_lines_ + 1;
-    int row = first_status_row;
 
-    // Build entire output in memory to reduce flicker
-    fmt::memory_buffer output;
+    // Create HUD raster
+    HudRaster raster (status_lines_, cols_);
 
-    // // Hide cursor while updating
-    // ansi::hide_cursor ();
-
+    // Render all activity lines into the raster
     for (int i = 0; i < status_lines_; ++i)
       {
-        // Generate cursor positioning and line clear in buffer
-        fmt::format_to (std::back_inserter (output), "\x1b[{};{}H", row, 1);
-        fmt::format_to (std::back_inserter (output), "\x1b[2K");
-
         if (i < static_cast<int> (state.activity_lines.size ()))
           {
-            fmt::format_to (
-                std::back_inserter (output), "{}",
-                render_activity_line (state.activity_lines[i], cols_));
+            render_activity_line (raster, i, state.activity_lines[i], cols_);
           }
+      }
+
+    // Get background color
+    fmt::rgb bg_color = get_hud_background_color ();
+
+    // Convert raster to ANSI with uniform background (returns vector of rows)
+    std::vector<std::string> raster_rows = raster_to_ansi (raster, bg_color);
+
+    // Build terminal output with positioning
+    fmt::memory_buffer output;
+
+    // Generate ANSI codes
+    std::string reset = "\x1b[0m";
+
+    // Draw top border above HUD
+    if (first_status_row > 1)
+      {
+        fmt::format_to (std::back_inserter (output), "\x1b[{};{}H",
+                        first_status_row - 1, 1);
+        fmt::format_to (std::back_inserter (output), "\x1b[K");
+        fmt::format_to (std::back_inserter (output), "\x1b[48;2;{};{};{}m",
+                        bg_color.r, bg_color.g, bg_color.b);
+        // Draw horizontal box line
+        for (int i = 0; i < cols_; ++i)
+          {
+            fmt::format_to (std::back_inserter (output), "▔");
+          }
+        fmt::format_to (std::back_inserter (output), "{}", reset);
+      }
+
+    // Position and emit each row
+    int row = first_status_row;
+    for (int i = 0; i < status_lines_; ++i)
+      {
+        // Move to row
+        fmt::format_to (std::back_inserter (output), "\x1b[{};{}H", row, 1);
+
+        // Clear line
+        fmt::format_to (std::back_inserter (output), "\x1b[K");
+
+        // Emit the raster row content
+        if (i < static_cast<int> (raster_rows.size ()))
+          {
+            fmt::format_to (std::back_inserter (output), "{}", raster_rows[i]);
+          }
+
+        // Reset at end of line
+        fmt::format_to (std::back_inserter (output), "{}", reset);
 
         ++row;
       }
 
     // Write entire frame at once
     fmt::print ("{}", fmt::to_string (output));
-
-    // // Show cursor again
-    // ansi::show_cursor ();
   }
 
   void
@@ -182,7 +237,8 @@ private:
     ansi::hide_cursor ();
 
     // Scroll region is from line 1 to scroll_bottom_.
-    scroll_bottom_ = rows_ - status_lines_;
+    // Account for: status_lines_ + 1 border line
+    scroll_bottom_ = rows_ - status_lines_ - 1;
     if (scroll_bottom_ < 1)
       scroll_bottom_ = 1;
 
@@ -215,6 +271,7 @@ private:
 
   bool enabled_ = false;
   int status_lines_ = 0;
+  float smoothed_status_lines_ = 0.0f; // EMA-smoothed line count
   int rows_ = 0;
   int cols_ = 0;
   int scroll_bottom_ = 0;
@@ -278,10 +335,13 @@ ActivityHud::present (const UiState &state)
           ActivityProgress &smoothed = it->second;
           const ActivityProgress &current = *line.progress;
 
-          auto smooth = [this] (int64_t old_val, int64_t new_val) -> int64_t
+          // Use much faster smoothing when finished to "zip" to 100%
+          double alpha = line.is_finished ? 0.8 : ema_alpha_;
+
+          auto smooth = [alpha] (int64_t old_val, int64_t new_val) -> int64_t
             {
-              return static_cast<int64_t> (ema_alpha_ * new_val
-                                           + (1.0 - ema_alpha_) * old_val);
+              return static_cast<int64_t> (alpha * new_val
+                                           + (1.0 - alpha) * old_val);
             };
 
           smoothed.done = smooth (smoothed.done, current.done);
@@ -289,6 +349,12 @@ ActivityHud::present (const UiState &state)
           smoothed.running = smooth (smoothed.running, current.running);
           smoothed.failed = smooth (smoothed.failed, current.failed);
           smoothed.unit = current.unit; // Unit doesn't get smoothed
+
+          // When finished, zip the progress toward 100%
+          if (line.is_finished)
+            {
+              smoothed.done = smooth (smoothed.done, smoothed.expected);
+            }
 
           smoothed_progress_[line.id] = smoothed;
         }

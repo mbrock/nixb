@@ -9,7 +9,6 @@
 #include "nix/util/logging.hh"
 #include "nix/util/ref.hh"
 #include "nix/util/types.hh"
-#include "src/IdColor.hpp"
 #include "src/NixLogPlayer.hpp"
 #include "src/UiStateBuilder.hpp"
 
@@ -26,7 +25,6 @@
 #include <nlohmann/json.hpp>
 #include <thread>
 
-#include <algorithm>
 #include <cctype>
 #include <iostream>
 #include <string>
@@ -188,7 +186,6 @@ NixLogWatcher::handle_start_event (const StartEvent &e)
     std::lock_guard<std::mutex> lock (state_mutex_);
     state_->start_activity (e);
   }
-  refresh_ui ();
 
   // Simple: just print the event text
   if (!e.text.empty ())
@@ -207,18 +204,15 @@ NixLogWatcher::handle_result_event (const ResultEvent &e)
 
   if (e.type == nix::resSetExpected)
     {
-      refresh_ui ();
       return;
     }
 
   if (e.type == nix::resProgress)
     {
-      refresh_ui ();
       return;
     }
 
   emit_log (e.format ());
-  refresh_ui ();
 }
 
 void
@@ -234,7 +228,6 @@ NixLogWatcher::handle_stop_event (const StopEvent &e)
       }
     state_->stop_activity (e.id);
   }
-  refresh_ui ();
 
   // Simple: just print the activity text if we have it
   if (!activity_text.empty ())
@@ -273,6 +266,7 @@ void
 NixLogWatcher::refresh_ui ()
 {
   std::lock_guard<std::mutex> lock (state_mutex_);
+  state_->cleanup_finished_activities ();
   rebuild_ui_state ();
   ui_.hud ().present (ui_state_);
 }

@@ -3,6 +3,7 @@
 #include "NixLogParser.hpp"
 #include "UiTypes.hpp"
 
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <nix/store/derivations.hh>
@@ -10,7 +11,6 @@
 #include <optional>
 #include <string>
 #include <unordered_map>
-#include <unordered_set>
 
 namespace nix
 {
@@ -34,6 +34,10 @@ struct ActivityInfo
   bool has_progress = false;
   size_t start_order = 0;
   std::string current_phase;
+  bool is_finished = false;
+  std::optional<std::chrono::steady_clock::time_point> finish_time;
+
+  std::string to_json () const;
 };
 
 class NixBuildState
@@ -44,6 +48,7 @@ public:
   void start_activity (const StartEvent &e);
   void stop_activity (int64_t id);
   void update_progress (const ResultEvent &e);
+  void cleanup_finished_activities ();
 
   const std::unordered_map<int64_t, ActivityInfo> &
   activities () const

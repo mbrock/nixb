@@ -1,5 +1,5 @@
 #include "NixLogParser.hpp"
-#include "src/IdColor.hpp"
+#include "nix/util/logging.hh"
 
 #include <fmt/color.h>
 #include <fmt/core.h>
@@ -140,6 +140,8 @@ NixLogParser::parse_line (std::string_view line)
             case nix::actCopyPath:
             case nix::actQueryPathInfo:
             case nix::actSubstitute:
+            case nix::actBuild:
+            case nix::actBuildWaiting:
               event.store_ref = parse_store_ref ();
               break;
             default:

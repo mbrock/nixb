@@ -6,9 +6,7 @@
 #include "Ui.hpp"
 
 #include <atomic>
-#include <cstdint>
 #include <fmt/color.h>
-#include <functional>
 #include <memory>
 #include <mutex>
 #include <optional>

@@ -1,7 +1,5 @@
 #include "UiStateBuilder.hpp"
 #include "NixLogParser.hpp"
-#include "UiRender.hpp"
-#include "fmt/color.h"
 #include "nix/util/logging.hh"
 
 #include <algorithm>
@@ -103,8 +101,8 @@ UiStateBuilder::should_hide_activity (int64_t id) const
     }
 
   if (info->type == nix::actRealise || info->type == nix::actBuilds
-      || info->type == nix::actSubstitute
-      || info->type == nix::actFileTransfer)
+      || info->type == nix::actSubstitute || info->type == nix::actFileTransfer
+      || info->type == nix::actUnknown)
     {
       return true;
     }
@@ -122,7 +120,9 @@ UiStateBuilder::format_display_label (
 
   if (info.type == nix::actBuild || info.type == nix::actBuildWaiting)
     {
-      if (info.store_path)
+      if (info.derivation_path)
+        display_label = info.derivation_path->name ();
+      else if (info.store_path)
         display_label = info.store_path->name ();
     }
 
@@ -136,35 +136,8 @@ UiStateBuilder::format_display_label (
       name_part = fmt::format ("{} {}", tag, display_label);
     }
 
-  // Column widths for alignment
-  constexpr int name_col_width = 40;
-  constexpr int host_col_width = 25;
-
-  std::string display;
-  if (base_url && !base_url->empty ())
-    {
-      // Strip https:// prefix for cleaner display
-      std::string_view url = *base_url;
-      if (url.starts_with ("https://"))
-        {
-          url = url.substr (8);
-        }
-      else if (url.starts_with ("http://"))
-        {
-          url = url.substr (7);
-        }
-
-      // Align name and host in columns
-      display = fmt::format ("{:<{}}{:<{}}",
-                             fmt::styled (name_part, fmt::emphasis::bold),
-                             name_col_width, url, host_col_width);
-    }
-  else
-    {
-      display = name_part;
-    }
-
-  return display;
+  // Return just the name part - URL will be rendered separately
+  return name_part;
 }
 
 void
@@ -208,10 +181,40 @@ UiStateBuilder::emit_tree_node (int64_t id, int visible_depth)
       std::string display = format_display_label (*info, visible_depth, tag,
                                                   label, info->store_base_url);
 
+      // Extract URL for separate styling
+      std::optional<std::string> url_part;
+      if (info->store_base_url && !info->store_base_url->empty ())
+        {
+          std::string_view url = *info->store_base_url;
+          if (url.starts_with ("https://"))
+            {
+              url = url.substr (8);
+            }
+          else if (url.starts_with ("http://"))
+            {
+              url = url.substr (7);
+            }
+          url_part = std::string (url);
+        }
+
       auto progress = compute_progress (id);
 
+      // Calculate fade factor for finished activities
+      double fade_factor = 0.0;
+      if (info->is_finished && info->finish_time)
+        {
+          auto now = std::chrono::steady_clock::now ();
+          auto elapsed = now - *info->finish_time;
+          auto elapsed_ms
+              = std::chrono::duration_cast<std::chrono::milliseconds> (elapsed)
+                    .count ();
+          // Fade out over 1000ms (matches cleanup timeout)
+          fade_factor = std::min (1.0, elapsed_ms / 2000.0);
+        }
+
       result_.activity_lines.push_back (
-          UiActivityLine{ id, std::move (display), progress });
+          UiActivityLine{ id, std::move (display), url_part, progress,
+                          info->is_finished, fade_factor });
 
       next_visible_depth = visible_depth + 1;
     }
@@ -229,33 +232,34 @@ UiStateBuilder::emit_tree_node (int64_t id, int visible_depth)
 void
 UiStateBuilder::sort_activity_lines ()
 {
-  std::stable_sort (
-      result_.activity_lines.begin (), result_.activity_lines.end (),
-      [&] (const UiActivityLine &a, const UiActivityLine &b)
-        {
-          const auto *info_a = state_.get_activity (a.id);
-          const auto *info_b = state_.get_activity (b.id);
-          if (!info_a || !info_b)
-            return false;
+  // std::stable_sort (result_.activity_lines.begin (),
+  //                   result_.activity_lines.end (),
+  //                   [&] (const UiActivityLine &a, const UiActivityLine &b)
+  //                     {
+  //                       const auto *info_a = state_.get_activity (a.id);
+  //                       const auto *info_b = state_.get_activity (b.id);
+  //                       if (!info_a || !info_b)
+  //                         return false;
 
-          bool is_dl_a = (info_a->type == nix::actCopyPath);
-          bool is_dl_b = (info_b->type == nix::actCopyPath);
+  //                       bool is_dl_a = (info_a->type == nix::actCopyPath);
+  //                       bool is_dl_b = (info_b->type == nix::actCopyPath);
 
-          if (is_dl_a != is_dl_b)
-            {
-              return !is_dl_a && is_dl_b;
-            }
+  //                       if (is_dl_a != is_dl_b)
+  //                         {
+  //                           return !is_dl_a && is_dl_b;
+  //                         }
 
-          if (is_dl_a && is_dl_b)
-            {
-              auto prog_a = compute_progress (a.id);
-              auto prog_b = compute_progress (b.id);
+  //                       // if (is_dl_a && is_dl_b)
+  //                       //   {
+  //                       //     auto prog_a = compute_progress (a.id);
+  //                       //     auto prog_b = compute_progress (b.id);
 
-              return prog_a && prog_b && prog_a->expected > prog_b->expected;
-            }
+  //                       //     return prog_a && prog_b && prog_a->expected >
+  //                       //     prog_b->expected;
+  //                       //   }
 
-          return false;
-        });
+  //                       return false;
+  //                     });
 }
 
 size_t
@@ -276,7 +280,7 @@ UiStateBuilder::tag_for_type (ActivityType type)
     case nix::actSubstitute:
       return std::string{ "substitute" };
     case nix::actCopyPath:
-      return std::string{ "" };
+      return std::string{ "%" };
     case nix::actFileTransfer:
       return std::string{ "transfer" };
     case nix::actQueryPathInfo:
@@ -284,7 +288,7 @@ UiStateBuilder::tag_for_type (ActivityType type)
     case nix::actBuilds:
       return std::string{ "builds" };
     case nix::actBuild:
-      return std::string{ "build" };
+      return std::string{ "$" };
     case nix::actBuildWaiting:
       return std::string{ "queued" };
     case nix::actFetchTree:
