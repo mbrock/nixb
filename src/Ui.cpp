@@ -14,161 +14,202 @@
 #include <string_view>
 #include <unordered_set>
 
-namespace nixb {
+namespace nixb
+{
 
 // ============================================================================
 // DumbBackend: non-TTY fallback
 // ============================================================================
 
-class DumbBackend : public UiBackend {
+class DumbBackend : public UiBackend
+{
 public:
-  void println(std::string_view line) override {
+  void
+  println (std::string_view line) override
+  {
     // Ensure line ends with newline
-    bool has_nl = !line.empty() && line.back() == '\n';
-    fmt::print("{}{}", line, has_nl ? "" : "\n");
-    std::fflush(stdout);
+    bool has_nl = !line.empty () && line.back () == '\n';
+    fmt::print ("{}{}", line, has_nl ? "" : "\n");
+    std::fflush (stdout);
   }
 
-  void update_hud(const UiState &) override {
+  void
+  update_hud (const UiState &) override
+  {
     // No-op for dumb backend
   }
 
-  bool enabled() const override { return false; }
+  bool
+  enabled () const override
+  {
+    return false;
+  }
 };
 
 // ============================================================================
 // TerminalBackend: ANSI terminal with scroll regions and status HUD
 // ============================================================================
 
-class TerminalBackend : public UiBackend {
+class TerminalBackend : public UiBackend
+{
 public:
-  explicit TerminalBackend(int rows, int cols)
-      : status_lines_(0), rows_(rows), cols_(cols) {
+  explicit TerminalBackend (int rows, int cols)
+      : status_lines_ (0), rows_ (rows), cols_ (cols)
+  {
     // Caller has already validated that this is a TTY with valid dimensions
-    reconfigure_scroll_region();
+    reconfigure_scroll_region ();
     enabled_ = true;
   }
 
-  ~TerminalBackend() override { finish(); }
+  ~TerminalBackend () override { finish (); }
 
-  void println(std::string_view line) override {
-    if (!enabled_) {
-      return;
-    }
+  void
+  println (std::string_view line) override
+  {
+    if (!enabled_)
+      {
+        return;
+      }
 
-    ansi::move_cursor(scroll_bottom_, 1);
-    bool has_trailing_newline = !line.empty() && line.back() == '\n';
-    fmt::print("{}{}", line, has_trailing_newline ? "" : "\n");
-    std::fflush(stdout);
+    ansi::move_cursor (scroll_bottom_, 1);
+    bool has_trailing_newline = !line.empty () && line.back () == '\n';
+    fmt::print ("{}{}", line, has_trailing_newline ? "" : "\n");
+    std::fflush (stdout);
   }
 
-  void update_hud(const UiState &state) override {
+  void
+  update_hud (const UiState &state) override
+  {
     if (!enabled_)
       return;
 
     last_state_ = state;
 
-    int needed_lines = static_cast<int>(state.activity_lines.size());
-    int new_status_lines = std::clamp(needed_lines, 0, rows_ - 1);
-    if (new_status_lines != status_lines_) {
-      apply_status_resize(new_status_lines);
-    }
+    int needed_lines = static_cast<int> (state.activity_lines.size ());
+    int new_status_lines = std::clamp (needed_lines, 0, rows_ - 1);
+    if (new_status_lines != status_lines_)
+      {
+        apply_status_resize (new_status_lines);
+      }
 
-    draw_status_lines(state);
+    draw_status_lines (state);
 
-    ansi::move_cursor(rows_, 1);
-    std::fflush(stdout);
+    ansi::move_cursor (rows_, 1);
+    std::fflush (stdout);
   }
 
-  bool enabled() const override { return enabled_; }
+  bool
+  enabled () const override
+  {
+    return enabled_;
+  }
 
 private:
-  void apply_status_resize(int new_status_lines) {
+  void
+  apply_status_resize (int new_status_lines)
+  {
     int old_status_lines = status_lines_;
     int old_scroll_bottom = scroll_bottom_;
 
     // Shrink the scroll region only after pushing visible log lines up so they
     // remain on screen.
-    if (new_status_lines > old_status_lines && old_scroll_bottom > 0) {
-      int scroll_diff = new_status_lines - old_status_lines;
-      ansi::move_cursor(old_scroll_bottom, 1);
-      ansi::scroll_up(scroll_diff);
-    }
+    if (new_status_lines > old_status_lines && old_scroll_bottom > 0)
+      {
+        int scroll_diff = new_status_lines - old_status_lines;
+        ansi::move_cursor (old_scroll_bottom, 1);
+        ansi::scroll_up (scroll_diff);
+      }
 
     status_lines_ = new_status_lines;
-    reconfigure_scroll_region();
+    reconfigure_scroll_region ();
 
-    if (new_status_lines < old_status_lines) {
-      int scroll_diff = old_status_lines - new_status_lines;
-      ansi::move_cursor(1, 1);
-      ansi::scroll_down(scroll_diff);
+    if (new_status_lines < old_status_lines)
+      {
+        int scroll_diff = old_status_lines - new_status_lines;
+        ansi::move_cursor (1, 1);
+        ansi::scroll_down (scroll_diff);
 
-      // Newly freed rows belong to the scroll region; clear stale status text.
-      int first_freed_row = rows_ - old_status_lines + 1;
-      int last_freed_row = rows_ - new_status_lines;
-      for (int r = first_freed_row; r <= last_freed_row; ++r) {
-        ansi::move_cursor(r, 1);
-        ansi::clear_line();
+        // Newly freed rows belong to the scroll region; clear stale status
+        // text.
+        int first_freed_row = rows_ - old_status_lines + 1;
+        int last_freed_row = rows_ - new_status_lines;
+        for (int r = first_freed_row; r <= last_freed_row; ++r)
+          {
+            ansi::move_cursor (r, 1);
+            ansi::clear_line ();
+          }
       }
-    }
   }
 
-  void draw_status_lines(const UiState &state) {
+  void
+  draw_status_lines (const UiState &state)
+  {
     int first_status_row = rows_ - status_lines_ + 1;
     int row = first_status_row;
 
     // Build entire output in memory to reduce flicker
     fmt::memory_buffer output;
 
-    // Hide cursor while updating
-    ansi::hide_cursor();
+    // // Hide cursor while updating
+    // ansi::hide_cursor ();
 
-    for (int i = 0; i < status_lines_; ++i) {
-      // Generate cursor positioning and line clear in buffer
-      fmt::format_to(std::back_inserter(output), "\x1b[{};{}H", row, 1);
-      fmt::format_to(std::back_inserter(output), "\x1b[2K");
+    for (int i = 0; i < status_lines_; ++i)
+      {
+        // Generate cursor positioning and line clear in buffer
+        fmt::format_to (std::back_inserter (output), "\x1b[{};{}H", row, 1);
+        fmt::format_to (std::back_inserter (output), "\x1b[2K");
 
-      if (i < static_cast<int>(state.activity_lines.size())) {
-        fmt::format_to(std::back_inserter(output), "{}",
-                       render_activity_line(state.activity_lines[i], cols_));
+        if (i < static_cast<int> (state.activity_lines.size ()))
+          {
+            fmt::format_to (
+                std::back_inserter (output), "{}",
+                render_activity_line (state.activity_lines[i], cols_));
+          }
+
+        ++row;
       }
 
-      ++row;
-    }
-
     // Write entire frame at once
-    fmt::print("{}", fmt::to_string(output));
+    fmt::print ("{}", fmt::to_string (output));
 
-    // Show cursor again
-    ansi::show_cursor();
+    // // Show cursor again
+    // ansi::show_cursor ();
   }
 
-  void reconfigure_scroll_region() {
+  void
+  reconfigure_scroll_region ()
+  {
+    ansi::hide_cursor ();
+
     // Scroll region is from line 1 to scroll_bottom_.
     scroll_bottom_ = rows_ - status_lines_;
     if (scroll_bottom_ < 1)
       scroll_bottom_ = 1;
 
-    ansi::set_scroll_region(1, scroll_bottom_);
-    ansi::move_cursor(scroll_bottom_, 1);
-    std::fflush(stdout);
+    ansi::set_scroll_region (1, scroll_bottom_);
+    ansi::move_cursor (scroll_bottom_, 1);
+    std::fflush (stdout);
   }
 
-  void finish() {
+  void
+  finish ()
+  {
     if (!enabled_ || torn_down_)
       return;
 
-    ansi::reset_scroll_region();
+    ansi::reset_scroll_region ();
 
     int first_status_row = rows_ - status_lines_ + 1;
-    for (int row = first_status_row; row <= rows_; ++row) {
-      ansi::move_cursor(row, 1);
-      ansi::clear_line();
-    }
+    for (int row = first_status_row; row <= rows_; ++row)
+      {
+        ansi::move_cursor (row, 1);
+        ansi::clear_line ();
+      }
 
-    ansi::move_cursor(rows_, 1);
-    fmt::print("\n");
-    std::fflush(stdout);
+    ansi::move_cursor (rows_, 1);
+    fmt::print ("\n");
+    ansi::show_cursor ();
+    std::fflush (stdout);
     torn_down_ = true;
   }
 
@@ -185,23 +226,30 @@ private:
 // LogStream implementation
 // ============================================================================
 
-void LogStream::println(std::string_view line) { backend_.println(line); }
+void
+LogStream::println (std::string_view line)
+{
+  backend_.println (line);
+}
 
 // ============================================================================
 // ActivityHud implementation
 // ============================================================================
 
-void ActivityHud::present(const UiState &state) {
+void
+ActivityHud::present (const UiState &state)
+{
   last_state_ = state;
 
-  auto now = std::chrono::steady_clock::now();
-  auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+  auto now = std::chrono::steady_clock::now ();
+  auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds> (
       now - last_render_time_);
 
   // Rate limit: only render if enough time has passed
-  if (elapsed < min_frame_interval_) {
-    return; // Skip this frame, state is cached in last_state_
-  }
+  if (elapsed < min_frame_interval_)
+    {
+      return; // Skip this frame, state is cached in last_state_
+    }
 
   last_render_time_ = now;
 
@@ -209,86 +257,104 @@ void ActivityHud::present(const UiState &state) {
   UiState smoothed_state = state;
   std::unordered_set<int64_t> current_ids;
 
-  for (auto &line : smoothed_state.activity_lines) {
-    if (!line.progress) {
-      continue;
+  for (auto &line : smoothed_state.activity_lines)
+    {
+      if (!line.progress)
+        {
+          continue;
+        }
+
+      current_ids.insert (line.id);
+      auto it = smoothed_progress_.find (line.id);
+
+      if (it == smoothed_progress_.end ())
+        {
+          // First time seeing this activity, initialize with current value
+          smoothed_progress_[line.id] = *line.progress;
+        }
+      else
+        {
+          // Apply EMA: smoothed = alpha * new + (1 - alpha) * old
+          ActivityProgress &smoothed = it->second;
+          const ActivityProgress &current = *line.progress;
+
+          auto smooth = [this] (int64_t old_val, int64_t new_val) -> int64_t
+            {
+              return static_cast<int64_t> (ema_alpha_ * new_val
+                                           + (1.0 - ema_alpha_) * old_val);
+            };
+
+          smoothed.done = smooth (smoothed.done, current.done);
+          smoothed.expected = smooth (smoothed.expected, current.expected);
+          smoothed.running = smooth (smoothed.running, current.running);
+          smoothed.failed = smooth (smoothed.failed, current.failed);
+          smoothed.unit = current.unit; // Unit doesn't get smoothed
+
+          smoothed_progress_[line.id] = smoothed;
+        }
+
+      // Use the smoothed value for rendering
+      line.progress = smoothed_progress_[line.id];
     }
-
-    current_ids.insert(line.id);
-    auto it = smoothed_progress_.find(line.id);
-
-    if (it == smoothed_progress_.end()) {
-      // First time seeing this activity, initialize with current value
-      smoothed_progress_[line.id] = *line.progress;
-    } else {
-      // Apply EMA: smoothed = alpha * new + (1 - alpha) * old
-      ActivityProgress &smoothed = it->second;
-      const ActivityProgress &current = *line.progress;
-
-      auto smooth = [this](int64_t old_val, int64_t new_val) -> int64_t {
-        return static_cast<int64_t>(ema_alpha_ * new_val +
-                                    (1.0 - ema_alpha_) * old_val);
-      };
-
-      smoothed.done = smooth(smoothed.done, current.done);
-      smoothed.expected = smooth(smoothed.expected, current.expected);
-      smoothed.running = smooth(smoothed.running, current.running);
-      smoothed.failed = smooth(smoothed.failed, current.failed);
-      smoothed.unit = current.unit; // Unit doesn't get smoothed
-
-      smoothed_progress_[line.id] = smoothed;
-    }
-
-    // Use the smoothed value for rendering
-    line.progress = smoothed_progress_[line.id];
-  }
 
   // Clean up smoothed values for activities that no longer exist
-  for (auto it = smoothed_progress_.begin(); it != smoothed_progress_.end();) {
-    if (current_ids.find(it->first) == current_ids.end()) {
-      it = smoothed_progress_.erase(it);
-    } else {
-      ++it;
+  for (auto it = smoothed_progress_.begin (); it != smoothed_progress_.end ();)
+    {
+      if (current_ids.find (it->first) == current_ids.end ())
+        {
+          it = smoothed_progress_.erase (it);
+        }
+      else
+        {
+          ++it;
+        }
     }
-  }
 
-  backend_.update_hud(smoothed_state);
+  backend_.update_hud (smoothed_state);
 }
 
 // ============================================================================
 // UiSession implementation
 // ============================================================================
 
-UiSession::UiSession(std::unique_ptr<UiBackend> backend)
-    : backend_(std::move(backend)),
-      log_(std::make_unique<LogStream>(*backend_)),
-      hud_(std::make_unique<ActivityHud>(*backend_)) {}
+UiSession::UiSession (std::unique_ptr<UiBackend> backend)
+    : backend_ (std::move (backend)),
+      log_ (std::make_unique<LogStream> (*backend_)),
+      hud_ (std::make_unique<ActivityHud> (*backend_))
+{
+}
 
-UiSession::~UiSession() = default;
+UiSession::~UiSession () = default;
 
-UiSession UiSession::create(bool force) {
+UiSession
+UiSession::create (bool force)
+{
   // TTY detection logic (rationalized - only here, not in TerminalUi)
-  if (!force) {
-    if (!::isatty(STDOUT_FILENO)) {
-      return UiSession(std::make_unique<DumbBackend>());
-    }
+  if (!force)
+    {
+      if (!::isatty (STDOUT_FILENO))
+        {
+          return UiSession (std::make_unique<DumbBackend> ());
+        }
 
-    const char *term = std::getenv("TERM");
-    if (!term || std::string_view(term) == "dumb") {
-      return UiSession(std::make_unique<DumbBackend>());
+      const char *term = std::getenv ("TERM");
+      if (!term || std::string_view (term) == "dumb")
+        {
+          return UiSession (std::make_unique<DumbBackend> ());
+        }
     }
-  }
 
   // Get terminal size
   winsize ws{};
-  if (::ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == -1 || ws.ws_row == 0 ||
-      ws.ws_col == 0 || ws.ws_row <= 1) {
-    return UiSession(std::make_unique<DumbBackend>());
-  }
+  if (::ioctl (STDOUT_FILENO, TIOCGWINSZ, &ws) == -1 || ws.ws_row == 0
+      || ws.ws_col == 0 || ws.ws_row <= 1)
+    {
+      return UiSession (std::make_unique<DumbBackend> ());
+    }
 
   // Create terminal backend with detected size
-  auto backend = std::make_unique<TerminalBackend>(ws.ws_row, ws.ws_col);
-  return UiSession(std::move(backend));
+  auto backend = std::make_unique<TerminalBackend> (ws.ws_row, ws.ws_col);
+  return UiSession (std::move (backend));
 }
 
 } // namespace nixb

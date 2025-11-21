@@ -15,48 +15,59 @@
 #include <string>
 #include <thread>
 
-namespace nix {
+namespace nix
+{
 class Store;
 }
 
-namespace nixb {
+namespace nixb
+{
 
-class NixLogWatcher {
+class NixLogWatcher
+{
 public:
-  enum class UiMode { Auto, Off, On };
+  enum class UiMode
+  {
+    Auto,
+    Off,
+    On
+  };
 
-  explicit NixLogWatcher(bool quiet, UiMode ui_mode = UiMode::Auto,
-                         std::optional<std::string> record_path = std::nullopt,
-                         std::atomic<bool> *stop_flag = nullptr,
-                         double emit_delay_ms = 0.0);
-  ~NixLogWatcher();
+  explicit NixLogWatcher (bool quiet, UiMode ui_mode = UiMode::Auto,
+                          std::optional<std::string> record_path
+                          = std::nullopt,
+                          std::atomic<bool> *stop_flag = nullptr,
+                          double emit_delay_ms = 0.0);
+  ~NixLogWatcher ();
 
   // Evaluate an installable and return derivation JSON strings.
   static std::vector<std::string>
-  show_derivation(const std::string &installable);
+  show_derivation (const std::string &installable);
 
-  void process_input();
-  void process_playback_file(const std::string &path);
-  void process_playback_file(const std::string &path, double speedup);
-  void process_log_line(const std::string &line) { process_line(line); }
-  void finish();
+  void process_input ();
+  void process_playback_file (const std::string &path);
+  void process_playback_file (const std::string &path, double speedup);
+  void
+  process_log_line (const std::string &line)
+  {
+    process_line (line);
+  }
+  void finish ();
 
 private:
-  void process_line(const std::string &line);
-  void handle_start_event(const StartEvent &e);
-  void handle_result_event(const ResultEvent &e);
-  void handle_stop_event(const StopEvent &e);
-  void handle_msg_event(const MsgEvent &e);
-  void emit_log(const std::string &block);
-  void refresh_ui();
-  void rebuild_ui_state();
-  void render_loop();
-  std::optional<std::string> format_activity_log_line(
-      std::string_view prefix, fmt::terminal_color color, int64_t id,
-      std::optional<int64_t> parent, const ActivityInfo &info,
-      const std::function<std::string(const ActivityInfo &)> &label_fn) const;
-  bool stop_requested() const {
-    return stop_flag_ && stop_flag_->load(std::memory_order_relaxed);
+  void process_line (const std::string &line);
+  void handle_start_event (const StartEvent &e);
+  void handle_result_event (const ResultEvent &e);
+  void handle_stop_event (const StopEvent &e);
+  void handle_msg_event (const MsgEvent &e);
+  void emit_log (const std::string &block);
+  void refresh_ui ();
+  void rebuild_ui_state ();
+  void render_loop ();
+  bool
+  stop_requested () const
+  {
+    return stop_flag_ && stop_flag_->load (std::memory_order_relaxed);
   }
 
   bool quiet_;
@@ -66,7 +77,7 @@ private:
   std::unique_ptr<NixLogRecorder> recorder_;
   UiSession ui_;
   UiState ui_state_;
-  double emit_delay_ms_{0.0};
+  double emit_delay_ms_{ 0.0 };
   std::atomic<bool> *stop_flag_ = nullptr;
 
   // Render thread for continuous UI updates

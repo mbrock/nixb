@@ -32,7 +32,8 @@ executable('nixb', [
     'src/NixLogWatcher.cpp',
     'src/Ui.cpp',
     'src/Ansi.cpp',
-    'src/UiRender.cpp'
+    'src/UiRender.cpp',
+    'src/UiStateBuilder.cpp'
   ],
   dependencies : [fmt_dep, simdjson_dep, cli11_dep, nix_store_dep, nix_expr_dep, nix_flake_dep, nix_cmd_dep, boost_dep],
   install : true)

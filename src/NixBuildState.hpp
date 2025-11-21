@@ -53,63 +53,18 @@ public:
 
   const ActivityInfo *get_activity (int64_t id) const;
 
-  std::optional<int64_t>
-  builds_activity () const
-  {
-    return builds_activity_;
-  }
-
-  int64_t
-  success_tokens () const
-  {
-    return success_tokens_;
-  }
-  void decrement_success_tokens ();
-
-  const std::unordered_set<int64_t> &
-  active_transfers () const
-  {
-    return active_transfers_;
-  }
-
-  const std::unordered_map<int64_t, ActivityProgress> &
-  transfer_progress () const
-  {
-    return transfer_progress_;
-  }
-
   std::string format_activity_label (const ActivityInfo &info) const;
 
-  struct BuildsProgress
-  {
-    std::optional<ActivityProgress> aggregate;
-    std::string current_phase;
-  };
-
-  const BuildsProgress &
-  builds_progress () const
-  {
-    return builds_progress_;
-  }
-  void set_builds_expected (int64_t expected);
-  void set_builds_progress (const ActivityProgress &progress);
-  void set_current_phase (int64_t id, const std::string &phase);
-  void clear_builds_aggregate ();
-
 private:
-  void note_transfer_start (int64_t id);
-  void note_transfer_stop (int64_t id);
-  void update_success_tokens (const ResultEvent &e);
-  void update_transfer_progress (int64_t id, const ActivityProgress &progress);
+  ActivityType infer_activity_type (const StartEvent &e) const;
+  void process_store_ref (const StartEvent &e, ActivityInfo &info);
+  void process_text_fallback (const StartEvent &e, ActivityType type,
+                              ActivityInfo &info);
+  void extract_label_from_quotes (std::string_view text,
+                                  ActivityInfo &info) const;
 
   std::shared_ptr<nix::Store> store_;
   std::unordered_map<int64_t, ActivityInfo> activities_;
-  std::optional<int64_t> builds_activity_;
-  int64_t success_tokens_ = 0;
-  int64_t last_progress_done_ = 0;
-  std::unordered_set<int64_t> active_transfers_;
-  std::unordered_map<int64_t, ActivityProgress> transfer_progress_;
-  BuildsProgress builds_progress_;
   size_t next_activity_order_ = 0;
 };
 

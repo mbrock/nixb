@@ -6,8 +6,8 @@
 #include <optional>
 #include <vector>
 
-#include "NixLogWatcher.hpp"
 #include "NixLogForwardingLogger.hpp"
+#include "NixLogWatcher.hpp"
 #include <nix/util/logging.hh>
 #include <nix/util/signals.hh>
 
@@ -104,7 +104,8 @@ main (int argc, char **argv)
       std::vector<std::unique_ptr<nix::Logger>> extras;
       if (nix::logger)
         extras.push_back (std::move (nix::logger));
-      nix::logger = nix::makeTeeLogger (std::move (bridge), std::move (extras));
+      nix::logger
+          = nix::makeTeeLogger (std::move (bridge), std::move (extras));
 
       try
         {

@@ -259,29 +259,30 @@ StartEvent::format () const
   fmt::memory_buffer buf;
   fmt::format_to (std::back_inserter (buf), "{}",
                   fmt::styled (">>>", fmt::fg (fmt::terminal_color::blue)));
-  auto id_style = style_for_id (static_cast<uint64_t> (id));
-  fmt::format_to (
-      std::back_inserter (buf), " [{} ",
-      fmt::styled (hashed_id_token (static_cast<uint64_t> (id)), id_style));
-  if (parent)
-    {
-      fmt::format_to (
-          std::back_inserter (buf), ":: {}] ",
-          fmt::styled (hashed_id_token (static_cast<uint64_t> (*parent)),
-                       style_for_id (static_cast<uint64_t> (*parent))));
-    }
-  else
-    {
-      fmt::format_to (std::back_inserter (buf), "] ");
-    }
-  fmt::format_to (std::back_inserter (buf), "{} ",
-                  NixLogParser::activity_type_name (type));
+  // auto id_style = style_for_id (static_cast<uint64_t> (id));
+  //  fmt::format_to (
+  //      std::back_inserter (buf), " [{} ",
+  //      fmt::styled (hashed_id_token (static_cast<uint64_t> (id)),
+  //      id_style));
+  //  if (parent)
+  //    {
+  //      fmt::format_to (
+  //          std::back_inserter (buf), ":: {}] ",
+  //          fmt::styled (hashed_id_token (static_cast<uint64_t> (*parent)),
+  //                       style_for_id (static_cast<uint64_t> (*parent))));
+  //    }
+  //  else
+  //    {
+  //      fmt::format_to (std::back_inserter (buf), "] ");
+  //    }
   if (!text.empty ())
     {
-      fmt::format_to (
-          std::back_inserter (buf), "{}",
-          fmt::styled (text, fmt::fg (fmt::terminal_color::white)));
+      fmt::format_to (std::back_inserter (buf), "{:<20}: ",
+                      fmt::styled (text, fmt::fg (fmt::terminal_color::white)
+                                             | fmt::emphasis::bold));
     }
+  fmt::format_to (std::back_inserter (buf), "{:<20}",
+                  NixLogParser::activity_type_name (type));
 
   return fmt::to_string (buf);
 }
@@ -291,20 +292,21 @@ StopEvent::format (std::string_view type_name, std::string_view activity_text,
                    bool build_success, std::optional<uint64_t> parent_id) const
 {
   fmt::memory_buffer buf;
-  auto id_style = style_for_id (static_cast<uint64_t> (id));
-  std::string parent_token = "-";
-  if (parent_id)
-    {
-      parent_token = fmt::format (
-          "{}",
-          fmt::styled (hashed_id_token (static_cast<uint64_t> (*parent_id)),
-                       style_for_id (static_cast<uint64_t> (*parent_id))));
-    }
-  fmt::format_to (
-      std::back_inserter (buf), "{} [{} :: {}] {}",
-      fmt::styled ("<<<", fmt::fg (fmt::terminal_color::red)),
-      fmt::styled (hashed_id_token (static_cast<uint64_t> (id)), id_style),
-      parent_token, type_name);
+  // auto id_style = style_for_id (static_cast<uint64_t> (id));
+  //  std::string parent_token = "-";
+  //  if (parent_id)
+  //    {
+  //      parent_token = fmt::format (
+  //          "{}",
+  //          fmt::styled (hashed_id_token (static_cast<uint64_t>
+  //          (*parent_id)),
+  //                       style_for_id (static_cast<uint64_t> (*parent_id))));
+  //    }
+  fmt::format_to (std::back_inserter (buf), "{} {}",
+                  fmt::styled ("<<<", fmt::fg (fmt::terminal_color::red)),
+                  // fmt::styled (hashed_id_token (static_cast<uint64_t> (id)),
+                  // id_style), parent_token,
+                  type_name);
   if (build_success)
     {
       fmt::format_to (

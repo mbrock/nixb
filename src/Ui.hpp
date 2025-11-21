@@ -7,39 +7,44 @@
 #include <string_view>
 #include <unordered_map>
 
-namespace nixb {
+namespace nixb
+{
 
 // Forward declarations
 class UiSession;
 
 // Backend interface for UI rendering
-class UiBackend {
+class UiBackend
+{
 public:
-  virtual ~UiBackend() = default;
+  virtual ~UiBackend () = default;
 
   // Append a line to the log stream
-  virtual void println(std::string_view line) = 0;
+  virtual void println (std::string_view line) = 0;
 
   // Update the HUD with a new state snapshot
-  virtual void update_hud(const UiState &state) = 0;
+  virtual void update_hud (const UiState &state) = 0;
 
   // Whether terminal features are active
-  virtual bool enabled() const = 0;
+  virtual bool enabled () const = 0;
 };
 
 // Log stream for append-only output (top region)
-class LogStream {
+class LogStream
+{
 public:
   // Constructor (only for use by UiSession)
-  explicit LogStream(UiBackend &backend) : backend_(backend) {}
+  explicit LogStream (UiBackend &backend) : backend_ (backend) {}
 
   // Print a line (adds newline if needed)
-  void println(std::string_view line);
+  void println (std::string_view line);
 
   // Printf-style formatted output
   template <typename... Args>
-  void printf(fmt::format_string<Args...> fmt_str, Args &&...args) {
-    println(fmt::format(fmt_str, std::forward<Args>(args)...));
+  void
+  printf (fmt::format_string<Args...> fmt_str, Args &&...args)
+  {
+    println (fmt::format (fmt_str, std::forward<Args> (args)...));
   }
 
 private:
@@ -47,53 +52,67 @@ private:
 };
 
 // Activity HUD for dynamic status display (bottom region)
-class ActivityHud {
+class ActivityHud
+{
 public:
   // Constructor (only for use by UiSession)
-  explicit ActivityHud(UiBackend &backend) : backend_(backend) {}
+  explicit ActivityHud (UiBackend &backend) : backend_ (backend) {}
 
   // Present a complete new snapshot of the activity HUD
-  void present(const UiState &state);
+  void present (const UiState &state);
 
 private:
   UiBackend &backend_;
   UiState last_state_;
   std::chrono::steady_clock::time_point last_render_time_;
-  std::chrono::milliseconds min_frame_interval_{33}; // ~30 FPS default
+  std::chrono::milliseconds min_frame_interval_{ 33 }; // ~30 FPS default
 
   // EMA-smoothed progress values per activity ID
   std::unordered_map<int64_t, ActivityProgress> smoothed_progress_;
-  double ema_alpha_{0.3}; // Smoothing factor: higher = more responsive
+  double ema_alpha_{ 0.3 }; // Smoothing factor: higher = more responsive
 };
 
 // Main UI session facade
-class UiSession {
+class UiSession
+{
 public:
   // Create a UI session
   // - force: if true, attempt to use terminal features even when not a TTY
-  static UiSession create(bool force = false);
+  static UiSession create (bool force = false);
 
   // Append-only log stream (top region)
-  LogStream &log() { return *log_; }
+  LogStream &
+  log ()
+  {
+    return *log_;
+  }
 
   // Dynamic HUD view (bottom region)
-  ActivityHud &hud() { return *hud_; }
+  ActivityHud &
+  hud ()
+  {
+    return *hud_;
+  }
 
   // Whether interactive terminal features are actually enabled
-  bool enabled() const { return backend_ && backend_->enabled(); }
+  bool
+  enabled () const
+  {
+    return backend_ && backend_->enabled ();
+  }
 
   // RAII teardown: restores terminal state
-  ~UiSession();
+  ~UiSession ();
 
   // Movable, non-copyable
-  UiSession(UiSession &&) noexcept = default;
-  UiSession &operator=(UiSession &&) noexcept = default;
+  UiSession (UiSession &&) noexcept = default;
+  UiSession &operator= (UiSession &&) noexcept = default;
 
-  UiSession(const UiSession &) = delete;
-  UiSession &operator=(const UiSession &) = delete;
+  UiSession (const UiSession &) = delete;
+  UiSession &operator= (const UiSession &) = delete;
 
 private:
-  explicit UiSession(std::unique_ptr<UiBackend> backend);
+  explicit UiSession (std::unique_ptr<UiBackend> backend);
 
   std::unique_ptr<UiBackend> backend_;
   std::unique_ptr<LogStream> log_;

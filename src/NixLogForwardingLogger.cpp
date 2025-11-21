@@ -1,10 +1,10 @@
 #include "NixLogForwardingLogger.hpp"
 
-#include <nlohmann/json.hpp>
-#include <nix/util/position.hh>
-#include <nix/util/logging.hh>
 #include <nix/util/error.hh>
+#include <nix/util/logging.hh>
+#include <nix/util/position.hh>
 #include <nix/util/signals.hh>
+#include <nlohmann/json.hpp>
 #include <sstream>
 
 namespace nix
@@ -21,8 +21,9 @@ namespace
 std::string
 make_line (const nlohmann::json &json, bool include_prefix)
 {
-  return (include_prefix ? "@nix " : std::string{}) + json.dump (-1, ' ', false,
-                                                                 nlohmann::json::error_handler_t::replace);
+  return (include_prefix ? "@nix " : std::string{})
+         + json.dump (-1, ' ', false,
+                      nlohmann::json::error_handler_t::replace);
 }
 } // namespace
 
@@ -39,7 +40,7 @@ NixLogForwardingLogger::emit (nlohmann::json &&json)
   std::lock_guard<std::mutex> lock (mutex_);
   if (stop_flag_ && stop_flag_->load (std::memory_order_relaxed))
     throw nix::Interrupted ("interrupted");
-  sink_(make_line (json, include_prefix_));
+  sink_ (make_line (json, include_prefix_));
 }
 
 void
@@ -93,7 +94,7 @@ NixLogForwardingLogger::logEI (const nix::ErrorInfo &ei)
       json["trace"] = std::move (traces);
     }
 
-    emit (std::move (json));
+  emit (std::move (json));
 }
 
 void

@@ -1,8 +1,8 @@
 #pragma once
 
 #include <functional>
-#include <string>
 #include <mutex>
+#include <string>
 
 #include <nix/util/logging.hh>
 
@@ -15,9 +15,9 @@ namespace nixb
  * function. This lets us feed an in-process NixLogWatcher without
  * going through stderr/stdout.
  */
-  class NixLogForwardingLogger : public nix::Logger
-  {
-  public:
+class NixLogForwardingLogger : public nix::Logger
+{
+public:
   using Sink = std::function<void (const std::string &)>;
 
   explicit NixLogForwardingLogger (Sink sink, bool include_prefix = true,
