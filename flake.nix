@@ -12,9 +12,26 @@
       packages = forAllSystems (system:
         let
           pkgs = import nixpkgs { inherit system; };
+          emacsWithPkgs = (pkgs.emacsPackagesFor pkgs.emacs).emacsWithPackages (epkgs:
+            with epkgs; [
+              vterm
+              magit
+              consult
+              vertico
+              orderless
+              marginalia
+              embark
+              embark-consult
+              corfu
+              cape
+              eglot
+              which-key
+              doom-themes
+            ]);
         in
         {
           inherit (pkgs) hello;
+          emacs = emacsWithPkgs;
         });
         
       devShells = forAllSystems (system:
