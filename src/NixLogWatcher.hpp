@@ -3,7 +3,7 @@
 #include "NixBuildState.hpp"
 #include "NixLogParser.hpp"
 #include "NixLogRecorder.hpp"
-#include "TerminalUi.hpp"
+#include "Ui.hpp"
 
 #include <atomic>
 #include <cstdint>
@@ -44,7 +44,11 @@ public:
   void process_input ();
   void process_playback_file (const std::string &path);
   void process_playback_file (const std::string &path, double speedup);
-  void process_log_line (const std::string &line) { process_line (line); }
+  void
+  process_log_line (const std::string &line)
+  {
+    process_line (line);
+  }
   void finish ();
 
 private:
@@ -71,7 +75,7 @@ private:
   std::shared_ptr<nix::Store> store_;
   std::unique_ptr<NixBuildState> state_;
   std::unique_ptr<NixLogRecorder> recorder_;
-  std::unique_ptr<TerminalUi> ui_;
+  UiSession ui_;
   UiState ui_state_;
   double emit_delay_ms_{ 0.0 };
   std::atomic<bool> *stop_flag_ = nullptr;

@@ -30,7 +30,7 @@ executable('nixb', [
     'src/NixLogRecorder.cpp',
     'src/NixLogForwardingLogger.cpp',
     'src/NixLogWatcher.cpp',
-    'src/TerminalUi.cpp',
+    'src/Ui.cpp',
     'src/Ansi.cpp',
     'src/UiRender.cpp'
   ],

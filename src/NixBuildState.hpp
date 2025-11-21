@@ -1,7 +1,7 @@
 #pragma once
 
 #include "NixLogParser.hpp"
-#include "TerminalUi.hpp"
+#include "UiTypes.hpp"
 
 #include <cstddef>
 #include <cstdint>

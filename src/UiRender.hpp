@@ -1,13 +1,13 @@
 #pragma once
 
-#include "TerminalUi.hpp"
+#include "UiTypes.hpp"
 #include <string>
 
 namespace nixb
 {
 
-// Helpers for rendering activity lines; kept separate from TerminalUi so the
-// UI only concerns itself with layout/scroll behavior.
+// Helpers for rendering activity lines; kept separate from UI backend
+// so rendering logic is isolated from terminal control.
 std::string render_activity_line (const UiActivityLine &line, int cols);
 
 } // namespace nixb

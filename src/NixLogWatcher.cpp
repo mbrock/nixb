@@ -117,22 +117,17 @@ NixLogWatcher::NixLogWatcher (bool quiet, UiMode ui_mode,
                               std::optional<std::string> record_path,
                               std::atomic<bool> *stop_flag,
                               double emit_delay_ms)
-    : quiet_ (quiet), emit_delay_ms_ (emit_delay_ms), stop_flag_ (stop_flag)
+    : quiet_ (quiet),
+      // Always create a UI session; uses DumbBackend when disabled
+      // Off/Auto: force=false, will check TTY
+      // On: force=true, will use TerminalBackend even if not TTY
+      ui_ (UiSession::create (ui_mode == UiMode::On)),
+      emit_delay_ms_ (emit_delay_ms), stop_flag_ (stop_flag)
 {
   nix::initLibStore ();
   store_ = nix::openStore ();
 
   state_ = std::make_unique<NixBuildState> (store_);
-
-  if (ui_mode != UiMode::Off)
-    {
-      bool force = ui_mode == UiMode::On;
-      auto ui = std::make_unique<TerminalUi> (0, force);
-      if (ui->enabled ())
-        {
-          ui_ = std::move (ui);
-        }
-    }
 
   if (record_path)
     {
@@ -196,19 +191,13 @@ NixLogWatcher::process_input ()
           break;
         }
     }
-  if (ui_ && ui_->enabled ())
-    {
-      ui_->finish ();
-    }
+  // UiSession handles cleanup in destructor, no explicit finish needed
 }
 
 void
 NixLogWatcher::finish ()
 {
-  if (ui_ && ui_->enabled ())
-    {
-      ui_->finish ();
-    }
+  // UiSession handles cleanup in destructor, no explicit finish needed
 }
 
 void
@@ -254,11 +243,7 @@ void
 NixLogWatcher::handle_start_event (const StartEvent &e)
 {
   state_->start_activity (e);
-
-  if (ui_ && ui_->enabled ())
-    {
-      refresh_ui ();
-    }
+  refresh_ui ();
 
   const auto *info = state_->get_activity (e.id);
   if (info)
@@ -311,30 +296,22 @@ NixLogWatcher::handle_start_event (const StartEvent &e)
 void
 NixLogWatcher::handle_result_event (const ResultEvent &e)
 {
-  bool ui_on = ui_ && ui_->enabled ();
-
   state_->update_progress (e);
 
   if (e.type == nix::resSetExpected)
     {
-      if (ui_on)
-        {
-          refresh_ui ();
-        }
+      refresh_ui ();
       return;
     }
 
-  if (ui_on && e.type == nix::resProgress)
+  if (e.type == nix::resProgress)
     {
       refresh_ui ();
       return;
     }
 
   emit_log (e.format ());
-  if (ui_on)
-    {
-      refresh_ui ();
-    }
+  refresh_ui ();
 }
 
 void
@@ -372,11 +349,7 @@ NixLogWatcher::handle_stop_event (const StopEvent &e)
     }
 
   state_->stop_activity (e.id);
-
-  if (ui_ && ui_->enabled ())
-    {
-      refresh_ui ();
-    }
+  refresh_ui ();
 
   if (stopped_type == nix::actCopyPath || stopped_type == nix::actFileTransfer
       || stopped_type == nix::actQueryPathInfo
@@ -437,8 +410,8 @@ NixLogWatcher::emit_log (const std::string &block)
   auto is_blank = [] (const std::string &text)
     {
       return text.empty ()
-             || std::all_of (text.begin (), text.end (),
-                             [] (unsigned char c) { return std::isspace (c); });
+             || std::all_of (text.begin (), text.end (), [] (unsigned char c)
+                               { return std::isspace (c); });
     };
 
   std::string text = is_blank (block) ? "[empty log line]" : block;
@@ -449,16 +422,8 @@ NixLogWatcher::emit_log (const std::string &block)
       std::this_thread::sleep_for (delay);
     }
 
-  if (ui_ && ui_->enabled ())
-    {
-      ui_->redraw (ui_state_);
-      ui_->print_log_block (text);
-      std::fflush (stdout);
-      return;
-    }
-
-  fmt::print ("{}\n", text);
-  std::fflush (stdout);
+  ui_.hud ().present (ui_state_);
+  ui_.log ().println (text);
 }
 
 void
@@ -730,13 +695,8 @@ NixLogWatcher::rebuild_ui_state ()
 void
 NixLogWatcher::refresh_ui ()
 {
-  if (!ui_ || !ui_->enabled ())
-    {
-      return;
-    }
-
   rebuild_ui_state ();
-  ui_->redraw (ui_state_);
+  ui_.hud ().present (ui_state_);
 }
 
 void
@@ -752,10 +712,7 @@ NixLogWatcher::process_playback_file (const std::string &path, double speedup)
                          { process_line (line); }, stop_flag_);
   player.play (path, speedup);
 
-  if (ui_ && ui_->enabled ())
-    {
-      ui_->finish ();
-    }
+  // UiSession handles cleanup in destructor, no explicit finish needed
 }
 
 } // namespace nixb
