@@ -4,6 +4,7 @@
 #include "NixLogParser.hpp"
 #include "TerminalUi.hpp"
 
+#include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <fstream>
@@ -35,7 +36,8 @@ public:
 
   explicit NixLogWatcher (bool quiet, UiMode ui_mode = UiMode::Auto,
                           std::optional<std::string> record_path
-                          = std::nullopt);
+                          = std::nullopt,
+                          std::atomic<bool> *stop_flag = nullptr);
 
   void process_input ();
   void process_playback_file (const std::string &path);
@@ -71,6 +73,11 @@ private:
       std::string_view prefix, fmt::terminal_color color, int64_t id,
       std::optional<int64_t> parent, const ActivityInfo &info,
       const std::function<std::string (const ActivityInfo &)> &label_fn) const;
+  bool
+  stop_requested () const
+  {
+    return stop_flag_ && stop_flag_->load (std::memory_order_relaxed);
+  }
 
   bool quiet_;
   NixLogParser parser_;
@@ -83,6 +90,7 @@ private:
 
   std::unique_ptr<TerminalUi> ui_;
   UiState ui_state_;
+  std::atomic<bool> *stop_flag_ = nullptr;
 
   bool recording_enabled_ = false;
   std::ofstream record_stream_;

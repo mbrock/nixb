@@ -92,15 +92,16 @@ NixLogWatcher::format_activity_log_line (
       suffix = fmt::format (" @ {}", *info.store_base_url);
     }
 
-  return fmt::format (
-      "{} [{} :: {}] {} {}{}\n", fmt::styled (prefix, fmt::fg (color)),
-      styled_id (static_cast<uint64_t> (id)), styled_parent (parent),
-      *action, label, suffix);
+  return fmt::format ("{} [{} :: {}] {} {}{}\n",
+                      fmt::styled (prefix, fmt::fg (color)),
+                      styled_id (static_cast<uint64_t> (id)),
+                      styled_parent (parent), *action, label, suffix);
 }
 
 NixLogWatcher::NixLogWatcher (bool quiet, UiMode ui_mode,
-                              std::optional<std::string> record_path)
-    : quiet_ (quiet)
+                              std::optional<std::string> record_path,
+                              std::atomic<bool> *stop_flag)
+    : quiet_ (quiet), stop_flag_ (stop_flag)
 {
   nix::initLibStore ();
   store_ = nix::openStore ();
@@ -136,9 +137,13 @@ void
 NixLogWatcher::process_input ()
 {
   std::string line;
-  while (std::getline (std::cin, line))
+  while (!stop_requested () && std::getline (std::cin, line))
     {
       process_line (line);
+      if (stop_requested ())
+        {
+          break;
+        }
     }
   if (ui_ && ui_->enabled ())
     {
@@ -322,21 +327,20 @@ NixLogWatcher::handle_stop_event (const StopEvent &e)
       || stopped_type == nix::actSubstitute)
     {
       auto label_fn = [this, &activity_text] (const ActivityInfo &info)
-      {
-        std::string label = format_activity_label (info);
-        if (label.empty ())
-          {
-            label = url_basename (info.text);
-          }
-        return label.empty () ? std::string{ activity_text } : label;
-      };
+        {
+          std::string label = format_activity_label (info);
+          if (label.empty ())
+            {
+              label = url_basename (info.text);
+            }
+          return label.empty () ? std::string{ activity_text } : label;
+        };
 
       if (stopped_info)
         {
-          if (auto log_line
-              = format_activity_log_line ("<<<", fmt::terminal_color::red,
-                                          e.id, parent, *stopped_info,
-                                          label_fn))
+          if (auto log_line = format_activity_log_line (
+                  "<<<", fmt::terminal_color::red, e.id, parent, *stopped_info,
+                  label_fn))
             {
               emit_log (*log_line);
               return;
@@ -346,10 +350,9 @@ NixLogWatcher::handle_stop_event (const StopEvent &e)
         {
           ActivityInfo fallback_info{ stopped_type, std::string{} };
           fallback_info.parent = parent;
-          if (auto log_line
-              = format_activity_log_line ("<<<", fmt::terminal_color::red,
-                                          e.id, parent, fallback_info,
-                                          label_fn))
+          if (auto log_line = format_activity_log_line (
+                  "<<<", fmt::terminal_color::red, e.id, parent, fallback_info,
+                  label_fn))
             {
               emit_log (*log_line);
               return;
@@ -696,6 +699,8 @@ NixLogWatcher::process_playback_file (const std::string &path, double speedup)
   std::string line;
   while (std::getline (in, line))
     {
+      if (stop_requested ())
+        break;
       size_t pos = 0;
       while (pos < line.size ()
              && std::isdigit (static_cast<unsigned char> (line[pos])))
@@ -748,6 +753,8 @@ NixLogWatcher::process_playback_file (const std::string &path, double speedup)
       first = false;
 
       process_line (payload);
+      if (stop_requested ())
+        break;
     }
 
   if (ui_ && ui_->enabled ())

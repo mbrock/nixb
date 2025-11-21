@@ -1,8 +1,35 @@
 #include <CLI/CLI.hpp>
 
+#include <atomic>
+#include <csignal>
 #include <optional>
 
 #include "NixLogWatcher.hpp"
+
+namespace
+{
+std::atomic<bool> *g_stop_flag = nullptr;
+
+void
+handle_signal (int)
+{
+  if (g_stop_flag)
+    {
+      g_stop_flag->store (true, std::memory_order_relaxed);
+    }
+}
+
+void
+install_signal_handlers (std::atomic<bool> &stop_flag)
+{
+  g_stop_flag = &stop_flag;
+  struct sigaction sa;
+  sa.sa_handler = handle_signal;
+  sigemptyset (&sa.sa_mask);
+  sa.sa_flags = 0;
+  sigaction (SIGINT, &sa, nullptr);
+}
+} // namespace
 
 int
 main (int argc, char **argv)
@@ -41,7 +68,10 @@ main (int argc, char **argv)
       record_path = record_file;
     }
 
-  nixb::NixLogWatcher watcher (quiet, ui_mode, record_path);
+  std::atomic<bool> stop_flag{ false };
+  install_signal_handlers (stop_flag);
+
+  nixb::NixLogWatcher watcher (quiet, ui_mode, record_path, &stop_flag);
 
   if (!play_file.empty ())
     {
