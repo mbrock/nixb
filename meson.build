@@ -31,7 +31,8 @@ executable('nixb', [
     'src/NixLogForwardingLogger.cpp',
     'src/NixLogWatcher.cpp',
     'src/TerminalUi.cpp',
-    'src/Ansi.cpp'
+    'src/Ansi.cpp',
+    'src/UiRender.cpp'
   ],
   dependencies : [fmt_dep, simdjson_dep, cli11_dep, nix_store_dep, nix_expr_dep, nix_flake_dep, nix_cmd_dep, boost_dep],
   install : true)

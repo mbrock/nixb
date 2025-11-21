@@ -59,9 +59,8 @@ public:
   }
 
 private:
-  void render ();
-  std::string render_log_line (std::string_view text) const;
-
+  void apply_status_resize (int new_status_lines);
+  void draw_status_lines (const UiState &state);
   void reconfigure_scroll_region ();
 
   bool enabled_ = false;
@@ -71,7 +70,6 @@ private:
   int scroll_bottom_ = 0;
   bool torn_down_ = false;
   UiState last_state_;
-  std::vector<std::string> log_lines_;
 };
 
 } // namespace nixb
