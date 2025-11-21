@@ -24,11 +24,80 @@ UiStateBuilder::build ()
       return result_;
     }
 
-  build_activity_tree ();
+  // Just read the retained tree structure from state
+  children_ = state_.activity_children ();
+  roots_ = state_.activity_roots ();
+  drv_path_to_activity_ = state_.drv_path_to_activity ();
+  dependents_ = state_.activity_dependents ();
 
-  for (int64_t root_id : roots_)
+  // Track which activities we've already emitted to avoid duplicates in DAG
+  std::unordered_set<int64_t> emitted_ids;
+
+  // Sort roots: prioritize branches that contain active (non-queued) builds
+  auto roots_sorted = roots_;
+
+  std::function<bool (int64_t, std::unordered_set<int64_t> &)>
+      has_active_descendant
+      = [this, &has_active_descendant] (
+            int64_t root_id, std::unordered_set<int64_t> &visited) -> bool {
+    if (visited.contains (root_id))
+      return false;
+    visited.insert (root_id);
+
+    const auto *yearning = state_.get_yearning (root_id);
+    if (yearning && yearning->live_activity_id)
+      {
+        const auto *activity
+            = state_.get_activity (*yearning->live_activity_id);
+        if (activity && activity->type != nix::actBuildWaiting)
+          return true;
+      }
+
+    const auto &children_map = state_.activity_children ();
+    auto it = children_map.find (root_id);
+    if (it != children_map.end ())
+      {
+        for (int64_t child_id : it->second)
+          {
+            if (has_active_descendant (child_id, visited))
+              return true;
+          }
+      }
+    return false;
+  };
+
+  std::stable_sort (roots_sorted.begin (), roots_sorted.end (),
+                    [&] (int64_t a, int64_t b) {
+                      std::unordered_set<int64_t> visited_a, visited_b;
+                      bool a_has_active = has_active_descendant (a, visited_a);
+                      bool b_has_active = has_active_descendant (b, visited_b);
+
+                      if (a_has_active != b_has_active)
+                        return a_has_active; // Active branches first
+
+                      return false; // Keep original order otherwise
+                    });
+
+  // Render the tree - branches with active builds are now at top
+  constexpr int max_depth = 8;
+  constexpr size_t max_roots = 20; // Show first N roots
+
+  size_t roots_shown = 0;
+  for (int64_t root_id : roots_sorted)
     {
-      emit_tree_node (root_id, 0);
+      if (roots_shown++ >= max_roots)
+        break;
+      emit_tree_node (root_id, 0, max_depth, emitted_ids);
+    }
+
+  // Summary of what's not shown
+  size_t total_not_shown = state_.yearnings ().size () - emitted_ids.size ();
+
+  if (total_not_shown > 0)
+    {
+      result_.activity_lines.push_back (UiActivityLine{
+          -999999, fmt::format ("... and {} more packages", total_not_shown),
+          std::nullopt, std::nullopt, false, 0.0, 0, 0 });
     }
 
   sort_activity_lines ();
@@ -36,105 +105,13 @@ UiStateBuilder::build ()
   return result_;
 }
 
+// NOTE: This method is now obsolete - the tree is built and maintained
+// in NixBuildState in a retained-mode fashion. Keeping the signature
+// for now in case we need to add any UiStateBuilder-specific processing.
 void
 UiStateBuilder::build_activity_tree ()
 {
-  const auto &activities = state_.activities ();
-
-  children_.clear ();
-  roots_.clear ();
-  drv_path_to_activity_.clear ();
-  dependents_.clear ();
-
-  // First pass: build derivation path -> activity ID mapping
-  for (const auto &[id, info] : activities)
-    {
-      if (info.derivation_path)
-        {
-          try
-            {
-              std::string drv_str
-                  = std::string{ info.derivation_path->to_string () };
-              drv_path_to_activity_[drv_str] = id;
-            }
-          catch (const std::exception &)
-            {
-              // Ignore errors when converting store paths to strings
-            }
-        }
-    }
-
-  // Second pass: build dependency relationships
-  for (const auto &[id, info] : activities)
-    {
-      // For each input derivation this activity depends on,
-      // find the activity building that derivation
-      for (const auto &input_drv : info.input_drv_paths)
-        {
-          try
-            {
-              std::string input_drv_str
-                  = std::string{ input_drv.to_string () };
-              auto it = drv_path_to_activity_.find (input_drv_str);
-              if (it != drv_path_to_activity_.end ())
-                {
-                  int64_t dep_activity_id = it->second;
-                  // This activity (id) depends on dep_activity_id
-                  // So dep_activity_id has id as a dependent
-                  dependents_[dep_activity_id].push_back (id);
-                }
-            }
-          catch (const std::exception &)
-            {
-              // Ignore errors when converting store paths to strings
-            }
-        }
-    }
-
-  // Use dependency relationships as the hierarchy
-  children_ = dependents_;
-
-  std::unordered_set<int64_t> seen_children;
-  for (const auto &[parent_id, child_ids] : children_)
-    {
-      seen_children.insert (child_ids.begin (), child_ids.end ());
-    }
-
-  for (const auto &[id, info] : activities)
-    {
-      if (!seen_children.contains (id))
-        {
-          roots_.push_back (id);
-        }
-    }
-
-  if (roots_.empty ())
-    {
-      for (const auto &[id, info] : activities)
-        {
-          roots_.push_back (id);
-        }
-    }
-
-  // Sort children and roots by start order
-  auto order_cmp = [this] (int64_t a, int64_t b)
-    {
-      size_t order_a = order_for_id (a);
-      size_t order_b = order_for_id (b);
-      if (order_a == order_b)
-        {
-          return a < b;
-        }
-      return order_a < order_b;
-    };
-
-  for (auto &kv : children_)
-    {
-      std::sort (kv.second.begin (), kv.second.end (), order_cmp);
-      kv.second.erase (std::unique (kv.second.begin (), kv.second.end ()),
-                       kv.second.end ());
-    }
-  std::sort (roots_.begin (), roots_.end (), order_cmp);
+  // Tree is now maintained in NixBuildState, just read it from there
 }
 
 std::optional<ActivityProgress>
@@ -215,27 +192,63 @@ UiStateBuilder::format_display_label (
 }
 
 void
-UiStateBuilder::emit_tree_node (int64_t id, int visible_depth)
+UiStateBuilder::emit_tree_node (int64_t yearning_id, int visible_depth,
+                                int max_depth,
+                                std::unordered_set<int64_t> &emitted_ids)
 {
-  const auto *info = state_.get_activity (id);
-  if (!info)
+  // We're iterating YEARNINGS now, not activities!
+  const auto *yearning = state_.get_yearning (yearning_id);
+  if (!yearning)
     {
       return;
     }
 
-  bool show_this_line = !should_hide_activity (id);
+  // Stop recursion if we've hit max depth
+  if (max_depth <= 0)
+    {
+      return;
+    }
+
+  // If we've already emitted this node, skip it silently
+  if (emitted_ids.contains (yearning_id))
+    {
+      return;
+    }
+
+  // Mark this node as emitted
+  emitted_ids.insert (yearning_id);
+
+  // Get linked activity (if any) to merge state
+  const ActivityInfo *activity = nullptr;
+  if (yearning->live_activity_id)
+    {
+      activity = state_.get_activity (*yearning->live_activity_id);
+    }
+
+  // Determine if we should show this line (don't hide yearnings for now)
+  bool show_this_line = true;
   int next_visible_depth = visible_depth;
 
   if (show_this_line)
     {
-      std::string tag = tag_for_type (info->type);
-      std::string label = state_.format_activity_label (*info);
+      // Merge yearning metadata + activity state
+      std::string tag;
+      std::string label = std::string{ yearning->derivation.name } + " "
+                          + yearning->derivation.platform;
+      std::optional<std::string> url_part;
+      std::optional<ActivityProgress> progress;
+      bool is_finished = false;
+      double fade_factor = 0.0;
 
-      if (info->type == nix::actBuild || info->type == nix::actBuildWaiting)
+      if (activity)
         {
-          if (!info->current_phase.empty ())
+          // Has live activity - use its state
+          tag = tag_for_type (activity->type);
+
+          // Use current phase if available
+          if (!activity->current_phase.empty ())
             {
-              std::string phase = info->current_phase;
+              std::string phase = activity->current_phase;
               constexpr std::string_view suffix = "Phase";
               if (phase.size () > suffix.size ()
                   && phase.compare (phase.size () - suffix.size (),
@@ -244,70 +257,80 @@ UiStateBuilder::emit_tree_node (int64_t id, int visible_depth)
                 {
                   phase.erase (phase.size () - suffix.size (), suffix.size ());
                 }
-              std::transform (
-                  phase.begin (), phase.end (), phase.begin (),
-                  [] (unsigned char c)
-                    { return static_cast<char> (std::tolower (c)); });
+              std::transform (phase.begin (), phase.end (), phase.begin (),
+                              [] (unsigned char c) {
+                                return static_cast<char> (std::tolower (c));
+                              });
               tag = fmt::format ("[{}]", phase);
             }
-        }
 
-      std::string display = format_display_label (*info, visible_depth, tag,
-                                                  label, info->store_base_url);
+          // Get progress from activity
+          if (activity->has_progress)
+            progress = activity->progress;
 
-      // Extract URL for separate styling
-      std::optional<std::string> url_part;
-      if (info->store_base_url && !info->store_base_url->empty ())
-        {
-          std::string_view url = *info->store_base_url;
-          if (url.starts_with ("https://"))
+          is_finished = activity->is_finished;
+
+          if (activity->is_finished && activity->finish_time)
             {
-              url = url.substr (8);
+              auto now = std::chrono::steady_clock::now ();
+              auto elapsed = now - *activity->finish_time;
+              auto elapsed_ms
+                  = std::chrono::duration_cast<std::chrono::milliseconds> (
+                        elapsed)
+                        .count ();
+              fade_factor = std::min (1.0, elapsed_ms / 2000.0);
             }
-          else if (url.starts_with ("http://"))
+
+          if (activity->store_base_url)
             {
-              url = url.substr (7);
+              std::string_view url = *activity->store_base_url;
+              if (url.starts_with ("https://"))
+                url = url.substr (8);
+              else if (url.starts_with ("http://"))
+                url = url.substr (7);
+              url_part = std::string (url);
             }
-          url_part = std::string (url);
         }
-
-      auto progress = compute_progress (id);
-
-      // Calculate fade factor for finished activities
-      double fade_factor = 0.0;
-      if (info->is_finished && info->finish_time)
+      else
         {
-          auto now = std::chrono::steady_clock::now ();
-          auto elapsed = now - *info->finish_time;
-          auto elapsed_ms
-              = std::chrono::duration_cast<std::chrono::milliseconds> (elapsed)
-                    .count ();
-          // Fade out over 1000ms (matches cleanup timeout)
-          fade_factor = std::min (1.0, elapsed_ms / 2000.0);
+          // No live activity - show as queued
+          tag = "queued";
         }
 
-      // Get dependency counts
-      size_t num_input_deps = info->input_drv_paths.size ();
+      std::string indent;
+      if (visible_depth > 0)
+        {
+          indent.assign (static_cast<size_t> (visible_depth) * 2, ' ');
+        }
+
+      std::string display = indent;
+      if (!tag.empty ())
+        display += tag + " ";
+      display += label;
+
+      // Get dependency counts from yearning
+      size_t num_input_deps = yearning->dependency_yearning_ids.size ();
       size_t num_dependents = 0;
-      auto dep_it = dependents_.find (id);
+      auto dep_it = dependents_.find (yearning_id);
       if (dep_it != dependents_.end ())
         {
           num_dependents = dep_it->second.size ();
         }
 
       result_.activity_lines.push_back (UiActivityLine{
-          id, std::move (display), url_part, progress, info->is_finished,
+          yearning_id, std::move (display), url_part, progress, is_finished,
           fade_factor, num_input_deps, num_dependents });
 
       next_visible_depth = visible_depth + 1;
     }
 
-  auto it = children_.find (id);
+  auto it = children_.find (yearning_id);
   if (it != children_.end ())
     {
-      for (int64_t child_id : it->second)
+      for (int64_t child_yearning_id : it->second)
         {
-          emit_tree_node (child_id, next_visible_depth);
+          emit_tree_node (child_yearning_id, next_visible_depth, max_depth - 1,
+                          emitted_ids);
         }
     }
 }

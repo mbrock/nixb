@@ -21,13 +21,12 @@ enum_from_int (int64_t v)
 {
   std::optional<Enum> result;
   boost::mp11::mp_for_each<boost::describe::describe_enumerators<Enum>> (
-      [&] (auto desc)
-        {
-          if (!result && static_cast<int64_t> (desc.value) == v)
-            {
-              result = static_cast<Enum> (desc.value);
-            }
-        });
+      [&] (auto desc) {
+        if (!result && static_cast<int64_t> (desc.value) == v)
+          {
+            result = static_cast<Enum> (desc.value);
+          }
+      });
   return result;
 }
 
@@ -121,19 +120,19 @@ NixLogParser::parse_line (std::string_view line)
                   event.fields.emplace_back (s.value ());
                 }
             }
-          auto parse_store_ref = [&] () -> std::optional<StartEvent::StoreRef>
-            {
-              if (event.fields.empty ())
-                {
-                  return std::nullopt;
-                }
-              StartEvent::StoreRef ref{ event.fields[0], std::nullopt };
-              if (event.fields.size () > 1)
-                {
-                  ref.base_url = event.fields[1];
-                }
-              return ref;
-            };
+          auto parse_store_ref
+              = [&] () -> std::optional<StartEvent::StoreRef> {
+            if (event.fields.empty ())
+              {
+                return std::nullopt;
+              }
+            StartEvent::StoreRef ref{ event.fields[0], std::nullopt };
+            if (event.fields.size () > 1)
+              {
+                ref.base_url = event.fields[1];
+              }
+            return ref;
+          };
 
           switch (event.type)
             {
@@ -151,43 +150,41 @@ NixLogParser::parse_line (std::string_view line)
           // Heuristic: some older log lines come through as actUnknown with
           // only a descriptive text. Try to recover type + fields so the UI
           // can treat them like normal transfers.
-          auto parse_copying_text = [&] () -> bool
-            {
-              std::string_view t = event.text;
-              constexpr std::string_view prefix = "copying '";
-              if (!t.starts_with (prefix))
-                return false;
+          auto parse_copying_text = [&] () -> bool {
+            std::string_view t = event.text;
+            constexpr std::string_view prefix = "copying '";
+            if (!t.starts_with (prefix))
+              return false;
 
-              auto path_start = prefix.size ();
-              auto path_end = t.find ('\'', path_start);
-              if (path_end == std::string_view::npos)
-                return false;
-              auto path_sv = t.substr (path_start, path_end - path_start);
+            auto path_start = prefix.size ();
+            auto path_end = t.find ('\'', path_start);
+            if (path_end == std::string_view::npos)
+              return false;
+            auto path_sv = t.substr (path_start, path_end - path_start);
 
-              event.type = nix::actCopyPath;
-              event.fields.clear ();
-              event.fields.emplace_back (std::string (path_sv));
-              event.store_ref = parse_store_ref ();
-              return true;
-            };
+            event.type = nix::actCopyPath;
+            event.fields.clear ();
+            event.fields.emplace_back (std::string (path_sv));
+            event.store_ref = parse_store_ref ();
+            return true;
+          };
 
-          auto parse_hashing_text = [&] () -> bool
-            {
-              std::string_view t = event.text;
-              constexpr std::string_view prefix = "hashing '";
-              constexpr char quote = '\'';
-              if (!t.starts_with (prefix))
-                return false;
-              auto path_start = prefix.size ();
-              auto path_end = t.find (quote, path_start);
-              if (path_end == std::string_view::npos)
-                return false;
-              auto path_sv = t.substr (path_start, path_end - path_start);
-              event.type = nix::actFileTransfer;
-              event.fields.clear ();
-              event.fields.emplace_back (std::string (path_sv));
-              return true;
-            };
+          auto parse_hashing_text = [&] () -> bool {
+            std::string_view t = event.text;
+            constexpr std::string_view prefix = "hashing '";
+            constexpr char quote = '\'';
+            if (!t.starts_with (prefix))
+              return false;
+            auto path_start = prefix.size ();
+            auto path_end = t.find (quote, path_start);
+            if (path_end == std::string_view::npos)
+              return false;
+            auto path_sv = t.substr (path_start, path_end - path_start);
+            event.type = nix::actFileTransfer;
+            event.fields.clear ();
+            event.fields.emplace_back (std::string (path_sv));
+            return true;
+          };
 
           if (event.type == nix::actUnknown && event.fields.empty ())
             {
@@ -357,15 +354,13 @@ ResultEvent::format () const
   fmt::memory_buffer buf;
   bool printed_compact = false;
 
-  auto print_log_line = [&] (std::string_view msg_view)
-    {
-      auto faint_style
-          = fmt::fg (fmt::terminal_color::white) | fmt::emphasis::faint;
-      fmt::format_to (
-          std::back_inserter (buf), "{}",
-          fmt::styled (fmt::format ("> {}", msg_view), faint_style));
-      printed_compact = true;
-    };
+  auto print_log_line = [&] (std::string_view msg_view) {
+    auto faint_style
+        = fmt::fg (fmt::terminal_color::white) | fmt::emphasis::faint;
+    fmt::format_to (std::back_inserter (buf), "{}",
+                    fmt::styled (fmt::format ("> {}", msg_view), faint_style));
+    printed_compact = true;
+  };
 
   if (type == nix::resBuildLogLine || type == nix::resPostBuildLogLine
       || type == nix::resFetchStatus)
@@ -398,22 +393,19 @@ ResultEvent::format () const
       fmt::styled ("[result]", fmt::fg (fmt::terminal_color::yellow)),
       NixLogParser::result_type_name (type));
 
-  auto append_str = [&] (const char *label, size_t idx)
-    {
-      if (auto value = get_string (idx))
-        {
-          fmt::format_to (std::back_inserter (buf), " {}=\"{}\"", label,
-                          *value);
-        }
-    };
+  auto append_str = [&] (const char *label, size_t idx) {
+    if (auto value = get_string (idx))
+      {
+        fmt::format_to (std::back_inserter (buf), " {}=\"{}\"", label, *value);
+      }
+  };
 
-  auto append_int = [&] (const char *label, size_t idx)
-    {
-      if (auto value = get_int (idx))
-        {
-          fmt::format_to (std::back_inserter (buf), " {}={}", label, *value);
-        }
-    };
+  auto append_int = [&] (const char *label, size_t idx) {
+    if (auto value = get_int (idx))
+      {
+        fmt::format_to (std::back_inserter (buf), " {}={}", label, *value);
+      }
+  };
 
   switch (type)
     {

@@ -338,11 +338,10 @@ ActivityHud::present (const UiState &state)
           // Use much faster smoothing when finished to "zip" to 100%
           double alpha = line.is_finished ? 0.8 : ema_alpha_;
 
-          auto smooth = [alpha] (int64_t old_val, int64_t new_val) -> int64_t
-            {
-              return static_cast<int64_t> (alpha * new_val
-                                           + (1.0 - alpha) * old_val);
-            };
+          auto smooth = [alpha] (int64_t old_val, int64_t new_val) -> int64_t {
+            return static_cast<int64_t> (alpha * new_val
+                                         + (1.0 - alpha) * old_val);
+          };
 
           smoothed.done = smooth (smoothed.done, current.done);
           smoothed.expected = smooth (smoothed.expected, current.expected);

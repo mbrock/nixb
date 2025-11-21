@@ -12,7 +12,7 @@ SETUP_FLAGS ?= --wrap-mode=nodownload
 all: build
 
 build: $(BUILDDIR)/build.ninja
-	$(MESON) compile -C $(BUILDDIR)
+	$(MESON) compile -C $(BUILDDIR) -j$$(nproc) -v
 
 setup: $(BUILDDIR)/build.ninja
 
@@ -21,7 +21,7 @@ $(BUILDDIR)/build.ninja:
 
 build-opt: $(BUILDDIR)/build.ninja
 	$(MESON) setup $(BUILDDIR) $(SETUP_FLAGS) --buildtype=release -Doptimization=3 -Db_ndebug=true --reconfigure
-	$(MESON) compile -C $(BUILDDIR)
+	$(MESON) compile -C $(BUILDDIR) -j$$(nproc) -v
 
 clean:
 	rm -rf $(BUILDDIR) meson-logs meson-private compile_commands.json

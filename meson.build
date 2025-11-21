@@ -19,6 +19,7 @@ boost_dep = dependency('boost')
 add_project_arguments(
   '-Wno-missing-field-initializers',
   '-Wno-unused-parameter',
+  '-Wno-deprecated-literal-operator',
   language: 'cpp'
 )
 

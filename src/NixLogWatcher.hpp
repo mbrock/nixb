@@ -77,10 +77,12 @@ private:
   UiState ui_state_;
   double emit_delay_ms_{ 0.0 };
   std::atomic<bool> *stop_flag_ = nullptr;
+  std::optional<int> pending_derivation_count_;
 
   // Render thread for continuous UI updates
   std::unique_ptr<std::thread> render_thread_;
   std::mutex state_mutex_;
+  size_t last_rendered_generation_ = 0; // Cache invalidation
 };
 
 } // namespace nixb

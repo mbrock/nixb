@@ -63,14 +63,13 @@ oklch_to_srgb (float L, float C, float h_rad)
   float g = -1.2684380046f * X + 2.6097574011f * Y - 0.3413193965f * Z;
   float b = -0.0041960863f * X - 0.7034186147f * Y + 1.7076147010f * Z;
 
-  auto to_srgb = [] (float c) -> uint8_t
-    {
-      c = std::clamp (c, 0.0f, 1.0f);
-      float v = c <= 0.0031308f ? c * 12.92f
-                                : 1.055f * std::pow (c, 1.0f / 2.4f) - 0.055f;
-      return static_cast<uint8_t> (
-          std::round (std::clamp (v, 0.0f, 1.0f) * 255.0f));
-    };
+  auto to_srgb = [] (float c) -> uint8_t {
+    c = std::clamp (c, 0.0f, 1.0f);
+    float v = c <= 0.0031308f ? c * 12.92f
+                              : 1.055f * std::pow (c, 1.0f / 2.4f) - 0.055f;
+    return static_cast<uint8_t> (
+        std::round (std::clamp (v, 0.0f, 1.0f) * 255.0f));
+  };
 
   return { to_srgb (r), to_srgb (g), to_srgb (b) };
 }

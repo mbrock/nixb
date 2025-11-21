@@ -44,8 +44,10 @@ private:
 
   // Recursively emit a tree node and its children. visible_depth is the
   // indentation level counting only visible ancestors (hidden parents don't
-  // increase depth).
-  void emit_tree_node (int64_t id, int visible_depth);
+  // increase depth). max_depth limits recursion to prevent rendering huge trees.
+  // emitted_ids tracks which nodes we've already rendered to avoid duplicates.
+  void emit_tree_node (int64_t id, int visible_depth, int max_depth,
+                       std::unordered_set<int64_t> &emitted_ids);
 
   // Sort activity lines (downloads at bottom)
   void sort_activity_lines ();

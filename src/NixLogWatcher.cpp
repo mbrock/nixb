@@ -140,6 +140,39 @@ NixLogWatcher::process_input ()
 void
 NixLogWatcher::finish ()
 {
+  // In no-UI mode, print final tree snapshot
+  if (!ui_.enabled ())
+    {
+      std::lock_guard<std::mutex> lock (state_mutex_);
+
+      // Debug: show what roots we have
+      const auto &roots = state_->activity_roots ();
+      std::cerr << "[DEBUG] " << roots.size () << " roots:\n";
+      for (int64_t root_id : roots)
+        {
+          const auto *info = state_->get_activity (root_id);
+          if (info)
+            {
+              std::cerr << "  Root " << root_id << ": "
+                        << state_->format_activity_label (*info)
+                        << " (type=" << info->type << ")\n";
+            }
+        }
+
+      rebuild_ui_state ();
+
+      if (!ui_state_.activity_lines.empty ())
+        {
+          fmt::print (stderr, "\n─── Final Build Status ───\n");
+          for (const auto &line : ui_state_.activity_lines)
+            {
+              fmt::print (stderr, "{}\n", line.label);
+            }
+          fmt::print (stderr, "\n");
+          std::fflush (stderr);
+        }
+    }
+
   // UiSession handles cleanup in destructor, no explicit finish needed
 }
 
@@ -263,6 +296,58 @@ void
 NixLogWatcher::handle_msg_event (const MsgEvent &e)
 {
   emit_log (e.format ());
+
+  // 0000000000063 @nix {"action":"msg","level":3,"msg":"these 129 derivations
+  // will be built:"} 0000000000099 @nix {"action":"msg","level":3,"msg":"
+  // /nix/store/3yj9z7jbsp0q1n5y7d17iqdipqlh12w2-filc0-git.drv"} 0000000000099
+  // @nix {"action":"msg","level":3,"msg":"
+  // /nix/store/ngr5y3gx77cmd3si4vlja97b0s0vqzzw-filc0-resource-dir.drv"}
+  // 0000000000099 @nix {"action":"msg","level":3,"msg":"
+  // /nix/store/iqd1zzyb0r8ci63ir3hbdy3wjg220yi3-filc.drv"} 0000000000099 @nix
+  // {"action":"msg","level":3,"msg":"
+  // /nix/store/h9y612lvx773jqvf6kyx0jsh67wyywzh-libpizlo-git.drv"}
+  // 0000000000099 @nix {"action":"msg","level":3,"msg":"
+  // /nix/store/i2zf9rbxj6p31nf0igns2r86sn8vfd12-filc-crt-lib.drv"}
+  // 0000000000099 @nix {"action":"msg","level":3,"msg":"
+  // /nix/store/4jk36rrvar942fni15mkqb039yczxnrv-filc.drv"} 0000000000099 @nix
+  // {"action":"msg","level":3,"msg":"
+  // /nix/store/wd594wvph2y9v7jvcryay945hxs10d6p-filc-glibc-2.40.drv"}
+  // 0000000000099 @nix {"action":"msg","level":3,"msg":"
+  // /nix/store/a8vgan1mlhp7wyp1yjsmkk0jky7j44hz-filc.drv"}
+
+  // These are actually valuable messages.
+  // At the start of a build, they list the derivations that will be built,
+  // in (I believe) topological dependency order.
+  // And probably they are all valid present derivations.
+
+  // We should immediately read these derivations.
+
+  // let's use std::regex to match "these \d+ derivations will be built:"
+  std::regex re ("these (\\d+) derivations will be built:");
+  std::smatch match;
+  if (std::regex_search (e.msg, match, re))
+    {
+      int count = std::stoi (match[1].str ());
+      pending_derivation_count_ = count;
+    }
+
+  if (pending_derivation_count_.has_value ())
+    {
+      std::regex re ("^  (/nix/store/.*\\.drv)$");
+      std::smatch match;
+      if (std::regex_search (e.msg, match, re))
+        {
+          auto path = store_->parseStorePath (match[1].str ());
+          state_->yearn_for_derivation (path);
+
+          pending_derivation_count_ = pending_derivation_count_.value () - 1;
+        }
+      if (pending_derivation_count_.value () == 0)
+        {
+          pending_derivation_count_ = std::nullopt;
+          state_->yearn ();
+        }
+    }
 }
 
 void
@@ -290,7 +375,15 @@ NixLogWatcher::refresh_ui ()
 {
   std::lock_guard<std::mutex> lock (state_mutex_);
   state_->cleanup_finished_activities ();
-  rebuild_ui_state ();
+
+  // Only rebuild UI state if activities have changed
+  size_t current_gen = state_->generation ();
+  if (current_gen != last_rendered_generation_)
+    {
+      rebuild_ui_state ();
+      last_rendered_generation_ = current_gen;
+    }
+
   ui_.hud ().present (ui_state_);
 }
 
@@ -320,11 +413,12 @@ NixLogWatcher::process_playback_file (const std::string &path)
 void
 NixLogWatcher::process_playback_file (const std::string &path, double speedup)
 {
-  NixLogPlayer player ([this] (const std::string &line)
-                         { process_line (line); }, stop_flag_);
+  NixLogPlayer player (
+      [this] (const std::string &line) { process_line (line); }, stop_flag_);
   player.play (path, speedup);
 
-  // UiSession handles cleanup in destructor, no explicit finish needed
+  // Print final state
+  finish ();
 }
 
 } // namespace nixb
