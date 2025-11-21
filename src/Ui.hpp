@@ -1,9 +1,11 @@
 #pragma once
 
 #include "UiTypes.hpp"
+#include <chrono>
 #include <fmt/core.h>
 #include <memory>
 #include <string_view>
+#include <unordered_map>
 
 namespace nixb {
 
@@ -56,6 +58,12 @@ public:
 private:
   UiBackend &backend_;
   UiState last_state_;
+  std::chrono::steady_clock::time_point last_render_time_;
+  std::chrono::milliseconds min_frame_interval_{33}; // ~30 FPS default
+
+  // EMA-smoothed progress values per activity ID
+  std::unordered_map<int64_t, ActivityProgress> smoothed_progress_;
+  double ema_alpha_{0.3}; // Smoothing factor: higher = more responsive
 };
 
 // Main UI session facade

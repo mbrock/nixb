@@ -356,8 +356,8 @@ NixBuildState::format_activity_label (const ActivityInfo &info) const
         }
       else
         {
-          return std::string{ info.derivation_path->name () } + " (drv for "
-                 + std::string{ info.store_path->name () } + ")";
+          // Just show the derivation name without the "(drv for ...)" part
+          return std::string{ info.derivation_path->name () };
         }
     }
   if (info.store_path)

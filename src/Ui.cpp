@@ -12,6 +12,7 @@
 #include <cstdlib>
 #include <iterator>
 #include <string_view>
+#include <unordered_set>
 
 namespace nixb {
 
@@ -192,7 +193,66 @@ void LogStream::println(std::string_view line) { backend_.println(line); }
 
 void ActivityHud::present(const UiState &state) {
   last_state_ = state;
-  backend_.update_hud(state);
+
+  auto now = std::chrono::steady_clock::now();
+  auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+      now - last_render_time_);
+
+  // Rate limit: only render if enough time has passed
+  if (elapsed < min_frame_interval_) {
+    return; // Skip this frame, state is cached in last_state_
+  }
+
+  last_render_time_ = now;
+
+  // Apply EMA smoothing to progress values
+  UiState smoothed_state = state;
+  std::unordered_set<int64_t> current_ids;
+
+  for (auto &line : smoothed_state.activity_lines) {
+    if (!line.progress) {
+      continue;
+    }
+
+    current_ids.insert(line.id);
+    auto it = smoothed_progress_.find(line.id);
+
+    if (it == smoothed_progress_.end()) {
+      // First time seeing this activity, initialize with current value
+      smoothed_progress_[line.id] = *line.progress;
+    } else {
+      // Apply EMA: smoothed = alpha * new + (1 - alpha) * old
+      ActivityProgress &smoothed = it->second;
+      const ActivityProgress &current = *line.progress;
+
+      auto smooth = [this](int64_t old_val, int64_t new_val) -> int64_t {
+        return static_cast<int64_t>(ema_alpha_ * new_val +
+                                    (1.0 - ema_alpha_) * old_val);
+      };
+
+      smoothed.done = smooth(smoothed.done, current.done);
+      smoothed.expected = smooth(smoothed.expected, current.expected);
+      smoothed.running = smooth(smoothed.running, current.running);
+      smoothed.failed = smooth(smoothed.failed, current.failed);
+      smoothed.unit = current.unit; // Unit doesn't get smoothed
+
+      smoothed_progress_[line.id] = smoothed;
+    }
+
+    // Use the smoothed value for rendering
+    line.progress = smoothed_progress_[line.id];
+  }
+
+  // Clean up smoothed values for activities that no longer exist
+  for (auto it = smoothed_progress_.begin(); it != smoothed_progress_.end();) {
+    if (current_ids.find(it->first) == current_ids.end()) {
+      it = smoothed_progress_.erase(it);
+    } else {
+      ++it;
+    }
+  }
+
+  backend_.update_hud(smoothed_state);
 }
 
 // ============================================================================
