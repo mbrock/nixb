@@ -49,7 +49,8 @@
               cmake
               python3
               git
-              nixd              
+              nixd
+              treefmt
             ];
             shellHook = ''
               unset MACOSX_DEPLOYMENT_TARGET

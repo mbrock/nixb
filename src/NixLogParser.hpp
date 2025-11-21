@@ -1,7 +1,5 @@
 #pragma once
 
-#include "IdColor.hpp"
-
 #include <cstdint>
 #include <optional>
 #include <simdjson.h>
@@ -45,7 +43,8 @@ struct StopEvent {
   int64_t id;
 
   std::string format(std::string_view type_name, std::string_view activity_text,
-                     bool build_success, std::optional<uint64_t> parent_id) const;
+                     bool build_success,
+                     std::optional<uint64_t> parent_id) const;
 };
 
 struct ResultEvent {
