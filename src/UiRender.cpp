@@ -339,8 +339,8 @@ render_activity_line (HudRaster &raster, int row, const UiActivityLine &line,
     {
       if (line.num_input_deps > 0 && line.num_dependents > 0)
         {
-          dep_suffix
-              = fmt::format (" [↓{} ↑{}]", line.num_input_deps, line.num_dependents);
+          dep_suffix = fmt::format (" [↓{} ↑{}]", line.num_input_deps,
+                                    line.num_dependents);
         }
       else if (line.num_input_deps > 0)
         {
