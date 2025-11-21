@@ -26,7 +26,6 @@ struct UiActivityLine
 
 struct UiState
 {
-  std::string current_phase;
   std::vector<UiActivityLine> activity_lines;
 };
 
@@ -34,7 +33,7 @@ struct UiState
 class TerminalUi
 {
 public:
-  explicit TerminalUi (int status_lines = 3, bool force = false);
+  explicit TerminalUi (int status_lines = 0, bool force = false);
   ~TerminalUi ();
 
   bool
@@ -49,9 +48,6 @@ public:
   // Redraw bottom progress bars from the current UiState.
   void redraw (const UiState &state);
 
-  // Allow adjusting footer height and redraw when it changes.
-  void update_status_height (int desired_status_lines, const UiState &state);
-
   // Reset terminal state and clear status lines.
   void finish ();
 
@@ -63,6 +59,9 @@ public:
   }
 
 private:
+  void render ();
+  std::string render_log_line (std::string_view text) const;
+
   void reconfigure_scroll_region ();
 
   bool enabled_ = false;
@@ -72,6 +71,7 @@ private:
   int scroll_bottom_ = 0;
   bool torn_down_ = false;
   UiState last_state_;
+  std::vector<std::string> log_lines_;
 };
 
 } // namespace nixb

@@ -1,5 +1,4 @@
 #include "NixLogWatcher.hpp"
-#include "NixLogForwardingLogger.hpp"
 #include "nix/cmd/installable-flake.hh"
 #include "nix/cmd/installables.hh"
 #include "nix/expr/eval-gc.hh"
@@ -26,6 +25,7 @@
 #include <thread>
 
 #include <algorithm>
+#include <cctype>
 #include <iostream>
 #include <limits>
 #include <string>
@@ -127,7 +127,7 @@ NixLogWatcher::NixLogWatcher (bool quiet, UiMode ui_mode,
   if (ui_mode != UiMode::Off)
     {
       bool force = ui_mode == UiMode::On;
-      auto ui = std::make_unique<TerminalUi> (3, force);
+      auto ui = std::make_unique<TerminalUi> (0, force);
       if (ui->enabled ())
         {
           ui_ = std::move (ui);
@@ -304,7 +304,7 @@ NixLogWatcher::handle_start_event (const StartEvent &e)
     }
 
   line += " json=" + json.dump ();
-  line += "\n";
+  // line += "\n";
   emit_log (line);
 }
 
@@ -434,6 +434,15 @@ NixLogWatcher::handle_msg_event (const MsgEvent &e)
 void
 NixLogWatcher::emit_log (const std::string &block)
 {
+  auto is_blank = [] (const std::string &text)
+    {
+      return text.empty ()
+             || std::all_of (text.begin (), text.end (),
+                             [] (unsigned char c) { return std::isspace (c); });
+    };
+
+  std::string text = is_blank (block) ? "[empty log line]" : block;
+
   if (emit_delay_ms_ > 0.0)
     {
       auto delay = std::chrono::duration<double, std::milli> (emit_delay_ms_);
@@ -442,12 +451,13 @@ NixLogWatcher::emit_log (const std::string &block)
 
   if (ui_ && ui_->enabled ())
     {
-      ui_->print_log_block (block);
       ui_->redraw (ui_state_);
+      ui_->print_log_block (text);
       std::fflush (stdout);
       return;
     }
-  fmt::print ("{}", block);
+
+  fmt::print ("{}\n", text);
   std::fflush (stdout);
 }
 
@@ -459,7 +469,6 @@ NixLogWatcher::rebuild_ui_state ()
   const auto &activities = state_->activities ();
   if (activities.empty ())
     {
-      ui_state_.current_phase.clear ();
       return;
     }
 
@@ -716,8 +725,6 @@ NixLogWatcher::rebuild_ui_state ()
     {
       emit_node (root_id, 0);
     }
-
-  ui_state_.current_phase.clear ();
 }
 
 void
@@ -729,17 +736,7 @@ NixLogWatcher::refresh_ui ()
     }
 
   rebuild_ui_state ();
-
-  int max_footer = ui_->max_status_lines ();
-  int desired_lines = static_cast<int> (ui_state_.activity_lines.size ())
-                      + (ui_state_.current_phase.empty () ? 0 : 1);
-  desired_lines = std::max (1, desired_lines);
-  if (max_footer > 0)
-    {
-      desired_lines = std::min (desired_lines, max_footer);
-    }
-
-  ui_->update_status_height (desired_lines, ui_state_);
+  ui_->redraw (ui_state_);
 }
 
 void

@@ -1,5 +1,6 @@
 #include "TerminalUi.hpp"
 
+#include "Ansi.hpp"
 #include <fmt/core.h>
 
 #include <algorithm>
@@ -7,6 +8,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <iterator>
+#include <stdexcept>
 #include <string_view>
 #include <sys/ioctl.h>
 #include <unistd.h>
@@ -16,7 +18,6 @@ namespace nixb
 
 namespace
 {
-constexpr const char *CSI = "\x1b[";
 
 std::string
 render_progress_line (std::string_view label, const ActivityProgress &p,
@@ -124,7 +125,7 @@ TerminalUi::TerminalUi (int status_lines, bool force)
       return;
     }
 
-  status_lines_ = std::clamp (status_lines_, 1, rows_ - 1);
+  status_lines_ = std::clamp (status_lines_, 0, rows_ - 1);
 
   reconfigure_scroll_region ();
 
@@ -138,13 +139,13 @@ TerminalUi::print_log_block (std::string_view block)
 {
   if (!enabled_)
     {
-      fmt::print ("{}", block);
+      fmt::print ("{}\n", block);
       return;
     }
 
-  // fmt::print ("{}{};1H{}2K", CSI, scroll_bottom_, CSI);
-  fmt::print ("{}{};1H", CSI, scroll_bottom_);
-  fmt::print ("{}\n", block);
+  ansi::move_cursor (scroll_bottom_, 1);
+  bool has_trailing_newline = !block.empty () && block.back () == '\n';
+  fmt::print ("{}{}", block, has_trailing_newline ? "" : "\n");
   std::fflush (stdout);
 }
 
@@ -156,74 +157,90 @@ TerminalUi::redraw (const UiState &state)
 
   last_state_ = state;
 
+  int needed_lines = static_cast<int> (state.activity_lines.size ());
+  int new_status_lines = std::clamp (needed_lines, 0, rows_ - 1);
+
+  if (new_status_lines != status_lines_)
+    {
+      int old_status_lines = status_lines_;
+      int old_scroll_bottom = scroll_bottom_;
+
+      if (new_status_lines > old_status_lines && old_scroll_bottom > 0)
+        {
+          int scroll_diff = status_lines_ - old_status_lines;
+          ansi::move_cursor (old_scroll_bottom, 1);
+          ansi::scroll_up (scroll_diff);
+        }
+
+      status_lines_ = new_status_lines;
+      reconfigure_scroll_region ();
+
+      if (new_status_lines < old_status_lines)
+        {
+          int scroll_diff = old_status_lines - new_status_lines;
+          ansi::move_cursor (1, 1);
+          ansi::scroll_down (scroll_diff);
+          // Clear the rows now part of the scroll region so we don't leave
+          // stale status text.
+          int first_freed_row = rows_ - old_status_lines + 1;
+          int last_freed_row = rows_ - new_status_lines;
+          for (int r = first_freed_row; r <= last_freed_row; ++r)
+            {
+              ansi::move_cursor (r, 1);
+              ansi::clear_line ();
+            }
+        }
+    }
+
   int first_status_row = rows_ - status_lines_ + 1;
   int row = first_status_row;
 
   auto draw_line = [&] (std::string_view text)
     {
-      fmt::print ("{}{};1H{}2K{}", CSI, row, CSI, text);
+      ansi::move_cursor (row, 1);
+      ansi::clear_line ();
+      fmt::print ("{}", text);
       ++row;
     };
 
-  int phase_lines = state.current_phase.empty () ? 0 : 1;
-  int activity_budget = status_lines_ - phase_lines;
-  if (activity_budget < 0)
+  for (int i = 0; i < status_lines_; ++i)
     {
-      activity_budget = 0;
+      if (i < static_cast<int> (state.activity_lines.size ()))
+        {
+          draw_line (render_activity_line (state.activity_lines[i], cols_));
+        }
+      else
+        {
+          // This branch implies status_lines_ > activity_lines.size()
+          // which happens if needed_lines > rows_-1, so status_lines_ is
+          // capped but the loop continues up to status_lines_. Wait, if
+          // needed_lines > rows_-1, status_lines_ = rows_-1. The loop goes
+          // from 0 to rows_-2 (since < status_lines_). But
+          // activity_lines.size() is larger. So this branch is NOT hit in that
+          // case.
+          //
+          // This branch is strictly for: i >= activity_lines.size().
+          // Since status_lines_ = min(activity_lines.size(), rows_-1),
+          // this means i >= min(...) AND i < min(...).
+          // This is impossible. The branch is dead code if logic is correct.
+          draw_line ("");
+        }
     }
 
-  int activity_count = static_cast<int> (
-      std::min<std::size_t> (activity_budget, state.activity_lines.size ()));
-
-  for (int i = 0; i < activity_count && row <= rows_; ++i)
-    {
-      draw_line (render_activity_line (state.activity_lines[i], cols_));
-    }
-
-  for (int i = activity_count; i < activity_budget && row <= rows_; ++i)
-    {
-      draw_line ("");
-    }
-
-  if (!state.current_phase.empty () && row <= rows_)
-    {
-      draw_line (state.current_phase);
-    }
-
-  while (row <= rows_)
-    {
-      draw_line ("");
-    }
-
-  fmt::print ("{}{};1H", CSI, rows_);
+  ansi::move_cursor (rows_, 1);
   std::fflush (stdout);
-}
-
-void
-TerminalUi::update_status_height (int desired_status_lines,
-                                  const UiState &state)
-{
-  if (!enabled_)
-    return;
-
-  desired_status_lines = std::clamp (desired_status_lines, 1, rows_ - 1);
-  if (desired_status_lines != status_lines_)
-    {
-      status_lines_ = desired_status_lines;
-      reconfigure_scroll_region ();
-    }
-
-  redraw (state);
 }
 
 void
 TerminalUi::reconfigure_scroll_region ()
 {
+  // Scroll region is from line 1 to scroll_bottom_.
   scroll_bottom_ = rows_ - status_lines_;
   if (scroll_bottom_ < 1)
     scroll_bottom_ = 1;
-  fmt::print ("{}1;{}r", CSI, scroll_bottom_);
-  fmt::print ("{}1;1H", CSI);
+
+  ansi::set_scroll_region (1, scroll_bottom_);
+  ansi::move_cursor (scroll_bottom_, 1);
   std::fflush (stdout);
 }
 
@@ -233,13 +250,16 @@ TerminalUi::finish ()
   if (!enabled_ || torn_down_)
     return;
 
-  fmt::print ("{}r", CSI);
+  ansi::reset_scroll_region ();
+
   int first_status_row = rows_ - status_lines_ + 1;
   for (int row = first_status_row; row <= rows_; ++row)
     {
-      fmt::print ("{}{};1H{}2K", CSI, row, CSI);
+      ansi::move_cursor (row, 1);
+      ansi::clear_line ();
     }
-  fmt::print ("{}{};1H", CSI, rows_);
+
+  ansi::move_cursor (rows_, 1);
   fmt::print ("\n");
   std::fflush (stdout);
   torn_down_ = true;
