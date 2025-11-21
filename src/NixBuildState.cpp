@@ -35,15 +35,16 @@ NixBuildState::get_activity (int64_t id) const
 void
 NixBuildState::start_activity (const StartEvent &e)
 {
-  auto infer_type = [&]() -> ActivityType {
-    if (e.type != nix::actUnknown)
+  auto infer_type = [&] () -> ActivityType
+    {
+      if (e.type != nix::actUnknown)
+        return e.type;
+      if (e.text.rfind ("hashing '", 0) == 0)
+        return nix::actFileTransfer;
+      if (e.text.rfind ("copying '", 0) == 0)
+        return nix::actCopyPath;
       return e.type;
-    if (e.text.rfind ("hashing '", 0) == 0)
-      return nix::actFileTransfer;
-    if (e.text.rfind ("copying '", 0) == 0)
-      return nix::actCopyPath;
-    return e.type;
-  };
+    };
 
   ActivityType inferred_type = infer_type ();
 
@@ -51,16 +52,17 @@ NixBuildState::start_activity (const StartEvent &e)
   info.parent = e.parent;
   info.start_order = next_activity_order_++;
 
-  auto set_label_from_quoted = [&]() {
-    auto first = e.text.find ('\'');
-    if (first == std::string::npos)
-      return;
-    auto last = e.text.find_last_of ('\'');
-    if (last == std::string::npos || last <= first)
-      return;
-    if (last - first > 1)
-      info.label = e.text.substr (first + 1, last - first - 1);
-  };
+  auto set_label_from_quoted = [&] ()
+    {
+      auto first = e.text.find ('\'');
+      if (first == std::string::npos)
+        return;
+      auto last = e.text.find_last_of ('\'');
+      if (last == std::string::npos || last <= first)
+        return;
+      if (last - first > 1)
+        info.label = e.text.substr (first + 1, last - first - 1);
+    };
 
   if (e.store_ref)
     {
@@ -132,7 +134,8 @@ NixBuildState::start_activity (const StartEvent &e)
       builds_activity_ = e.id;
     }
 
-  if (inferred_type == nix::actFileTransfer || inferred_type == nix::actCopyPath)
+  if (inferred_type == nix::actFileTransfer
+      || inferred_type == nix::actCopyPath)
     {
       note_transfer_start (e.id);
     }
@@ -216,6 +219,14 @@ NixBuildState::update_progress (const ResultEvent &e)
     progress.running = *v;
   if (auto v = e.get_int (3))
     progress.failed = *v;
+
+  // Set unit type based on activity type
+  if (it->second.type == nix::actFileTransfer
+      || it->second.type == nix::actCopyPath)
+    {
+      progress.unit = ProgressUnit::Bytes;
+    }
+
   it->second.progress = progress;
   it->second.has_progress = true;
 

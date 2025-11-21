@@ -9,7 +9,6 @@
 #include <cstdio>
 #include <cstdlib>
 #include <iterator>
-#include <stdexcept>
 #include <string_view>
 #include <sys/ioctl.h>
 #include <unistd.h>
@@ -133,25 +132,33 @@ TerminalUi::draw_status_lines (const UiState &state)
   int first_status_row = rows_ - status_lines_ + 1;
   int row = first_status_row;
 
-  auto draw_line = [&] (std::string_view text)
-    {
-      ansi::move_cursor (row, 1);
-      ansi::clear_line ();
-      fmt::print ("{}", text);
-      ++row;
-    };
+  // Build entire output in memory to reduce flicker
+  fmt::memory_buffer output;
+
+  // Hide cursor while updating
+  ansi::hide_cursor ();
 
   for (int i = 0; i < status_lines_; ++i)
     {
+      // Generate cursor positioning and line clear in buffer
+      fmt::format_to (std::back_inserter (output), "\x1b[{};{}H", row, 1);
+      fmt::format_to (std::back_inserter (output), "\x1b[2K");
+
       if (i < static_cast<int> (state.activity_lines.size ()))
         {
-          draw_line (render_activity_line (state.activity_lines[i], cols_));
+          fmt::format_to (
+              std::back_inserter (output), "{}",
+              render_activity_line (state.activity_lines[i], cols_));
         }
-      else
-        {
-          draw_line ("");
-        }
+
+      ++row;
     }
+
+  // Write entire frame at once
+  fmt::print ("{}", fmt::to_string (output));
+
+  // Show cursor again
+  ansi::show_cursor ();
 }
 
 void
