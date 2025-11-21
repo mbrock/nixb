@@ -9,6 +9,14 @@
       forAllSystems = f: nixpkgs.lib.genAttrs systems (system: f system);
     in
     {
+      packages = forAllSystems (system:
+        let
+          pkgs = import nixpkgs { inherit system; };
+        in
+        {
+          inherit (pkgs) hello;
+        });
+        
       devShells = forAllSystems (system:
         let
           pkgs = import nixpkgs { inherit system; };

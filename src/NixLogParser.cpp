@@ -1,4 +1,4 @@
-#include "nix_log_parser.hpp"
+#include "NixLogParser.hpp"
 
 #include <fmt/color.h>
 #include <fmt/core.h>
