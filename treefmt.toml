@@ -56,4 +56,4 @@ walk = "git"
 command = "clang-format"
 excludes = []
 includes = ["*.cpp", "*.hpp"]
-options = ["-i"]
+options = ["-i", "-style=file"]
