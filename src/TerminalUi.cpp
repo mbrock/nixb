@@ -142,8 +142,9 @@ TerminalUi::print_log_block (std::string_view block)
       return;
     }
 
-  fmt::print ("{}{};1H{}2K", CSI, scroll_bottom_, CSI);
-  fmt::print ("{}", block);
+  // fmt::print ("{}{};1H{}2K", CSI, scroll_bottom_, CSI);
+  fmt::print ("{}{};1H", CSI, scroll_bottom_);
+  fmt::print ("{}\n", block);
   std::fflush (stdout);
 }
 
@@ -171,9 +172,8 @@ TerminalUi::redraw (const UiState &state)
       activity_budget = 0;
     }
 
-  int activity_count
-      = static_cast<int> (std::min<std::size_t> (activity_budget,
-                                                 state.activity_lines.size ()));
+  int activity_count = static_cast<int> (
+      std::min<std::size_t> (activity_budget, state.activity_lines.size ()));
 
   for (int i = 0; i < activity_count && row <= rows_; ++i)
     {
@@ -221,9 +221,7 @@ TerminalUi::reconfigure_scroll_region ()
 {
   scroll_bottom_ = rows_ - status_lines_;
   if (scroll_bottom_ < 1)
-    {
-      scroll_bottom_ = 1;
-    }
+    scroll_bottom_ = 1;
   fmt::print ("{}1;{}r", CSI, scroll_bottom_);
   fmt::print ("{}1;1H", CSI);
   std::fflush (stdout);

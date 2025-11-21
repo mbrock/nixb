@@ -5,6 +5,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <nix/store/derivations.hh>
 #include <nix/store/path.hh>
 #include <optional>
 #include <string>
@@ -24,12 +25,15 @@ struct ActivityInfo
   ActivityType type;
   std::string text;
   std::optional<nix::StorePath> store_path;
+  std::optional<nix::StorePath> derivation_path;
+  std::optional<nix::Derivation> derivation;
   std::optional<std::string> store_base_url;
   std::string label;
   std::optional<int64_t> parent;
   ActivityProgress progress;
   bool has_progress = false;
   size_t start_order = 0;
+  std::string current_phase;
 };
 
 class NixBuildState
@@ -89,7 +93,7 @@ public:
   }
   void set_builds_expected (int64_t expected);
   void set_builds_progress (const ActivityProgress &progress);
-  void set_current_phase (const std::string &phase);
+  void set_current_phase (int64_t id, const std::string &phase);
   void clear_builds_aggregate ();
 
 private:

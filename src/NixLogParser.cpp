@@ -145,7 +145,57 @@ NixLogParser::parse_line (std::string_view line)
             default:
               break;
             }
+
+          // Heuristic: some older log lines come through as actUnknown with
+          // only a descriptive text. Try to recover type + fields so the UI
+          // can treat them like normal transfers.
+          auto parse_copying_text = [&] () -> bool
+            {
+              std::string_view t = event.text;
+              constexpr std::string_view prefix = "copying '";
+              if (!t.starts_with (prefix))
+                return false;
+
+              auto path_start = prefix.size ();
+              auto path_end = t.find ('\'', path_start);
+              if (path_end == std::string_view::npos)
+                return false;
+              auto path_sv = t.substr (path_start, path_end - path_start);
+
+              event.type = nix::actCopyPath;
+              event.fields.clear ();
+              event.fields.emplace_back (std::string (path_sv));
+              event.store_ref = parse_store_ref ();
+              return true;
+            };
+
+          auto parse_hashing_text = [&] () -> bool
+            {
+              std::string_view t = event.text;
+              constexpr std::string_view prefix = "hashing '";
+              constexpr char quote = '\'';
+              if (!t.starts_with (prefix))
+                return false;
+              auto path_start = prefix.size ();
+              auto path_end = t.find (quote, path_start);
+              if (path_end == std::string_view::npos)
+                return false;
+              auto path_sv = t.substr (path_start, path_end - path_start);
+              event.type = nix::actFileTransfer;
+              event.fields.clear ();
+              event.fields.emplace_back (std::string (path_sv));
+              return true;
+            };
+
+          if (event.type == nix::actUnknown && event.fields.empty ())
+            {
+              if (!parse_copying_text ())
+                {
+                  parse_hashing_text ();
+                }
+            }
         }
+
       return event;
     }
   else if (action == "stop")
@@ -232,7 +282,7 @@ StartEvent::format () const
           std::back_inserter (buf), "{}",
           fmt::styled (text, fmt::fg (fmt::terminal_color::white)));
     }
-  fmt::format_to (std::back_inserter (buf), "\n");
+
   return fmt::to_string (buf);
 }
 
@@ -265,7 +315,6 @@ StopEvent::format (std::string_view type_name, std::string_view activity_text,
     {
       fmt::format_to (std::back_inserter (buf), " {}", activity_text);
     }
-  fmt::format_to (std::back_inserter (buf), "\n");
   return fmt::to_string (buf);
 }
 
@@ -273,7 +322,7 @@ std::string
 MsgEvent::format () const
 {
   return fmt::format (
-      "{} {}\n", fmt::styled ("[msg]", fmt::fg (fmt::terminal_color::cyan)),
+      "{} {}", fmt::styled ("[msg]", fmt::fg (fmt::terminal_color::cyan)),
       msg);
 }
 
@@ -309,7 +358,7 @@ ResultEvent::format () const
       auto faint_style
           = fmt::fg (fmt::terminal_color::white) | fmt::emphasis::faint;
       fmt::format_to (
-          std::back_inserter (buf), "{}\n",
+          std::back_inserter (buf), "{}",
           fmt::styled (fmt::format ("> {}", msg_view), faint_style));
       printed_compact = true;
     };
@@ -327,7 +376,7 @@ ResultEvent::format () const
       if (auto phase = get_string (0))
         {
           fmt::format_to (
-              std::back_inserter (buf), "{} {}\n",
+              std::back_inserter (buf), "{} {}",
               fmt::styled ("[phase]", fmt::fg (fmt::terminal_color::magenta)),
               *phase);
           printed_compact = true;
@@ -398,7 +447,6 @@ ResultEvent::format () const
       break;
     }
 
-  fmt::format_to (std::back_inserter (buf), "\n");
   return fmt::to_string (buf);
 }
 

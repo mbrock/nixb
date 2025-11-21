@@ -12,6 +12,8 @@ simdjson_dep = dependency('simdjson', fallback : ['simdjson', 'simdjson_dep'])
 cli11_dep = dependency('cli11', fallback : ['cli11', 'CLI11_dep'])
 nix_store_dep = dependency('nix-store')
 nix_expr_dep = dependency('nix-expr')
+nix_flake_dep = dependency('nix-flake')
+nix_cmd_dep = dependency('nix-cmd')
 boost_dep = dependency('boost')
 
 add_project_arguments(
@@ -26,8 +28,9 @@ executable('nixb', [
     'src/NixLogParser.cpp',
     'src/NixLogPlayer.cpp',
     'src/NixLogRecorder.cpp',
+    'src/NixLogForwardingLogger.cpp',
     'src/NixLogWatcher.cpp',
     'src/TerminalUi.cpp'
   ],
-  dependencies : [fmt_dep, simdjson_dep, cli11_dep, nix_store_dep, nix_expr_dep, boost_dep],
+  dependencies : [fmt_dep, simdjson_dep, cli11_dep, nix_store_dep, nix_expr_dep, nix_flake_dep, nix_cmd_dep, boost_dep],
   install : true)

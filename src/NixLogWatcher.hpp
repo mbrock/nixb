@@ -34,11 +34,18 @@ public:
   explicit NixLogWatcher (bool quiet, UiMode ui_mode = UiMode::Auto,
                           std::optional<std::string> record_path
                           = std::nullopt,
-                          std::atomic<bool> *stop_flag = nullptr);
+                          std::atomic<bool> *stop_flag = nullptr,
+                          double emit_delay_ms = 0.0);
+
+  // Evaluate an installable and return derivation JSON strings.
+  static std::vector<std::string>
+  show_derivation (const std::string &installable);
 
   void process_input ();
   void process_playback_file (const std::string &path);
   void process_playback_file (const std::string &path, double speedup);
+  void process_log_line (const std::string &line) { process_line (line); }
+  void finish ();
 
 private:
   void process_line (const std::string &line);
@@ -66,6 +73,7 @@ private:
   std::unique_ptr<NixLogRecorder> recorder_;
   std::unique_ptr<TerminalUi> ui_;
   UiState ui_state_;
+  double emit_delay_ms_{ 0.0 };
   std::atomic<bool> *stop_flag_ = nullptr;
 };
 

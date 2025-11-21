@@ -55,16 +55,14 @@
             shellHook = ''
               unset MACOSX_DEPLOYMENT_TARGET
 
-              store_include=$(pkg-config --variable=includedir nix-store 2>/dev/null || true)
-              util_include=$(pkg-config --variable=includedir nix-util 2>/dev/null || true)
+              store_include=$(pkg-config --variable=includedir nix-store 2>/dev/null)
+              util_include=$(pkg-config --variable=includedir nix-util 2>/dev/null)
+              flake_include=$(pkg-config --variable=includedir nix-flake 2>/dev/null)
+              expr_include=$(pkg-config --variable=includedir nix-expr 2>/dev/null)
+              cmd_include=$(pkg-config --variable=includedir nix-cmd 2>/dev/null)
 
-              if [ -n "$store_include" ] && [ -n "$util_include" ]; then
-                export NIX_API_INPUTS="''${store_include}/nix/store ''${util_include}/nix/util"
-              fi
-
-              if [ -n "$store_include" ] && [ -n "$util_include" ]; then
-                export NIX_API_INCLUDE_PATH="''${store_include} ''${util_include}"
-              fi
+              export NIX_API_INPUTS="''${store_include}/nix/store ''${util_include}/nix/util ''${flake_include}/nix/flake ''${expr_include}/nix/expr ''${cmd_include}/nix/cmd"
+              export NIX_API_INCLUDE_PATH="''${store_include} ''${util_include} ''${flake_include} ''${expr_include} ''${cmd_include}"
             '';
           };
         });

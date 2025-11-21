@@ -1,0 +1,743 @@
+0000000000000 @nix {"action":"start","fields":[],"id":136472585830400,"level":4,"parent":0,"text":"evaluating derivation 'git+file:///Users/mbrock/2025/nixb#emacs'","type":0}
+0000000000008 @nix {"action":"msg","level":1,"msg":"\u001b[35;1mwarning:\u001b[0m Git tree '/Users/mbrock/2025/nixb' is dirty"}
+0000000000013 @nix {"action":"start","fields":[],"id":136472585830401,"level":5,"parent":0,"text":"copying '/Users/mbrock/2025/nixb/' to the store","type":0}
+0000000000346 @nix {"action":"stop","id":136472585830401}
+0000000000557 @nix {"action":"start","fields":[],"id":136472585830402,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/stdenv/generic/source-stdenv.sh'","type":0}
+0000000000558 @nix {"action":"stop","id":136472585830402}
+0000000000558 @nix {"action":"start","fields":[],"id":136472585830403,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/stdenv/generic/default-builder.sh'","type":0}
+0000000000558 @nix {"action":"stop","id":136472585830403}
+0000000000563 @nix {"action":"start","fields":[],"id":136472585830404,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/stdenv/generic/builder.sh'","type":0}
+0000000000563 @nix {"action":"stop","id":136472585830404}
+0000000000564 @nix {"action":"start","fields":[],"id":136472585830405,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/build-support/setup-hooks/no-broken-symlinks.sh'","type":0}
+0000000000564 @nix {"action":"stop","id":136472585830405}
+0000000000564 @nix {"action":"start","fields":[],"id":136472585830406,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/build-support/setup-hooks/audit-tmpdir.sh'","type":0}
+0000000000564 @nix {"action":"stop","id":136472585830406}
+0000000000564 @nix {"action":"start","fields":[],"id":136472585830407,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/build-support/setup-hooks/compress-man-pages.sh'","type":0}
+0000000000564 @nix {"action":"stop","id":136472585830407}
+0000000000564 @nix {"action":"start","fields":[],"id":136472585830408,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/build-support/setup-hooks/make-symlinks-relative.sh'","type":0}
+0000000000565 @nix {"action":"stop","id":136472585830408}
+0000000000565 @nix {"action":"start","fields":[],"id":136472585830409,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/build-support/setup-hooks/move-docs.sh'","type":0}
+0000000000565 @nix {"action":"stop","id":136472585830409}
+0000000000565 @nix {"action":"start","fields":[],"id":136472585830410,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/build-support/setup-hooks/move-lib64.sh'","type":0}
+0000000000565 @nix {"action":"stop","id":136472585830410}
+0000000000565 @nix {"action":"start","fields":[],"id":136472585830411,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/build-support/setup-hooks/move-sbin.sh'","type":0}
+0000000000565 @nix {"action":"stop","id":136472585830411}
+0000000000565 @nix {"action":"start","fields":[],"id":136472585830412,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/build-support/setup-hooks/move-systemd-user-units.sh'","type":0}
+0000000000565 @nix {"action":"stop","id":136472585830412}
+0000000000565 @nix {"action":"start","fields":[],"id":136472585830413,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/build-support/setup-hooks/multiple-outputs.sh'","type":0}
+0000000000565 @nix {"action":"stop","id":136472585830413}
+0000000000565 @nix {"action":"start","fields":[],"id":136472585830414,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/build-support/setup-hooks/patch-shebangs.sh'","type":0}
+0000000000565 @nix {"action":"stop","id":136472585830414}
+0000000000566 @nix {"action":"start","fields":[],"id":136472585830415,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/build-support/setup-hooks/prune-libtool-files.sh'","type":0}
+0000000000566 @nix {"action":"stop","id":136472585830415}
+0000000000566 @nix {"action":"start","fields":[],"id":136472585830416,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/build-support/setup-hooks/reproducible-builds.sh'","type":0}
+0000000000566 @nix {"action":"stop","id":136472585830416}
+0000000000566 @nix {"action":"start","fields":[],"id":136472585830417,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/build-support/setup-hooks/set-source-date-epoch-to-latest.sh'","type":0}
+0000000000566 @nix {"action":"stop","id":136472585830417}
+0000000000566 @nix {"action":"start","fields":[],"id":136472585830418,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/build-support/setup-hooks/strip.sh'","type":0}
+0000000000566 @nix {"action":"stop","id":136472585830418}
+0000000000566 @nix {"action":"start","fields":[],"id":136472585830419,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/stdenv/generic/setup.sh'","type":0}
+0000000000567 @nix {"action":"stop","id":136472585830419}
+0000000000613 @nix {"action":"start","fields":[],"id":136472585830420,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/build-support/setup-hooks/update-autotools-gnu-config-scripts.sh'","type":0}
+0000000000613 @nix {"action":"stop","id":136472585830420}
+0000000000616 @nix {"action":"start","fields":[],"id":136472585830421,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/build-support/fetchurl/builder.sh'","type":0}
+0000000000616 @nix {"action":"stop","id":136472585830421}
+0000000000616 @nix {"action":"start","fields":[],"id":136472585830422,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/build-support/fetchurl/write-mirror-list.sh'","type":0}
+0000000000617 @nix {"action":"stop","id":136472585830422}
+0000000000642 @nix {"action":"start","fields":[],"id":136472585830423,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/build-support/setup-hooks/make-wrapper.sh'","type":0}
+0000000000642 @nix {"action":"stop","id":136472585830423}
+0000000000642 @nix {"action":"start","fields":[],"id":136472585830424,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/build-support/setup-hooks/die.sh'","type":0}
+0000000000642 @nix {"action":"stop","id":136472585830424}
+0000000000646 @nix {"action":"start","fields":[],"id":136472585830425,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/ap/apple-sdk/patches/0001-Add-function-definitions-needed-to-build-zlog-in-sys.patch'","type":0}
+0000000000646 @nix {"action":"stop","id":136472585830425}
+0000000000646 @nix {"action":"start","fields":[],"id":136472585830426,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/ap/apple-sdk/patches/0002-Add-CF_EXPORT-To-const-symbols.patch'","type":0}
+0000000000646 @nix {"action":"stop","id":136472585830426}
+0000000000649 @nix {"action":"start","fields":[],"id":136472585830427,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/ap/apple-sdk/setup-hooks/role.bash'","type":0}
+0000000000650 @nix {"action":"stop","id":136472585830427}
+0000000000651 @nix {"action":"start","fields":[],"id":136472585830428,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/build-support/substitute/substitute.sh'","type":0}
+0000000000651 @nix {"action":"stop","id":136472585830428}
+0000000000651 @nix {"action":"start","fields":[],"id":136472585830429,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/ap/apple-sdk/setup-hooks/sdk-hook.sh'","type":0}
+0000000000651 @nix {"action":"stop","id":136472585830429}
+0000000000654 @nix {"action":"start","fields":[],"id":136472585830430,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/build-support/bintools-wrapper/ld-wrapper.sh'","type":0}
+0000000000654 @nix {"action":"stop","id":136472585830430}
+0000000000654 @nix {"action":"start","fields":[],"id":136472585830431,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/build-support/bintools-wrapper/gnu-binutils-strip-wrapper.sh'","type":0}
+0000000000654 @nix {"action":"stop","id":136472585830431}
+0000000000654 @nix {"action":"start","fields":[],"id":136472585830432,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/build-support/bintools-wrapper/add-flags.sh'","type":0}
+0000000000655 @nix {"action":"stop","id":136472585830432}
+0000000000655 @nix {"action":"start","fields":[],"id":136472585830433,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/build-support/bintools-wrapper/add-hardening.sh'","type":0}
+0000000000655 @nix {"action":"stop","id":136472585830433}
+0000000000655 @nix {"action":"start","fields":[],"id":136472585830434,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/build-support/wrapper-common/utils.bash'","type":0}
+0000000000655 @nix {"action":"stop","id":136472585830434}
+0000000000655 @nix {"action":"start","fields":[],"id":136472585830435,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/build-support/wrapper-common/darwin-sdk-setup.bash'","type":0}
+0000000000655 @nix {"action":"stop","id":136472585830435}
+0000000000655 @nix {"action":"start","fields":[],"id":136472585830436,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/build-support/bintools-wrapper/add-darwin-ldflags-before.sh'","type":0}
+0000000000655 @nix {"action":"stop","id":136472585830436}
+0000000000656 @nix {"action":"start","fields":[],"id":136472585830437,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/build-support/setup-hooks/role.bash'","type":0}
+0000000000656 @nix {"action":"stop","id":136472585830437}
+0000000000656 @nix {"action":"start","fields":[],"id":136472585830438,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/build-support/bintools-wrapper/setup-hook.sh'","type":0}
+0000000000656 @nix {"action":"stop","id":136472585830438}
+0000000000659 @nix {"action":"start","fields":[],"id":136472585830439,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/build-support/cc-wrapper/add-flags.sh'","type":0}
+0000000000660 @nix {"action":"stop","id":136472585830439}
+0000000000660 @nix {"action":"start","fields":[],"id":136472585830440,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/build-support/cc-wrapper/add-hardening.sh'","type":0}
+0000000000660 @nix {"action":"stop","id":136472585830440}
+0000000000660 @nix {"action":"start","fields":[],"id":136472585830441,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/build-support/cc-wrapper/add-clang-cc-cflags-before.sh'","type":0}
+0000000000660 @nix {"action":"stop","id":136472585830441}
+0000000000660 @nix {"action":"start","fields":[],"id":136472585830442,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/build-support/cc-wrapper/setup-hook.sh'","type":0}
+0000000000660 @nix {"action":"stop","id":136472585830442}
+0000000000660 @nix {"action":"start","fields":[],"id":136472585830443,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/build-support/cc-wrapper/cc-wrapper.sh'","type":0}
+0000000000660 @nix {"action":"stop","id":136472585830443}
+0000000000668 @nix {"action":"start","fields":[],"id":136472585830444,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/interpreters/perl/CVE-2024-56406.patch'","type":0}
+0000000000668 @nix {"action":"stop","id":136472585830444}
+0000000000668 @nix {"action":"start","fields":[],"id":136472585830445,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/interpreters/perl/CVE-2025-40909.patch'","type":0}
+0000000000668 @nix {"action":"stop","id":136472585830445}
+0000000000668 @nix {"action":"start","fields":[],"id":136472585830446,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/interpreters/perl/no-sys-dirs-5.40.0.patch'","type":0}
+0000000000669 @nix {"action":"stop","id":136472585830446}
+0000000000669 @nix {"action":"start","fields":[],"id":136472585830447,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/interpreters/perl/fix-build-with-only-C-locale-5.40.0.patch'","type":0}
+0000000000669 @nix {"action":"stop","id":136472585830447}
+0000000000669 @nix {"action":"start","fields":[],"id":136472585830448,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/interpreters/perl/cpp-precomp.patch'","type":0}
+0000000000669 @nix {"action":"stop","id":136472585830448}
+0000000000669 @nix {"action":"start","fields":[],"id":136472585830449,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/interpreters/perl/sw_vers.patch'","type":0}
+0000000000669 @nix {"action":"stop","id":136472585830449}
+0000000000675 @nix {"action":"start","fields":[],"id":136472585830450,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/interpreters/perl/setup-hook.sh'","type":0}
+0000000000675 @nix {"action":"stop","id":136472585830450}
+0000000000683 @nix {"action":"start","fields":[],"id":136472585830451,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/shells/bash/pgrp-pipe-5.patch'","type":0}
+0000000000683 @nix {"action":"stop","id":136472585830451}
+0000000000689 @nix {"action":"start","fields":[],"id":136472585830452,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/build-support/setup-hooks/autoreconf.sh'","type":0}
+0000000000689 @nix {"action":"stop","id":136472585830452}
+0000000000689 @nix {"action":"start","fields":[],"id":136472585830453,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/libraries/libiconv/setup-hook.sh'","type":0}
+0000000000690 @nix {"action":"stop","id":136472585830453}
+0000000000692 @nix {"action":"start","fields":[],"id":136472585830454,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/libraries/gettext/absolute-paths.diff'","type":0}
+0000000000692 @nix {"action":"stop","id":136472585830454}
+0000000000692 @nix {"action":"start","fields":[],"id":136472585830455,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/libraries/gettext/0001-msginit-Do-not-use-POT-Creation-Date.patch'","type":0}
+0000000000692 @nix {"action":"stop","id":136472585830455}
+0000000000692 @nix {"action":"start","fields":[],"id":136472585830456,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/libraries/gettext/memory-safety.patch'","type":0}
+0000000000693 @nix {"action":"stop","id":136472585830456}
+0000000000693 @nix {"action":"start","fields":[],"id":136472585830457,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/libraries/gettext/gettext-setup-hook.sh'","type":0}
+0000000000693 @nix {"action":"stop","id":136472585830457}
+0000000000697 @nix {"action":"start","fields":[],"id":136472585830458,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/tools/misc/automake/setup-hook.sh'","type":0}
+0000000000697 @nix {"action":"stop","id":136472585830458}
+0000000000698 @nix {"action":"start","fields":[],"id":136472585830459,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/tools/misc/file/32-bit-time_t.patch'","type":0}
+0000000000698 @nix {"action":"stop","id":136472585830459}
+0000000000701 @nix {"action":"start","fields":[],"id":136472585830460,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/tools/compression/bzip2/patches/bzip2-1.0.6.2-autoconfiscated.patch'","type":0}
+0000000000701 @nix {"action":"stop","id":136472585830460}
+0000000000703 @nix {"action":"start","fields":[],"id":136472585830461,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/os-specific/darwin/apple-source-releases/libffi/patches/fix-tramponline-memory-leak.patch'","type":0}
+0000000000703 @nix {"action":"stop","id":136472585830461}
+0000000000703 @nix {"action":"start","fields":[],"id":136472585830462,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/os-specific/darwin/apple-source-releases/libffi/patches/automake-1.18.patch'","type":0}
+0000000000703 @nix {"action":"stop","id":136472585830462}
+0000000000705 @nix {"action":"start","fields":[],"id":136472585830463,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/build-support/pkg-config-wrapper/pkg-config-wrapper.sh'","type":0}
+0000000000705 @nix {"action":"stop","id":136472585830463}
+0000000000705 @nix {"action":"start","fields":[],"id":136472585830464,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/build-support/remove-references-to/remove-references-to.sh'","type":0}
+0000000000705 @nix {"action":"stop","id":136472585830464}
+0000000000706 @nix {"action":"start","fields":[],"id":136472585830465,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/os-specific/darwin/signing-utils/utils.sh'","type":0}
+0000000000706 @nix {"action":"stop","id":136472585830465}
+0000000000709 @nix {"action":"start","fields":[],"id":136472585830466,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/build-support/pkg-config-wrapper/add-flags.sh'","type":0}
+0000000000709 @nix {"action":"stop","id":136472585830466}
+0000000000709 @nix {"action":"start","fields":[],"id":136472585830467,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/build-support/pkg-config-wrapper/setup-hook.sh'","type":0}
+0000000000709 @nix {"action":"stop","id":136472585830467}
+0000000000711 @nix {"action":"start","fields":[],"id":136472585830468,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/libraries/ncurses/1001-ncurses-Support-gnuabielfv1-2.patch'","type":0}
+0000000000711 @nix {"action":"stop","id":136472585830468}
+0000000000715 @nix {"action":"start","fields":[],"id":136472585830469,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/ma/makeBinaryWrapper/make-binary-wrapper.sh'","type":0}
+0000000000716 @nix {"action":"stop","id":136472585830469}
+0000000000728 @nix {"action":"start","fields":[],"id":136472585830470,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/libraries/openssl/3.0/nix-ssl-cert-file.patch'","type":0}
+0000000000729 @nix {"action":"stop","id":136472585830470}
+0000000000729 @nix {"action":"start","fields":[],"id":136472585830471,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/libraries/openssl/3.0/openssl-disable-kernel-detection.patch'","type":0}
+0000000000729 @nix {"action":"stop","id":136472585830471}
+0000000000729 @nix {"action":"start","fields":[],"id":136472585830472,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/libraries/openssl/3.5/use-etc-ssl-certs-darwin.patch'","type":0}
+0000000000729 @nix {"action":"stop","id":136472585830472}
+0000000000730 @nix {"action":"start","fields":[],"id":136472585830473,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/tools/misc/coreutils/tail.patch'","type":0}
+0000000000730 @nix {"action":"stop","id":136472585830473}
+0000000000730 @nix {"action":"start","fields":[],"id":136472585830474,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/tools/misc/coreutils/cp-1.patch'","type":0}
+0000000000731 @nix {"action":"stop","id":136472585830474}
+0000000000731 @nix {"action":"start","fields":[],"id":136472585830475,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/tools/misc/coreutils/cp-2.patch'","type":0}
+0000000000731 @nix {"action":"stop","id":136472585830475}
+0000000000731 @nix {"action":"start","fields":[],"id":136472585830476,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/tools/misc/coreutils/cp-3.patch'","type":0}
+0000000000731 @nix {"action":"stop","id":136472585830476}
+0000000000745 @nix {"action":"start","fields":[],"id":136472585830477,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/un/unzip/CVE-2014-8139.diff'","type":0}
+0000000000746 @nix {"action":"stop","id":136472585830477}
+0000000000746 @nix {"action":"start","fields":[],"id":136472585830478,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/un/unzip/CVE-2014-8140.diff'","type":0}
+0000000000746 @nix {"action":"stop","id":136472585830478}
+0000000000746 @nix {"action":"start","fields":[],"id":136472585830479,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/un/unzip/CVE-2014-8141.diff'","type":0}
+0000000000746 @nix {"action":"stop","id":136472585830479}
+0000000000746 @nix {"action":"start","fields":[],"id":136472585830480,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/un/unzip/CVE-2014-9636.diff'","type":0}
+0000000000747 @nix {"action":"stop","id":136472585830480}
+0000000000747 @nix {"action":"start","fields":[],"id":136472585830481,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/un/unzip/CVE-2015-7696.diff'","type":0}
+0000000000747 @nix {"action":"stop","id":136472585830481}
+0000000000747 @nix {"action":"start","fields":[],"id":136472585830482,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/un/unzip/CVE-2015-7697.diff'","type":0}
+0000000000747 @nix {"action":"stop","id":136472585830482}
+0000000000747 @nix {"action":"start","fields":[],"id":136472585830483,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/un/unzip/CVE-2014-9913.patch'","type":0}
+0000000000747 @nix {"action":"stop","id":136472585830483}
+0000000000747 @nix {"action":"start","fields":[],"id":136472585830484,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/un/unzip/CVE-2016-9844.patch'","type":0}
+0000000000747 @nix {"action":"stop","id":136472585830484}
+0000000000747 @nix {"action":"start","fields":[],"id":136472585830485,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/un/unzip/CVE-2018-18384.patch'","type":0}
+0000000000747 @nix {"action":"stop","id":136472585830485}
+0000000000747 @nix {"action":"start","fields":[],"id":136472585830486,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/un/unzip/dont-hardcode-cc.patch'","type":0}
+0000000000747 @nix {"action":"stop","id":136472585830486}
+0000000000749 @nix {"action":"start","fields":[],"id":136472585830487,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/un/unzip/implicit-declarations-fix.patch'","type":0}
+0000000000749 @nix {"action":"stop","id":136472585830487}
+0000000000750 @nix {"action":"start","fields":[],"id":136472585830488,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/un/unzip/setup-hook.sh'","type":0}
+0000000000750 @nix {"action":"stop","id":136472585830488}
+0000000000756 @nix {"action":"start","fields":[],"id":136472585830489,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/tz/tzdata/tzdata-setup-hook.sh'","type":0}
+0000000000756 @nix {"action":"stop","id":136472585830489}
+0000000000759 @nix {"action":"start","fields":[],"id":136472585830490,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/libraries/readline/link-against-ncurses.patch'","type":0}
+0000000000759 @nix {"action":"stop","id":136472585830490}
+0000000000759 @nix {"action":"start","fields":[],"id":136472585830491,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/libraries/readline/no-arch_only-8.2.patch'","type":0}
+0000000000759 @nix {"action":"stop","id":136472585830491}
+0000000000760 @nix {"action":"start","fields":[],"id":136472585830492,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/build-support/nuke-references/nuke-refs.sh'","type":0}
+0000000000760 @nix {"action":"stop","id":136472585830492}
+0000000000762 @nix {"action":"start","fields":[],"id":136472585830493,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/interpreters/python/cpython/3.13/no-ldconfig.patch'","type":0}
+0000000000763 @nix {"action":"stop","id":136472585830493}
+0000000000763 @nix {"action":"start","fields":[],"id":136472585830494,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/interpreters/python/cpython/3.13/virtualenv-permissions.patch'","type":0}
+0000000000763 @nix {"action":"stop","id":136472585830494}
+0000000000763 @nix {"action":"start","fields":[],"id":136472585830495,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/interpreters/python/cpython/mimetypes.patch'","type":0}
+0000000000763 @nix {"action":"stop","id":136472585830495}
+0000000000763 @nix {"action":"start","fields":[],"id":136472585830496,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/interpreters/python/sitecustomize.py'","type":0}
+0000000000763 @nix {"action":"stop","id":136472585830496}
+0000000000765 @nix {"action":"start","fields":[],"id":136472585830497,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/interpreters/python/setup-hook.sh'","type":0}
+0000000000765 @nix {"action":"stop","id":136472585830497}
+0000000000779 @nix {"action":"start","fields":[],"id":136472585830498,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/interpreters/lua-5/CVE-2022-28805.patch'","type":0}
+0000000000779 @nix {"action":"stop","id":136472585830498}
+0000000000779 @nix {"action":"start","fields":[],"id":136472585830499,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/interpreters/lua-5/5.2.darwin.patch'","type":0}
+0000000000779 @nix {"action":"stop","id":136472585830499}
+0000000000780 @nix {"action":"start","fields":[],"id":136472585830500,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/interpreters/lua-5/utils.sh'","type":0}
+0000000000780 @nix {"action":"stop","id":136472585830500}
+0000000000784 @nix {"action":"start","fields":[],"id":136472585830501,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/ky/kyua/kyua-check-hook.sh'","type":0}
+0000000000784 @nix {"action":"stop","id":136472585830501}
+0000000000801 @nix {"action":"start","fields":[],"id":136472585830502,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/interpreters/python/wrap.sh'","type":0}
+0000000000801 @nix {"action":"stop","id":136472585830502}
+0000000000802 @nix {"action":"start","fields":[],"id":136472585830503,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/tools/misc/findutils/no-install-statedir.patch'","type":0}
+0000000000802 @nix {"action":"stop","id":136472585830503}
+0000000000805 @nix {"action":"start","fields":[],"id":136472585830504,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/interpreters/python/hooks/python-remove-tests-dir-hook.sh'","type":0}
+0000000000805 @nix {"action":"stop","id":136472585830504}
+0000000000805 @nix {"action":"start","fields":[],"id":136472585830505,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/interpreters/python/hooks/python-catch-conflicts-hook.sh'","type":0}
+0000000000805 @nix {"action":"stop","id":136472585830505}
+0000000000805 @nix {"action":"start","fields":[],"id":136472585830506,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/interpreters/python/catch_conflicts/catch_conflicts.py'","type":0}
+0000000000806 @nix {"action":"stop","id":136472585830506}
+0000000000806 @nix {"action":"start","fields":[],"id":136472585830507,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/interpreters/python/hooks/python-remove-bin-bytecode-hook.sh'","type":0}
+0000000000806 @nix {"action":"stop","id":136472585830507}
+0000000000806 @nix {"action":"start","fields":[],"id":136472585830508,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/interpreters/python/hooks/setuptools-build-hook.sh'","type":0}
+0000000000807 @nix {"action":"stop","id":136472585830508}
+0000000000810 @nix {"action":"start","fields":[],"id":136472585830509,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/interpreters/python/hooks/python-relax-deps-hook.sh'","type":0}
+0000000000810 @nix {"action":"stop","id":136472585830509}
+0000000000824 @nix {"action":"start","fields":[],"id":136472585830510,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/python-modules/installer/python313-compat.patch'","type":0}
+0000000000824 @nix {"action":"stop","id":136472585830510}
+0000000000831 @nix {"action":"start","fields":[],"id":136472585830511,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/interpreters/python/hooks/pypa-build-hook.sh'","type":0}
+0000000000831 @nix {"action":"stop","id":136472585830511}
+0000000000831 @nix {"action":"start","fields":[],"id":136472585830512,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/interpreters/python/hooks/python-runtime-deps-check-hook.sh'","type":0}
+0000000000831 @nix {"action":"stop","id":136472585830512}
+0000000000831 @nix {"action":"start","fields":[],"id":136472585830513,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/interpreters/python/hooks/python-runtime-deps-check-hook.py'","type":0}
+0000000000831 @nix {"action":"stop","id":136472585830513}
+0000000000833 @nix {"action":"start","fields":[],"id":136472585830514,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/interpreters/python/hooks/pypa-install-hook.sh'","type":0}
+0000000000833 @nix {"action":"stop","id":136472585830514}
+0000000000835 @nix {"action":"start","fields":[],"id":136472585830515,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/interpreters/python/hooks/python-imports-check-hook.sh'","type":0}
+0000000000835 @nix {"action":"stop","id":136472585830515}
+0000000000836 @nix {"action":"start","fields":[],"id":136472585830516,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/interpreters/python/hooks/python-namespaces-hook.sh'","type":0}
+0000000000836 @nix {"action":"stop","id":136472585830516}
+0000000000836 @nix {"action":"start","fields":[],"id":136472585830517,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/interpreters/python/hooks/python-output-dist-hook.sh'","type":0}
+0000000000836 @nix {"action":"stop","id":136472585830517}
+0000000000853 @nix {"action":"start","fields":[],"id":136472585830518,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/python-modules/setuptools/tag-date.patch'","type":0}
+0000000000854 @nix {"action":"stop","id":136472585830518}
+0000000000855 @nix {"action":"start","fields":[],"id":136472585830519,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/interpreters/python/run_setup.py'","type":0}
+0000000000855 @nix {"action":"stop","id":136472585830519}
+0000000000857 @nix {"action":"start","fields":[],"id":136472585830520,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/in/installShellFiles/setup-hook.sh'","type":0}
+0000000000857 @nix {"action":"stop","id":136472585830520}
+0000000000857 @nix {"action":"start","fields":[],"id":136472585830521,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/me/meson/000-nixpkgs-cmake-prefix-path.patch'","type":0}
+0000000000858 @nix {"action":"stop","id":136472585830521}
+0000000000858 @nix {"action":"start","fields":[],"id":136472585830522,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/me/meson/001-fix-rpath.patch'","type":0}
+0000000000858 @nix {"action":"stop","id":136472585830522}
+0000000000858 @nix {"action":"start","fields":[],"id":136472585830523,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/me/meson/002-clear-old-rpath.patch'","type":0}
+0000000000858 @nix {"action":"stop","id":136472585830523}
+0000000000858 @nix {"action":"start","fields":[],"id":136472585830524,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/me/meson/003-more-env-vars.patch'","type":0}
+0000000000859 @nix {"action":"stop","id":136472585830524}
+0000000000859 @nix {"action":"start","fields":[],"id":136472585830525,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/me/meson/004-gir-fallback-path.patch'","type":0}
+0000000000859 @nix {"action":"stop","id":136472585830525}
+0000000000859 @nix {"action":"start","fields":[],"id":136472585830526,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/me/meson/005-boost-Do-not-add-system-paths-on-nix.patch'","type":0}
+0000000000859 @nix {"action":"stop","id":136472585830526}
+0000000000859 @nix {"action":"start","fields":[],"id":136472585830527,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/me/meson/007-freebsd-pkgconfig-path.patch'","type":0}
+0000000000859 @nix {"action":"stop","id":136472585830527}
+0000000000859 @nix {"action":"start","fields":[],"id":136472585830528,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/me/meson/setup-hook.sh'","type":0}
+0000000000859 @nix {"action":"stop","id":136472585830528}
+0000000000863 @nix {"action":"start","fields":[],"id":136472585830529,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/ni/ninja/0001-spawn-sh-instead-of-bin-sh.patch'","type":0}
+0000000000863 @nix {"action":"stop","id":136472585830529}
+0000000000863 @nix {"action":"start","fields":[],"id":136472585830530,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/ni/ninja/setup-hook.sh'","type":0}
+0000000000863 @nix {"action":"stop","id":136472585830530}
+0000000000866 @nix {"action":"start","fields":[],"id":136472585830531,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/os-specific/darwin/xcode-project-check-hook/setup-hook.sh'","type":0}
+0000000000866 @nix {"action":"stop","id":136472585830531}
+0000000000866 @nix {"action":"start","fields":[],"id":136472585830532,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/os-specific/darwin/apple-source-releases/libiconv/patches/0001-Support-static-module-loading.patch'","type":0}
+0000000000866 @nix {"action":"stop","id":136472585830532}
+0000000000867 @nix {"action":"start","fields":[],"id":136472585830533,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/os-specific/darwin/apple-source-releases/libiconv/patches/0002-Fix-ISO-2022-out-of-bounds-write-with-encoded-charac.patch'","type":0}
+0000000000867 @nix {"action":"stop","id":136472585830533}
+0000000000867 @nix {"action":"start","fields":[],"id":136472585830534,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/os-specific/darwin/apple-source-releases/libiconv/nixpkgs_test.c'","type":0}
+0000000000867 @nix {"action":"stop","id":136472585830534}
+0000000000867 @nix {"action":"start","fields":[],"id":136472585830535,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/os-specific/darwin/apple-source-releases/libiconv/meson.build.in'","type":0}
+0000000000867 @nix {"action":"stop","id":136472585830535}
+0000000000867 @nix {"action":"start","fields":[],"id":136472585830536,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/os-specific/darwin/apple-source-releases/libiconv/meson.options'","type":0}
+0000000000867 @nix {"action":"stop","id":136472585830536}
+0000000000871 @nix {"action":"start","fields":[],"id":136472585830537,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/os-specific/darwin/apple-source-releases/libresolv/meson.build.in'","type":0}
+0000000000871 @nix {"action":"stop","id":136472585830537}
+0000000000874 @nix {"action":"start","fields":[],"id":136472585830538,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/jq/jq/musl.patch'","type":0}
+0000000000874 @nix {"action":"stop","id":136472585830538}
+0000000000881 @nix {"action":"start","fields":[],"id":136472585830539,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/build-support/setup-hooks/find-xml-catalogs.sh'","type":0}
+0000000000881 @nix {"action":"stop","id":136472585830539}
+0000000000884 @nix {"action":"start","fields":[],"id":136472585830540,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/cm/cmake/setup-hook.sh'","type":0}
+0000000000884 @nix {"action":"stop","id":136472585830540}
+0000000000884 @nix {"action":"start","fields":[],"id":136472585830541,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/cm/cmake/check-pc-files-hook.sh'","type":0}
+0000000000885 @nix {"action":"stop","id":136472585830541}
+0000000000885 @nix {"action":"start","fields":[],"id":136472585830542,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/cm/cmake/nixpkgs-cmake-prefix-path.patch'","type":0}
+0000000000885 @nix {"action":"stop","id":136472585830542}
+0000000000885 @nix {"action":"start","fields":[],"id":136472585830543,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/cm/cmake/add-nixpkgs-libc-paths.patch'","type":0}
+0000000000885 @nix {"action":"stop","id":136472585830543}
+0000000000886 @nix {"action":"start","fields":[],"id":136472585830544,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/os-specific/darwin/DarwinTools/sw_vers-CFPriv.patch'","type":0}
+0000000000886 @nix {"action":"stop","id":136472585830544}
+0000000000890 @nix {"action":"start","fields":[],"id":136472585830545,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/un/unifdef/unifdef-fix-build-with-gcc15.patch'","type":0}
+0000000000891 @nix {"action":"stop","id":136472585830545}
+0000000000892 @nix {"action":"start","fields":[],"id":136472585830546,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/os-specific/darwin/apple-source-releases/AvailabilityVersions/patches/0001-Support-setting-an-upper-bound-on-versions.patch'","type":0}
+0000000000892 @nix {"action":"stop","id":136472585830546}
+0000000000899 @nix {"action":"start","fields":[],"id":136472585830547,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/ap/apple-sdk/setup-hooks/add-private-frameworks.sh'","type":0}
+0000000000899 @nix {"action":"stop","id":136472585830547}
+0000000000901 @nix {"action":"start","fields":[],"id":136472585830548,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/os-specific/darwin/apple-source-releases/copyfile/meson.build.in'","type":0}
+0000000000901 @nix {"action":"stop","id":136472585830548}
+0000000000902 @nix {"action":"start","fields":[],"id":136472585830549,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/os-specific/darwin/apple-source-releases/libutil/meson.build.in'","type":0}
+0000000000902 @nix {"action":"stop","id":136472585830549}
+0000000000906 @nix {"action":"start","fields":[],"id":136472585830550,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/os-specific/darwin/apple-source-releases/system_cmds/patches/conditionalize-security-transition-shims.patch'","type":0}
+0000000000906 @nix {"action":"stop","id":136472585830550}
+0000000000906 @nix {"action":"start","fields":[],"id":136472585830551,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/os-specific/darwin/apple-source-releases/system_cmds/meson.build.in'","type":0}
+0000000000906 @nix {"action":"stop","id":136472585830551}
+0000000000908 @nix {"action":"start","fields":[],"id":136472585830552,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/cm/cmake/darwin-binary-paths.patch'","type":0}
+0000000000908 @nix {"action":"stop","id":136472585830552}
+0000000000924 @nix {"action":"start","fields":[],"id":136472585830553,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/perl-modules/generic/builder.sh'","type":0}
+0000000000924 @nix {"action":"stop","id":136472585830553}
+0000000000928 @nix {"action":"start","fields":[],"id":136472585830554,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/os-specific/darwin/apple-source-releases/adv_cmds/meson.build.in'","type":0}
+0000000000929 @nix {"action":"stop","id":136472585830554}
+0000000000931 @nix {"action":"start","fields":[],"id":136472585830555,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/cm/cmake/darwin-bsd-binary-paths.patch'","type":0}
+0000000000931 @nix {"action":"stop","id":136472585830555}
+0000000000932 @nix {"action":"start","fields":[],"id":136472585830556,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/cm/cmake/remove-impure-search-paths.patch'","type":0}
+0000000000932 @nix {"action":"stop","id":136472585830556}
+0000000000934 @nix {"action":"start","fields":[],"id":136472585830557,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/xc/xcbuild/patches/includes.patch'","type":0}
+0000000000934 @nix {"action":"stop","id":136472585830557}
+0000000000934 @nix {"action":"start","fields":[],"id":136472585830558,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/xc/xcbuild/patches/Use-system-toolchain-for-usr-bin.patch'","type":0}
+0000000000935 @nix {"action":"stop","id":136472585830558}
+0000000000935 @nix {"action":"start","fields":[],"id":136472585830559,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/xc/xcbuild/patches/Suppress-unknown-key-warnings.patch'","type":0}
+0000000000935 @nix {"action":"stop","id":136472585830559}
+0000000000935 @nix {"action":"start","fields":[],"id":136472585830560,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/xc/xcbuild/patches/fix-interactive-apps.patch'","type":0}
+0000000000935 @nix {"action":"stop","id":136472585830560}
+0000000000935 @nix {"action":"start","fields":[],"id":136472585830561,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/xc/xcbuild/patches/fix-no-home-directory-crash.patch'","type":0}
+0000000000935 @nix {"action":"stop","id":136472585830561}
+0000000000941 @nix {"action":"start","fields":[],"id":136472585830562,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/os-specific/darwin/apple-source-releases/libsbuf/patches/0001-darwin-compatibility.patch'","type":0}
+0000000000941 @nix {"action":"stop","id":136472585830562}
+0000000000941 @nix {"action":"start","fields":[],"id":136472585830563,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/os-specific/darwin/apple-source-releases/libsbuf/meson.build.in'","type":0}
+0000000000942 @nix {"action":"stop","id":136472585830563}
+0000000000946 @nix {"action":"start","fields":[],"id":136472585830564,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/xa/xar/patches/0001-Update-tests-for-Python-3-and-Nix-sandbox.patch'","type":0}
+0000000000946 @nix {"action":"stop","id":136472585830564}
+0000000000946 @nix {"action":"start","fields":[],"id":136472585830565,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/xa/xar/patches/0002-Update-for-modern-liblzma5-versions.patch'","type":0}
+0000000000946 @nix {"action":"stop","id":136472585830565}
+0000000000946 @nix {"action":"start","fields":[],"id":136472585830566,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/xa/xar/patches/0003-Fix-undefined-EXT2_ECOMPR_FL-for-e2fsprogs.patch'","type":0}
+0000000000946 @nix {"action":"stop","id":136472585830566}
+0000000000947 @nix {"action":"start","fields":[],"id":136472585830567,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/xa/xar/patches/0004-Fix-compatibility-with-openssl-1.0.patch'","type":0}
+0000000000947 @nix {"action":"stop","id":136472585830567}
+0000000000947 @nix {"action":"start","fields":[],"id":136472585830568,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/xa/xar/patches/0005-Fix-configure.ac-for-Linux-headers.patch'","type":0}
+0000000000947 @nix {"action":"stop","id":136472585830568}
+0000000000947 @nix {"action":"start","fields":[],"id":136472585830569,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/xa/xar/patches/0006-Fix-more-non-Darwin-stuff.patch'","type":0}
+0000000000947 @nix {"action":"stop","id":136472585830569}
+0000000000947 @nix {"action":"start","fields":[],"id":136472585830570,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/xa/xar/patches/0007-replace-initialized-constant-with-define-statement.patch'","type":0}
+0000000000947 @nix {"action":"stop","id":136472585830570}
+0000000000948 @nix {"action":"start","fields":[],"id":136472585830571,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/xa/xar/patches/0008-Fix-configure.ac-not-finding-AR-with-target-prefix.patch'","type":0}
+0000000000948 @nix {"action":"stop","id":136472585830571}
+0000000000948 @nix {"action":"start","fields":[],"id":136472585830572,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/xa/xar/patches/0009-Add-useless-descriptions-to-AC_DEFINE.patch'","type":0}
+0000000000948 @nix {"action":"stop","id":136472585830572}
+0000000000948 @nix {"action":"start","fields":[],"id":136472585830573,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/xa/xar/patches/0010-Update-configure.ac-for-openssl-libxml2-liblzma-and-.patch'","type":0}
+0000000000948 @nix {"action":"stop","id":136472585830573}
+0000000000948 @nix {"action":"start","fields":[],"id":136472585830574,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/xa/xar/patches/0011-Fix-missing-includes-and-silence-string-format-warni.patch'","type":0}
+0000000000948 @nix {"action":"stop","id":136472585830574}
+0000000000948 @nix {"action":"start","fields":[],"id":136472585830575,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/xa/xar/patches/0012-Fix-char-signedness-for-ARM-and-PowerPC.patch'","type":0}
+0000000000948 @nix {"action":"stop","id":136472585830575}
+0000000000948 @nix {"action":"start","fields":[],"id":136472585830576,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/xa/xar/patches/0013-Enable-extended-attributes-for-btrfs.patch'","type":0}
+0000000000948 @nix {"action":"stop","id":136472585830576}
+0000000000948 @nix {"action":"start","fields":[],"id":136472585830577,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/xa/xar/patches/0014-Fix-segfault-when-copying-xattr-buffers.patch'","type":0}
+0000000000948 @nix {"action":"stop","id":136472585830577}
+0000000000948 @nix {"action":"start","fields":[],"id":136472585830578,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/xa/xar/patches/0015-Fix-segfault-in-xar_attrcopy_from_heap.patch'","type":0}
+0000000000949 @nix {"action":"stop","id":136472585830578}
+0000000000949 @nix {"action":"start","fields":[],"id":136472585830579,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/xa/xar/patches/0016-Do-not-set-property-for-empty-ACL.patch'","type":0}
+0000000000949 @nix {"action":"stop","id":136472585830579}
+0000000000949 @nix {"action":"start","fields":[],"id":136472585830580,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/xa/xar/patches/0017-Fix-time-format-for-musl.patch'","type":0}
+0000000000949 @nix {"action":"stop","id":136472585830580}
+0000000000949 @nix {"action":"start","fields":[],"id":136472585830581,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/xa/xar/patches/0018-Replace-memcpy-with-memmove-for-musl.patch'","type":0}
+0000000000949 @nix {"action":"stop","id":136472585830581}
+0000000000949 @nix {"action":"start","fields":[],"id":136472585830582,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/xa/xar/patches/0019-Prefer-OpenSSL-over-CommonCrypto-if-available.patch'","type":0}
+0000000000949 @nix {"action":"stop","id":136472585830582}
+0000000000950 @nix {"action":"start","fields":[],"id":136472585830583,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/pb/pbzx/stdin.patch'","type":0}
+0000000000950 @nix {"action":"stop","id":136472585830583}
+0000000000953 @nix {"action":"start","fields":[],"id":136472585830584,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/ex/expand-response-params/expand-response-params.c'","type":0}
+0000000000953 @nix {"action":"stop","id":136472585830584}
+0000000000954 @nix {"action":"start","fields":[],"id":136472585830585,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/tools/text/gnugrep/gnulib-float-h-tests-port-to-C23-PowerPC-GCC.patch'","type":0}
+0000000000954 @nix {"action":"stop","id":136472585830585}
+0000000000959 @nix {"action":"start","fields":[],"id":136472585830586,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/lz/lzip/lzip-setup-hook.sh'","type":0}
+0000000000959 @nix {"action":"stop","id":136472585830586}
+0000000000962 @nix {"action":"start","fields":[],"id":136472585830587,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/bm/bmake/002-dont-test-while-installing.diff'","type":0}
+0000000000962 @nix {"action":"stop","id":136472585830587}
+0000000000962 @nix {"action":"start","fields":[],"id":136472585830588,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/bm/bmake/003-fix-unexport-env-test.diff'","type":0}
+0000000000962 @nix {"action":"stop","id":136472585830588}
+0000000000962 @nix {"action":"start","fields":[],"id":136472585830589,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/bm/bmake/004-unconditional-ksh-test.diff'","type":0}
+0000000000962 @nix {"action":"stop","id":136472585830589}
+0000000000962 @nix {"action":"start","fields":[],"id":136472585830590,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/bm/bmake/setup-hook.sh'","type":0}
+0000000000963 @nix {"action":"stop","id":136472585830590}
+0000000000989 @nix {"action":"start","fields":[],"id":136472585830591,"level":5,"parent":0,"text":"copying '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/compilers/llvm/21/llvm/gnu-install-dirs.patch' to the store","type":0}
+0000000000990 @nix {"action":"stop","id":136472585830591}
+0000000000990 @nix {"action":"start","fields":[],"id":136472585830592,"level":5,"parent":0,"text":"copying '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/compilers/llvm/18/llvm/llvm-lit-cfg-add-libs-to-dylib-path.patch' to the store","type":0}
+0000000000991 @nix {"action":"stop","id":136472585830592}
+0000000000991 @nix {"action":"start","fields":[],"id":136472585830593,"level":5,"parent":0,"text":"copying '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/compilers/llvm/18/llvm/lit-shell-script-runner-set-dyld-library-path.patch' to the store","type":0}
+0000000000991 @nix {"action":"stop","id":136472585830593}
+0000000000991 @nix {"action":"start","fields":[],"id":136472585830594,"level":5,"parent":0,"text":"copying '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/compilers/llvm/20/llvm/gnu-install-dirs-polly.patch' to the store","type":0}
+0000000000993 @nix {"action":"stop","id":136472585830594}
+0000000000993 @nix {"action":"start","fields":[],"id":136472585830595,"level":5,"parent":0,"text":"copying '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/compilers/llvm/18/llvm/polly-lit-cfg-add-libs-to-dylib-path.patch' to the store","type":0}
+0000000000995 @nix {"action":"stop","id":136472585830595}
+0000000000995 @nix {"action":"start","fields":[],"id":136472585830596,"level":5,"parent":0,"text":"copying '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/compilers/llvm/19/clang/gnu-install-dirs.patch' to the store","type":0}
+0000000000995 @nix {"action":"stop","id":136472585830596}
+0000000001001 @nix {"action":"start","fields":[],"id":136472585830597,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/ld/ld64/patches/0001-Always-use-write-instead-of-mmap.patch'","type":0}
+0000000001001 @nix {"action":"stop","id":136472585830597}
+0000000001002 @nix {"action":"start","fields":[],"id":136472585830598,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/ld/ld64/patches/0002-Add-compile_stubs.h-using-Clang-s-embed-extension-fo.patch'","type":0}
+0000000001002 @nix {"action":"stop","id":136472585830598}
+0000000001002 @nix {"action":"start","fields":[],"id":136472585830599,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/ld/ld64/patches/0003-Inline-missing-definitions-instead-of-using-private-.patch'","type":0}
+0000000001002 @nix {"action":"stop","id":136472585830599}
+0000000001002 @nix {"action":"start","fields":[],"id":136472585830600,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/ld/ld64/patches/0004-Removed-unused-Blob-clone-method.patch'","type":0}
+0000000001002 @nix {"action":"stop","id":136472585830600}
+0000000001002 @nix {"action":"start","fields":[],"id":136472585830601,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/ld/ld64/patches/0005-Use-std-atomics-and-std-mutex-for-portability.patch'","type":0}
+0000000001002 @nix {"action":"stop","id":136472585830601}
+0000000001002 @nix {"action":"start","fields":[],"id":136472585830602,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/ld/ld64/patches/0006-Add-Meson-build-system.patch'","type":0}
+0000000001003 @nix {"action":"stop","id":136472585830602}
+0000000001003 @nix {"action":"start","fields":[],"id":136472585830603,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/ld/ld64/patches/0007-Add-CrashReporterClient-header.patch'","type":0}
+0000000001003 @nix {"action":"stop","id":136472585830603}
+0000000001003 @nix {"action":"start","fields":[],"id":136472585830604,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/ld/ld64/patches/0008-Provide-mach-compatibility-headers-based-on-LLVM-s-h.patch'","type":0}
+0000000001003 @nix {"action":"stop","id":136472585830604}
+0000000001003 @nix {"action":"start","fields":[],"id":136472585830605,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/ld/ld64/patches/0009-Support-LTO-in-nixpkgs.patch'","type":0}
+0000000001003 @nix {"action":"stop","id":136472585830605}
+0000000001003 @nix {"action":"start","fields":[],"id":136472585830606,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/ld/ld64/patches/0010-Add-vendored-libtapi-to-the-ld64-build.patch'","type":0}
+0000000001003 @nix {"action":"stop","id":136472585830606}
+0000000001003 @nix {"action":"start","fields":[],"id":136472585830607,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/ld/ld64/patches/0011-Modify-vendored-libtapi-to-build-with-upstream-LLVM.patch'","type":0}
+0000000001004 @nix {"action":"stop","id":136472585830607}
+0000000001004 @nix {"action":"start","fields":[],"id":136472585830608,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/ld/ld64/patches/0012-Move-libcodedirectory-to-its-own-subproject.patch'","type":0}
+0000000001004 @nix {"action":"stop","id":136472585830608}
+0000000001004 @nix {"action":"start","fields":[],"id":136472585830609,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/ld/ld64/patches/0013-Set-the-version-string-in-the-build.patch'","type":0}
+0000000001004 @nix {"action":"stop","id":136472585830609}
+0000000001004 @nix {"action":"start","fields":[],"id":136472585830610,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/ld/ld64/patches/0014-Replace-corecrypto-and-CommonCrypto-with-OpenSSL.patch'","type":0}
+0000000001004 @nix {"action":"stop","id":136472585830610}
+0000000001004 @nix {"action":"start","fields":[],"id":136472585830611,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/ld/ld64/patches/0015-Add-libcd_is_blob_a_linker_signature-implementation.patch'","type":0}
+0000000001004 @nix {"action":"stop","id":136472585830611}
+0000000001004 @nix {"action":"start","fields":[],"id":136472585830612,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/ld/ld64/patches/0016-Add-dyldinfo-to-the-ld64-build.patch'","type":0}
+0000000001004 @nix {"action":"stop","id":136472585830612}
+0000000001004 @nix {"action":"start","fields":[],"id":136472585830613,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/ld/ld64/patches/0017-Fix-dyldinfo-build.patch'","type":0}
+0000000001005 @nix {"action":"stop","id":136472585830613}
+0000000001005 @nix {"action":"start","fields":[],"id":136472585830614,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/ld/ld64/patches/0018-Use-STL-containers-instead-of-LLVM-containers.patch'","type":0}
+0000000001005 @nix {"action":"stop","id":136472585830614}
+0000000001010 @nix {"action":"start","fields":[],"id":136472585830615,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/cc/cctools/0001-Fix-build-issues-with-misc-redo_prebinding.c.patch'","type":0}
+0000000001011 @nix {"action":"stop","id":136472585830615}
+0000000001011 @nix {"action":"start","fields":[],"id":136472585830616,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/cc/cctools/0002-Rely-on-libcd_is_blob_a_linker_signature.patch'","type":0}
+0000000001011 @nix {"action":"stop","id":136472585830616}
+0000000001011 @nix {"action":"start","fields":[],"id":136472585830617,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/cc/cctools/0004-Use-nixpkgs-clang-with-the-assembler-driver.patch'","type":0}
+0000000001011 @nix {"action":"stop","id":136472585830617}
+0000000001011 @nix {"action":"start","fields":[],"id":136472585830618,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/cc/cctools/0005-Find-ld64-in-the-store.patch'","type":0}
+0000000001011 @nix {"action":"stop","id":136472585830618}
+0000000001011 @nix {"action":"start","fields":[],"id":136472585830619,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/cc/cctools/0006-Support-target-prefixes-in-ranlib-detection.patch'","type":0}
+0000000001011 @nix {"action":"stop","id":136472585830619}
+0000000001012 @nix {"action":"start","fields":[],"id":136472585830620,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/cc/cctools/meson.build'","type":0}
+0000000001012 @nix {"action":"stop","id":136472585830620}
+0000000001012 @nix {"action":"start","fields":[],"id":136472585830621,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/cc/cctools/meson.options'","type":0}
+0000000001012 @nix {"action":"stop","id":136472585830621}
+0000000001012 @nix {"action":"start","fields":[],"id":136472585830622,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/build-support/setup-hooks/fix-darwin-dylib-names.sh'","type":0}
+0000000001012 @nix {"action":"stop","id":136472585830622}
+0000000001013 @nix {"action":"start","fields":[],"id":136472585830623,"level":5,"parent":0,"text":"copying '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/compilers/llvm/18/clang/purity.patch' to the store","type":0}
+0000000001013 @nix {"action":"stop","id":136472585830623}
+0000000001013 @nix {"action":"start","fields":[],"id":136472585830624,"level":5,"parent":0,"text":"copying '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/compilers/llvm/19/clang/gnu-install-dirs.patch' to the store","type":0}
+0000000001014 @nix {"action":"stop","id":136472585830624}
+0000000001014 @nix {"action":"start","fields":[],"id":136472585830625,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/compilers/llvm/common/clang/clang-at-least-16-LLVMgold-path.patch'","type":0}
+0000000001014 @nix {"action":"stop","id":136472585830625}
+0000000001024 @nix {"action":"start","fields":[],"id":136472585830626,"level":5,"parent":0,"text":"copying '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/compilers/llvm/18/compiler-rt/X86-support-extension.patch' to the store","type":0}
+0000000001026 @nix {"action":"stop","id":136472585830626}
+0000000001026 @nix {"action":"start","fields":[],"id":136472585830627,"level":5,"parent":0,"text":"copying '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/compilers/llvm/18/compiler-rt/normalize-var.patch' to the store","type":0}
+0000000001026 @nix {"action":"stop","id":136472585830627}
+0000000001026 @nix {"action":"start","fields":[],"id":136472585830628,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/compilers/llvm/common/compiler-rt/armv6-no-ldrexd-strexd.patch'","type":0}
+0000000001027 @nix {"action":"stop","id":136472585830628}
+0000000001027 @nix {"action":"start","fields":[],"id":136472585830629,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/compilers/llvm/common/compiler-rt/darwin-plistbuddy-workaround.patch'","type":0}
+0000000001027 @nix {"action":"stop","id":136472585830629}
+0000000001027 @nix {"action":"start","fields":[],"id":136472585830630,"level":5,"parent":0,"text":"copying '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/compilers/llvm/19/compiler-rt/armv6-scudo-libatomic.patch' to the store","type":0}
+0000000001028 @nix {"action":"stop","id":136472585830630}
+0000000001031 @nix {"action":"start","fields":[],"id":136472585830631,"level":5,"parent":0,"text":"copying '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/compilers/llvm/18/compiler-rt/X86-support-extension.patch' to the store","type":0}
+0000000001031 @nix {"action":"stop","id":136472585830631}
+0000000001031 @nix {"action":"start","fields":[],"id":136472585830632,"level":5,"parent":0,"text":"copying '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/compilers/llvm/18/compiler-rt/normalize-var.patch' to the store","type":0}
+0000000001031 @nix {"action":"stop","id":136472585830632}
+0000000001031 @nix {"action":"start","fields":[],"id":136472585830633,"level":5,"parent":0,"text":"copying '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/compilers/llvm/19/compiler-rt/armv6-scudo-libatomic.patch' to the store","type":0}
+0000000001032 @nix {"action":"stop","id":136472585830633}
+0000000001098 @nix {"action":"start","fields":[],"id":136472585830634,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/applications/editors/emacs/build-support/wrapper.sh'","type":0}
+0000000001099 @nix {"action":"stop","id":136472585830634}
+0000000001152 @nix {"action":"start","fields":[],"id":136472585830635,"level":5,"parent":0,"text":"copying '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/compilers/llvm/21/llvm/gnu-install-dirs.patch' to the store","type":0}
+0000000001152 @nix {"action":"stop","id":136472585830635}
+0000000001152 @nix {"action":"start","fields":[],"id":136472585830636,"level":5,"parent":0,"text":"copying '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/compilers/llvm/18/llvm/llvm-lit-cfg-add-libs-to-dylib-path.patch' to the store","type":0}
+0000000001152 @nix {"action":"stop","id":136472585830636}
+0000000001153 @nix {"action":"start","fields":[],"id":136472585830637,"level":5,"parent":0,"text":"copying '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/compilers/llvm/18/llvm/lit-shell-script-runner-set-dyld-library-path.patch' to the store","type":0}
+0000000001153 @nix {"action":"stop","id":136472585830637}
+0000000001153 @nix {"action":"start","fields":[],"id":136472585830638,"level":5,"parent":0,"text":"copying '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/compilers/llvm/20/llvm/gnu-install-dirs-polly.patch' to the store","type":0}
+0000000001153 @nix {"action":"stop","id":136472585830638}
+0000000001153 @nix {"action":"start","fields":[],"id":136472585830639,"level":5,"parent":0,"text":"copying '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/compilers/llvm/18/llvm/polly-lit-cfg-add-libs-to-dylib-path.patch' to the store","type":0}
+0000000001154 @nix {"action":"stop","id":136472585830639}
+0000000001154 @nix {"action":"start","fields":[],"id":136472585830640,"level":5,"parent":0,"text":"copying '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/compilers/llvm/19/clang/gnu-install-dirs.patch' to the store","type":0}
+0000000001154 @nix {"action":"stop","id":136472585830640}
+0000000001156 @nix {"action":"start","fields":[],"id":136472585830641,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/build-support/buildenv/builder.pl'","type":0}
+0000000001156 @nix {"action":"stop","id":136472585830641}
+0000000001170 @nix {"action":"start","fields":[],"id":136472585830642,"level":5,"parent":0,"text":"copying '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/compilers/llvm/21/llvm/gnu-install-dirs.patch' to the store","type":0}
+0000000001171 @nix {"action":"stop","id":136472585830642}
+0000000001171 @nix {"action":"start","fields":[],"id":136472585830643,"level":5,"parent":0,"text":"copying '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/compilers/llvm/18/llvm/llvm-lit-cfg-add-libs-to-dylib-path.patch' to the store","type":0}
+0000000001171 @nix {"action":"stop","id":136472585830643}
+0000000001171 @nix {"action":"start","fields":[],"id":136472585830644,"level":5,"parent":0,"text":"copying '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/compilers/llvm/18/llvm/lit-shell-script-runner-set-dyld-library-path.patch' to the store","type":0}
+0000000001172 @nix {"action":"stop","id":136472585830644}
+0000000001172 @nix {"action":"start","fields":[],"id":136472585830645,"level":5,"parent":0,"text":"copying '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/compilers/llvm/20/llvm/gnu-install-dirs-polly.patch' to the store","type":0}
+0000000001172 @nix {"action":"stop","id":136472585830645}
+0000000001172 @nix {"action":"start","fields":[],"id":136472585830646,"level":5,"parent":0,"text":"copying '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/compilers/llvm/18/llvm/polly-lit-cfg-add-libs-to-dylib-path.patch' to the store","type":0}
+0000000001173 @nix {"action":"stop","id":136472585830646}
+0000000001187 @nix {"action":"start","fields":[],"id":136472585830647,"level":5,"parent":0,"text":"copying '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/compilers/llvm/18/clang/purity.patch' to the store","type":0}
+0000000001188 @nix {"action":"stop","id":136472585830647}
+0000000001188 @nix {"action":"start","fields":[],"id":136472585830648,"level":5,"parent":0,"text":"copying '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/compilers/llvm/19/clang/gnu-install-dirs.patch' to the store","type":0}
+0000000001188 @nix {"action":"stop","id":136472585830648}
+0000000001208 @nix {"action":"start","fields":[],"id":136472585830649,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/tools/text/diffutils/gnulib-float-h-tests-port-to-C23-PowerPC-GCC.patch'","type":0}
+0000000001209 @nix {"action":"stop","id":136472585830649}
+0000000001209 @nix {"action":"start","fields":[],"id":136472585830650,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/tools/text/diffutils/musl-llvm.patch'","type":0}
+0000000001209 @nix {"action":"stop","id":136472585830650}
+0000000001225 @nix {"action":"start","fields":[],"id":136472585830651,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/pk/pkg-config-unwrapped/gcc-15.patch'","type":0}
+0000000001226 @nix {"action":"stop","id":136472585830651}
+0000000001226 @nix {"action":"start","fields":[],"id":136472585830652,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/pk/pkg-config-unwrapped/requires-private.patch'","type":0}
+0000000001226 @nix {"action":"stop","id":136472585830652}
+0000000001227 @nix {"action":"start","fields":[],"id":136472585830653,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/tools/build-managers/gnumake/patches/0001-No-impure-bin-sh.patch'","type":0}
+0000000001228 @nix {"action":"stop","id":136472585830653}
+0000000001228 @nix {"action":"start","fields":[],"id":136472585830654,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/tools/build-managers/gnumake/patches/0002-Remove-impure-dirs.patch'","type":0}
+0000000001228 @nix {"action":"stop","id":136472585830654}
+0000000001228 @nix {"action":"start","fields":[],"id":136472585830655,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/tools/build-managers/gnumake/patches/0003-Do-not-search-for-a-C-compiler-and-set-MAKE_CXX.patch'","type":0}
+0000000001228 @nix {"action":"stop","id":136472585830655}
+0000000001230 @nix {"action":"start","fields":[],"id":136472585830656,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/tools/archivers/gnutar/link-libiconv.patch'","type":0}
+0000000001230 @nix {"action":"stop","id":136472585830656}
+0000000001237 @nix {"action":"start","fields":[],"id":136472585830657,"level":5,"parent":0,"text":"copying '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/compilers/llvm/18/lld/gnu-install-dirs.patch' to the store","type":0}
+0000000001238 @nix {"action":"stop","id":136472585830657}
+0000000001255 @nix {"action":"start","fields":[],"id":136472585830658,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/cu/curlMinimal/fix-h2-paused-transfers.patch'","type":0}
+0000000001255 @nix {"action":"stop","id":136472585830658}
+0000000001267 @nix {"action":"start","fields":[],"id":136472585830659,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/compilers/gcc/patches/gcc-12-no-sys-dirs.patch'","type":0}
+0000000001267 @nix {"action":"stop","id":136472585830659}
+0000000001267 @nix {"action":"start","fields":[],"id":136472585830660,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/compilers/gcc/patches/13/no-sys-dirs-riscv.patch'","type":0}
+0000000001267 @nix {"action":"stop","id":136472585830660}
+0000000001267 @nix {"action":"start","fields":[],"id":136472585830661,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/compilers/gcc/patches/13/mangle-NIX_STORE-in-__FILE__.patch'","type":0}
+0000000001267 @nix {"action":"stop","id":136472585830661}
+0000000001267 @nix {"action":"start","fields":[],"id":136472585830662,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/compilers/gcc/patches/ppc-musl.patch'","type":0}
+0000000001268 @nix {"action":"stop","id":136472585830662}
+0000000001269 @nix {"action":"start","fields":[],"id":136472585830663,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/tools/text/patchutils/drop-comments.patch'","type":0}
+0000000001269 @nix {"action":"stop","id":136472585830663}
+0000000001275 @nix {"action":"start","fields":[],"id":136472585830664,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/applications/editors/emacs/build-support/mk-wrapper-subdirs.el'","type":0}
+0000000001275 @nix {"action":"stop","id":136472585830664}
+0000000001302 @nix {"action":"start","fields":[],"id":136472585830665,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/dn/dns-root-data/root.key'","type":0}
+0000000001302 @nix {"action":"stop","id":136472585830665}
+0000000001303 @nix {"action":"start","fields":[],"id":136472585830666,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/dn/dns-root-data/root.ds'","type":0}
+0000000001303 @nix {"action":"stop","id":136472585830666}
+0000000001390 @nix {"action":"start","fields":[],"id":136472585830667,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/python-modules/setuptools-scm/setup-hook.sh'","type":0}
+0000000001390 @nix {"action":"stop","id":136472585830667}
+0000000001394 @nix {"action":"start","fields":[],"id":136472585830668,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/interpreters/python/hooks/unittest-check-hook.sh'","type":0}
+0000000001394 @nix {"action":"stop","id":136472585830668}
+0000000001399 @nix {"action":"start","fields":[],"id":136472585830669,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/python-modules/iniconfig/version.patch'","type":0}
+0000000001400 @nix {"action":"stop","id":136472585830669}
+0000000001404 @nix {"action":"start","fields":[],"id":136472585830670,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/interpreters/python/hooks/pytest-check-hook.sh'","type":0}
+0000000001405 @nix {"action":"stop","id":136472585830670}
+0000000001409 @nix {"action":"start","fields":[],"id":136472585830671,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/data/sgml+xml/stylesheets/xslt/docbook-xsl/catalog-legacy-uris.patch'","type":0}
+0000000001409 @nix {"action":"stop","id":136472585830671}
+0000000001414 @nix {"action":"start","fields":[],"id":136472585830672,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/li/libxslt/77-Use-a-dedicated-node-type-to-maintain-the-list-of-cached-rv-ts.patch'","type":0}
+0000000001414 @nix {"action":"stop","id":136472585830672}
+0000000001420 @nix {"action":"start","fields":[],"id":136472585830673,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/build-support/fetchgit/builder.sh'","type":0}
+0000000001420 @nix {"action":"stop","id":136472585830673}
+0000000001420 @nix {"action":"start","fields":[],"id":136472585830674,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/build-support/fetchgit/nix-prefetch-git'","type":0}
+0000000001420 @nix {"action":"stop","id":136472585830674}
+0000000001425 @nix {"action":"start","fields":[],"id":136472585830675,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/li/libedit/01-cygwin.patch'","type":0}
+0000000001426 @nix {"action":"stop","id":136472585830675}
+0000000001432 @nix {"action":"start","fields":[],"id":136472585830676,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/os-specific/darwin/apple-source-releases/bootstrap_cmds/patches/0001-Specify-MIGCC-for-use-with-substitute.patch'","type":0}
+0000000001432 @nix {"action":"stop","id":136472585830676}
+0000000001433 @nix {"action":"start","fields":[],"id":136472585830677,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/os-specific/darwin/apple-source-releases/bootstrap_cmds/patches/0002-Always-remove-working-directory.patch'","type":0}
+0000000001433 @nix {"action":"stop","id":136472585830677}
+0000000001433 @nix {"action":"start","fields":[],"id":136472585830678,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/os-specific/darwin/apple-source-releases/bootstrap_cmds/meson.build.in'","type":0}
+0000000001433 @nix {"action":"stop","id":136472585830678}
+0000000001450 @nix {"action":"start","fields":[],"id":136472585830679,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/tools/compression/zstd/playtests-darwin.patch'","type":0}
+0000000001450 @nix {"action":"stop","id":136472585830679}
+0000000001454 @nix {"action":"start","fields":[],"id":136472585830680,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/rh/rhash/dont-fail-ln.patch'","type":0}
+0000000001454 @nix {"action":"stop","id":136472585830680}
+0000000001454 @nix {"action":"start","fields":[],"id":136472585830681,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/rh/rhash/do-link-so.patch'","type":0}
+0000000001455 @nix {"action":"stop","id":136472585830681}
+0000000001462 @nix {"action":"start","fields":[],"id":136472585830682,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/python-modules/cython/setup-hook.sh'","type":0}
+0000000001462 @nix {"action":"stop","id":136472585830682}
+0000000001464 @nix {"action":"start","fields":[],"id":136472585830683,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/gt/gtk-doc/respect-xml-catalog-files-var.patch'","type":0}
+0000000001464 @nix {"action":"stop","id":136472585830683}
+0000000001469 @nix {"action":"start","fields":[],"id":136472585830684,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/gt/gtest/fix-cmake-config-includedir.patch'","type":0}
+0000000001469 @nix {"action":"stop","id":136472585830684}
+0000000001474 @nix {"action":"start","fields":[],"id":136472585830685,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/de/deterministic-uname/deterministic-uname.sh'","type":0}
+0000000001474 @nix {"action":"stop","id":136472585830685}
+0000000001474 @nix {"action":"start","fields":[],"id":136472585830686,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/applications/version-management/git/docbook2texi.patch'","type":0}
+0000000001474 @nix {"action":"stop","id":136472585830686}
+0000000001474 @nix {"action":"start","fields":[],"id":136472585830687,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/applications/version-management/git/git-sh-i18n.patch'","type":0}
+0000000001475 @nix {"action":"stop","id":136472585830687}
+0000000001475 @nix {"action":"start","fields":[],"id":136472585830688,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/applications/version-management/git/git-send-email-honor-PATH.patch'","type":0}
+0000000001475 @nix {"action":"stop","id":136472585830688}
+0000000001479 @nix {"action":"start","fields":[],"id":136472585830689,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/ca/cacert/setup-hook.sh'","type":0}
+0000000001479 @nix {"action":"stop","id":136472585830689}
+0000000001481 @nix {"action":"start","fields":[],"id":136472585830690,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/libraries/gnutls/nix-ssl-cert-file.patch'","type":0}
+0000000001481 @nix {"action":"stop","id":136472585830690}
+0000000001481 @nix {"action":"start","fields":[],"id":136472585830691,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/libraries/gnutls/dummy.crt'","type":0}
+0000000001482 @nix {"action":"stop","id":136472585830691}
+0000000001489 @nix {"action":"start","fields":[],"id":136472585830692,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/gl/glib/setup-hook.sh'","type":0}
+0000000001489 @nix {"action":"stop","id":136472585830692}
+0000000001528 @nix {"action":"start","fields":[],"id":136472585830693,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/libraries/gobject-introspection/setup-hook.sh'","type":0}
+0000000001528 @nix {"action":"stop","id":136472585830693}
+0000000001528 @nix {"action":"start","fields":[],"id":136472585830694,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/libraries/gobject-introspection/absolute_shlib_path.patch'","type":0}
+0000000001529 @nix {"action":"stop","id":136472585830694}
+0000000001529 @nix {"action":"start","fields":[],"id":136472585830695,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/gl/glib/darwin-compilation.patch'","type":0}
+0000000001530 @nix {"action":"stop","id":136472585830695}
+0000000001530 @nix {"action":"start","fields":[],"id":136472585830696,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/gl/glib/glib-appinfo-watch.patch'","type":0}
+0000000001530 @nix {"action":"stop","id":136472585830696}
+0000000001530 @nix {"action":"start","fields":[],"id":136472585830697,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/gl/glib/schema-override-variable.patch'","type":0}
+0000000001530 @nix {"action":"stop","id":136472585830697}
+0000000001530 @nix {"action":"start","fields":[],"id":136472585830698,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/gl/glib/elementary-terminal-support.patch'","type":0}
+0000000001530 @nix {"action":"stop","id":136472585830698}
+0000000001530 @nix {"action":"start","fields":[],"id":136472585830699,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/gl/glib/split-dev-programs.patch'","type":0}
+0000000001531 @nix {"action":"stop","id":136472585830699}
+0000000001531 @nix {"action":"start","fields":[],"id":136472585830700,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/gl/glib/gdb_script.patch'","type":0}
+0000000001531 @nix {"action":"stop","id":136472585830700}
+0000000001548 @nix {"action":"start","fields":[],"id":136472585830701,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/build-support/setup-hooks/flatten-include-hack/flatten-include-hack-hook.sh'","type":0}
+0000000001548 @nix {"action":"stop","id":136472585830701}
+0000000001548 @nix {"action":"start","fields":[],"id":136472585830702,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/fr/freetype/enable-table-validation.patch'","type":0}
+0000000001548 @nix {"action":"stop","id":136472585830702}
+0000000001549 @nix {"action":"start","fields":[],"id":136472585830703,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/fr/freetype/enable-subpixel-rendering.patch'","type":0}
+0000000001549 @nix {"action":"stop","id":136472585830703}
+0000000001555 @nix {"action":"start","fields":[],"id":136472585830704,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/wo/woff2/gcc15.patch'","type":0}
+0000000001556 @nix {"action":"stop","id":136472585830704}
+0000000001563 @nix {"action":"start","fields":[],"id":136472585830705,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/li/libpipeline/fix-on-osx.patch'","type":0}
+0000000001563 @nix {"action":"stop","id":136472585830705}
+0000000001564 @nix {"action":"start","fields":[],"id":136472585830706,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/gr/groff/site.tmac'","type":0}
+0000000001564 @nix {"action":"stop","id":136472585830706}
+0000000001565 @nix {"action":"start","fields":[],"id":136472585830707,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/ma/man-db/systemwide-man-db-conf.patch'","type":0}
+0000000001566 @nix {"action":"stop","id":136472585830707}
+0000000001568 @nix {"action":"start","fields":[],"id":136472585830708,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/w3/w3m/RAND_egd.libressl.patch'","type":0}
+0000000001568 @nix {"action":"stop","id":136472585830708}
+0000000001574 @nix {"action":"start","fields":[],"id":136472585830709,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/gi/giflib/CVE-2021-40633.patch'","type":0}
+0000000001574 @nix {"action":"stop","id":136472585830709}
+0000000001575 @nix {"action":"start","fields":[],"id":136472585830710,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/gi/giflib/CVE-2025-31344.patch'","type":0}
+0000000001575 @nix {"action":"stop","id":136472585830710}
+0000000001615 @nix {"action":"start","fields":[],"id":136472585830711,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/python-modules/pytest-xdist/setup-hook.sh'","type":0}
+0000000001616 @nix {"action":"stop","id":136472585830711}
+0000000001621 @nix {"action":"start","fields":[],"id":136472585830712,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/python-modules/certifi/env.patch'","type":0}
+0000000001621 @nix {"action":"stop","id":136472585830712}
+0000000001627 @nix {"action":"start","fields":[],"id":136472585830713,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/python-modules/attrs/remove-hatch-plugins.patch'","type":0}
+0000000001628 @nix {"action":"stop","id":136472585830713}
+0000000001639 @nix {"action":"start","fields":[],"id":136472585830714,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/tools/text/patchutils/Make-grepdiff1-test-case-pcre-aware.patch'","type":0}
+0000000001639 @nix {"action":"stop","id":136472585830714}
+0000000001654 @nix {"action":"start","fields":[],"id":136472585830715,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/li/libtiff/rename-version.patch'","type":0}
+0000000001655 @nix {"action":"stop","id":136472585830715}
+0000000001657 @nix {"action":"start","fields":[],"id":136472585830716,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/fo/fontforge/set-python-sys-path.patch'","type":0}
+0000000001657 @nix {"action":"stop","id":136472585830716}
+0000000001662 @nix {"action":"start","fields":[],"id":136472585830717,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/ve/versionCheckHook/hook.sh'","type":0}
+0000000001662 @nix {"action":"stop","id":136472585830717}
+0000000001663 @nix {"action":"start","fields":[],"id":136472585830718,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/libraries/fontconfig/make-fonts-conf.xsl'","type":0}
+0000000001663 @nix {"action":"stop","id":136472585830718}
+0000000001676 @nix {"action":"start","fields":[],"id":136472585830719,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/libraries/gobject-introspection/absolute_gir_path.patch'","type":0}
+0000000001677 @nix {"action":"stop","id":136472585830719}
+0000000001685 @nix {"action":"start","fields":[],"id":136472585830720,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/libraries/silgraphite/macosx.patch'","type":0}
+0000000001686 @nix {"action":"stop","id":136472585830720}
+0000000001701 @nix {"action":"start","fields":[],"id":136472585830721,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/compilers/rust/setup-hook.sh'","type":0}
+0000000001702 @nix {"action":"stop","id":136472585830721}
+0000000001703 @nix {"action":"start","fields":[],"id":136472585830722,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/build-support/rust/rustc-wrapper/rustc-wrapper.sh'","type":0}
+0000000001703 @nix {"action":"stop","id":136472585830722}
+0000000001708 @nix {"action":"start","fields":[],"id":136472585830723,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/build-support/rust/hooks/cargo-build-hook.sh'","type":0}
+0000000001708 @nix {"action":"stop","id":136472585830723}
+0000000001709 @nix {"action":"start","fields":[],"id":136472585830724,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/build-support/rust/hooks/cargo-check-hook.sh'","type":0}
+0000000001709 @nix {"action":"stop","id":136472585830724}
+0000000001709 @nix {"action":"start","fields":[],"id":136472585830725,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/build-support/rust/hooks/cargo-install-hook.sh'","type":0}
+0000000001709 @nix {"action":"stop","id":136472585830725}
+0000000001710 @nix {"action":"start","fields":[],"id":136472585830726,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/build-support/rust/hooks/cargo-setup-hook.sh'","type":0}
+0000000001710 @nix {"action":"stop","id":136472585830726}
+0000000001710 @nix {"action":"start","fields":[],"id":136472585830727,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/build-support/rust/fetchcargo-default-config.toml'","type":0}
+0000000001710 @nix {"action":"stop","id":136472585830727}
+0000000001712 @nix {"action":"start","fields":[],"id":136472585830728,"level":5,"parent":0,"text":"copying '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/compilers/llvm/21/llvm/gnu-install-dirs.patch' to the store","type":0}
+0000000001712 @nix {"action":"stop","id":136472585830728}
+0000000001712 @nix {"action":"start","fields":[],"id":136472585830729,"level":5,"parent":0,"text":"copying '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/compilers/llvm/18/llvm/llvm-lit-cfg-add-libs-to-dylib-path.patch' to the store","type":0}
+0000000001713 @nix {"action":"stop","id":136472585830729}
+0000000001713 @nix {"action":"start","fields":[],"id":136472585830730,"level":5,"parent":0,"text":"copying '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/compilers/llvm/18/llvm/lit-shell-script-runner-set-dyld-library-path.patch' to the store","type":0}
+0000000001713 @nix {"action":"stop","id":136472585830730}
+0000000001713 @nix {"action":"start","fields":[],"id":136472585830731,"level":5,"parent":0,"text":"copying '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/compilers/llvm/20/llvm/gnu-install-dirs-polly.patch' to the store","type":0}
+0000000001714 @nix {"action":"stop","id":136472585830731}
+0000000001714 @nix {"action":"start","fields":[],"id":136472585830732,"level":5,"parent":0,"text":"copying '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/compilers/llvm/18/llvm/polly-lit-cfg-add-libs-to-dylib-path.patch' to the store","type":0}
+0000000001714 @nix {"action":"stop","id":136472585830732}
+0000000001717 @nix {"action":"start","fields":[],"id":136472585830733,"level":5,"parent":0,"text":"copying '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/compilers/llvm/21/llvm/gnu-install-dirs.patch' to the store","type":0}
+0000000001717 @nix {"action":"stop","id":136472585830733}
+0000000001717 @nix {"action":"start","fields":[],"id":136472585830734,"level":5,"parent":0,"text":"copying '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/compilers/llvm/18/llvm/llvm-lit-cfg-add-libs-to-dylib-path.patch' to the store","type":0}
+0000000001717 @nix {"action":"stop","id":136472585830734}
+0000000001717 @nix {"action":"start","fields":[],"id":136472585830735,"level":5,"parent":0,"text":"copying '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/compilers/llvm/18/llvm/lit-shell-script-runner-set-dyld-library-path.patch' to the store","type":0}
+0000000001718 @nix {"action":"stop","id":136472585830735}
+0000000001718 @nix {"action":"start","fields":[],"id":136472585830736,"level":5,"parent":0,"text":"copying '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/compilers/llvm/20/llvm/gnu-install-dirs-polly.patch' to the store","type":0}
+0000000001718 @nix {"action":"stop","id":136472585830736}
+0000000001718 @nix {"action":"start","fields":[],"id":136472585830737,"level":5,"parent":0,"text":"copying '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/compilers/llvm/18/llvm/polly-lit-cfg-add-libs-to-dylib-path.patch' to the store","type":0}
+0000000001718 @nix {"action":"stop","id":136472585830737}
+0000000001720 @nix {"action":"start","fields":[],"id":136472585830738,"level":5,"parent":0,"text":"copying '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/compilers/llvm/21/llvm/gnu-install-dirs.patch' to the store","type":0}
+0000000001721 @nix {"action":"stop","id":136472585830738}
+0000000001721 @nix {"action":"start","fields":[],"id":136472585830739,"level":5,"parent":0,"text":"copying '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/compilers/llvm/18/llvm/llvm-lit-cfg-add-libs-to-dylib-path.patch' to the store","type":0}
+0000000001721 @nix {"action":"stop","id":136472585830739}
+0000000001721 @nix {"action":"start","fields":[],"id":136472585830740,"level":5,"parent":0,"text":"copying '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/compilers/llvm/18/llvm/lit-shell-script-runner-set-dyld-library-path.patch' to the store","type":0}
+0000000001721 @nix {"action":"stop","id":136472585830740}
+0000000001721 @nix {"action":"start","fields":[],"id":136472585830741,"level":5,"parent":0,"text":"copying '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/compilers/llvm/20/llvm/gnu-install-dirs-polly.patch' to the store","type":0}
+0000000001722 @nix {"action":"stop","id":136472585830741}
+0000000001722 @nix {"action":"start","fields":[],"id":136472585830742,"level":5,"parent":0,"text":"copying '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/compilers/llvm/18/llvm/polly-lit-cfg-add-libs-to-dylib-path.patch' to the store","type":0}
+0000000001722 @nix {"action":"stop","id":136472585830742}
+0000000001724 @nix {"action":"start","fields":[],"id":136472585830743,"level":5,"parent":0,"text":"copying '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/compilers/llvm/21/llvm/gnu-install-dirs.patch' to the store","type":0}
+0000000001725 @nix {"action":"stop","id":136472585830743}
+0000000001725 @nix {"action":"start","fields":[],"id":136472585830744,"level":5,"parent":0,"text":"copying '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/compilers/llvm/18/llvm/llvm-lit-cfg-add-libs-to-dylib-path.patch' to the store","type":0}
+0000000001725 @nix {"action":"stop","id":136472585830744}
+0000000001725 @nix {"action":"start","fields":[],"id":136472585830745,"level":5,"parent":0,"text":"copying '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/compilers/llvm/18/llvm/lit-shell-script-runner-set-dyld-library-path.patch' to the store","type":0}
+0000000001725 @nix {"action":"stop","id":136472585830745}
+0000000001726 @nix {"action":"start","fields":[],"id":136472585830746,"level":5,"parent":0,"text":"copying '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/compilers/llvm/20/llvm/gnu-install-dirs-polly.patch' to the store","type":0}
+0000000001726 @nix {"action":"stop","id":136472585830746}
+0000000001726 @nix {"action":"start","fields":[],"id":136472585830747,"level":5,"parent":0,"text":"copying '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/compilers/llvm/18/llvm/polly-lit-cfg-add-libs-to-dylib-path.patch' to the store","type":0}
+0000000001726 @nix {"action":"stop","id":136472585830747}
+0000000001745 @nix {"action":"start","fields":[],"id":136472585830748,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/tools/parsing/tree-sitter/remove-web-interface.patch'","type":0}
+0000000001746 @nix {"action":"stop","id":136472585830748}
+0000000001749 @nix {"action":"start","fields":[],"id":136472585830749,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/libraries/gdk-pixbuf/installed-tests-path.patch'","type":0}
+0000000001749 @nix {"action":"stop","id":136472585830749}
+0000000001750 @nix {"action":"start","fields":[],"id":136472585830750,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/libraries/gdk-pixbuf/setup-hook.sh'","type":0}
+0000000001750 @nix {"action":"stop","id":136472585830750}
+0000000001758 @nix {"action":"start","fields":[],"id":136472585830751,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/au/autoconf-archive/0001-ax_check_gl.m4-properly-quote-m4_fatal.patch'","type":0}
+0000000001758 @nix {"action":"stop","id":136472585830751}
+0000000001758 @nix {"action":"start","fields":[],"id":136472585830752,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/au/autoconf-archive/0002-ax_check_glx.m4-properly-quote-m4_fatal.patch'","type":0}
+0000000001759 @nix {"action":"stop","id":136472585830752}
+0000000001759 @nix {"action":"start","fields":[],"id":136472585830753,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/au/autoconf-archive/0003-ax_switch_flags.m4-properly-quote-m4_fatal.patch'","type":0}
+0000000001759 @nix {"action":"stop","id":136472585830753}
+0000000001764 @nix {"action":"start","fields":[],"id":136472585830754,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/compilers/vala/disable-graphviz-0.56.8.patch'","type":0}
+0000000001764 @nix {"action":"stop","id":136472585830754}
+0000000001764 @nix {"action":"start","fields":[],"id":136472585830755,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/compilers/vala/setup-hook.sh'","type":0}
+0000000001765 @nix {"action":"stop","id":136472585830755}
+0000000001776 @nix {"action":"start","fields":[],"id":136472585830756,"level":5,"parent":0,"text":"copying '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/applications/editors/emacs/inhibit-lexical-cookie-warning-67916-30.patch' to the store","type":0}
+0000000001777 @nix {"action":"stop","id":136472585830756}
+0000000001777 @nix {"action":"start","fields":[],"id":136472585830757,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/applications/editors/emacs/native-comp-driver-options-30.patch'","type":0}
+0000000001777 @nix {"action":"stop","id":136472585830757}
+0000000001778 @nix {"action":"start","fields":[],"id":136472585830758,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/applications/editors/emacs/site-start.el'","type":0}
+0000000001778 @nix {"action":"stop","id":136472585830758}
+0000000001788 @nix {"action":"start","fields":[],"id":136472585830759,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/interpreters/guile/eai_system.patch'","type":0}
+0000000001788 @nix {"action":"stop","id":136472585830759}
+0000000001789 @nix {"action":"start","fields":[],"id":136472585830760,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/interpreters/guile/setup-hook-3.0.sh'","type":0}
+0000000001790 @nix {"action":"stop","id":136472585830760}
+0000000001792 @nix {"action":"start","fields":[],"id":136472585830761,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/ma/mailutils/fix-build-mb-len-max.patch'","type":0}
+0000000001792 @nix {"action":"stop","id":136472585830761}
+0000000001792 @nix {"action":"start","fields":[],"id":136472585830762,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/ma/mailutils/path-to-cat.patch'","type":0}
+0000000001792 @nix {"action":"stop","id":136472585830762}
+0000000001794 @nix {"action":"start","fields":[],"id":136472585830763,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/ma/mailutils/don-t-use-descrypt-password-in-the-test-suite.patch'","type":0}
+0000000001794 @nix {"action":"stop","id":136472585830763}
+0000000001795 @nix {"action":"start","fields":[],"id":136472585830764,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/applications/editors/emacs/setup-hook.sh'","type":0}
+0000000001795 @nix {"action":"stop","id":136472585830764}
+0000000001799 @nix {"action":"start","fields":[],"id":136472585830765,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/applications/editors/emacs/build-support/elpa2nix.el'","type":0}
+0000000001799 @nix {"action":"stop","id":136472585830765}
+0000000001799 @nix {"action":"start","fields":[],"id":136472585830766,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/applications/editors/emacs/build-support/melpa2nix.el'","type":0}
+0000000001799 @nix {"action":"stop","id":136472585830766}
+0000000001805 @nix {"action":"start","fields":[],"id":136472585830767,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/op/opensp/fix-register-storage-class.patch'","type":0}
+0000000001806 @nix {"action":"stop","id":136472585830767}
+0000000001806 @nix {"action":"start","fields":[],"id":136472585830768,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/op/opensp/setup-hook.sh'","type":0}
+0000000001806 @nix {"action":"stop","id":136472585830768}
+0000000001812 @nix {"action":"start","fields":[],"id":136472585830769,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/development/perl-modules/xml-parser-0001-HACK-Assumes-Expat-paths-are-good.patch'","type":0}
+0000000001812 @nix {"action":"stop","id":136472585830769}
+0000000001838 @nix {"action":"start","fields":[],"id":136472585830770,"level":5,"parent":0,"text":"hashing '/nix/store/f640ps0hcp7w5jzg18djf8gdhl6r2rnl-source/pkgs/by-name/do/docbook2x/db2x_texixml-to-stdout.patch'","type":0}
+0000000001838 @nix {"action":"stop","id":136472585830770}
+0000000001897 @nix {"action":"stop","id":136472585830400}

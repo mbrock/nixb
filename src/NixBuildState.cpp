@@ -1,4 +1,5 @@
 #include "NixBuildState.hpp"
+#include "nix/store/derivations.hh"
 
 #include <nix/store/store-api.hh>
 
@@ -34,9 +35,32 @@ NixBuildState::get_activity (int64_t id) const
 void
 NixBuildState::start_activity (const StartEvent &e)
 {
-  ActivityInfo info{ e.type, e.text };
+  auto infer_type = [&]() -> ActivityType {
+    if (e.type != nix::actUnknown)
+      return e.type;
+    if (e.text.rfind ("hashing '", 0) == 0)
+      return nix::actFileTransfer;
+    if (e.text.rfind ("copying '", 0) == 0)
+      return nix::actCopyPath;
+    return e.type;
+  };
+
+  ActivityType inferred_type = infer_type ();
+
+  ActivityInfo info{ inferred_type, e.text };
   info.parent = e.parent;
   info.start_order = next_activity_order_++;
+
+  auto set_label_from_quoted = [&]() {
+    auto first = e.text.find ('\'');
+    if (first == std::string::npos)
+      return;
+    auto last = e.text.find_last_of ('\'');
+    if (last == std::string::npos || last <= first)
+      return;
+    if (last - first > 1)
+      info.label = e.text.substr (first + 1, last - first - 1);
+  };
 
   if (e.store_ref)
     {
@@ -46,6 +70,18 @@ NixBuildState::start_activity (const StartEvent &e)
             {
               info.store_path = path;
               info.label = std::string{ path->name () };
+            }
+          if (e.type == nix::actSubstitute)
+            {
+              if (auto path
+                  = store_->getBuildDerivationPath (*info.store_path))
+                {
+                  info.derivation_path = path;
+                  //                  auto derivation =
+                  //                  store_->readInvalidDerivation (*path);
+                  //
+                  //                   info.derivation = derivation;
+                }
             }
         }
       if (info.label.empty ())
@@ -57,20 +93,46 @@ NixBuildState::start_activity (const StartEvent &e)
           info.store_base_url = *e.store_ref->base_url;
         }
     }
-  else if (e.type == nix::actFileTransfer && !e.fields.empty ())
+  else if (!e.fields.empty ())
     {
-      // For file transfers, fields[0] contains the clean URL
-      info.label = url_basename (e.fields[0]);
+      if (inferred_type == nix::actFileTransfer)
+        {
+          // For file transfers, fields[0] contains the clean URL
+          info.label = url_basename (e.fields[0]);
+        }
+      else if (inferred_type == nix::actBuild
+               || inferred_type == nix::actBuildWaiting
+               || inferred_type == nix::actBuilds)
+        {
+          if (store_)
+            {
+              if (auto path = store_->maybeParseStorePath (e.fields[0]))
+                {
+                  info.store_path = path;
+                  info.label = std::string{ path->name () };
+                }
+            }
+          if (info.label.empty ())
+            {
+              info.label = e.fields[0];
+            }
+        }
+    }
+  else
+    {
+      if (inferred_type == nix::actFileTransfer
+          || inferred_type == nix::actCopyPath)
+        set_label_from_quoted ();
     }
 
   activities_[e.id] = std::move (info);
 
-  if (e.type == nix::actBuilds)
+  if (inferred_type == nix::actBuilds)
     {
       builds_activity_ = e.id;
     }
 
-  if (e.type == nix::actFileTransfer || e.type == nix::actCopyPath)
+  if (inferred_type == nix::actFileTransfer || inferred_type == nix::actCopyPath)
     {
       note_transfer_start (e.id);
     }
@@ -129,7 +191,7 @@ NixBuildState::update_progress (const ResultEvent &e)
     {
       if (auto phase = e.get_string (0))
         {
-          set_current_phase (std::string{ *phase });
+          set_current_phase (e.id, std::string{ *phase });
         }
       return;
     }
@@ -253,9 +315,16 @@ NixBuildState::set_builds_progress (const ActivityProgress &progress)
 }
 
 void
-NixBuildState::set_current_phase (const std::string &phase)
+NixBuildState::set_current_phase (int64_t id, const std::string &phase)
 {
-  builds_progress_.current_phase = phase;
+  if (auto it = activities_.find (id); it != activities_.end ())
+    {
+      it->second.current_phase = phase;
+    }
+  if (builds_activity_ && *builds_activity_ == id)
+    {
+      builds_progress_.current_phase = phase;
+    }
 }
 
 void
@@ -267,6 +336,19 @@ NixBuildState::clear_builds_aggregate ()
 std::string
 NixBuildState::format_activity_label (const ActivityInfo &info) const
 {
+  if (info.derivation_path)
+    {
+      if (info.derivation)
+        {
+          return std::string{ info.derivation->name } + " "
+                 + info.derivation->platform;
+        }
+      else
+        {
+          return std::string{ info.derivation_path->name () } + " (drv for "
+                 + std::string{ info.store_path->name () } + ")";
+        }
+    }
   if (info.store_path)
     {
       return std::string{ info.store_path->name () };

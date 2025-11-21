@@ -1,18 +1,36 @@
 #include "NixLogWatcher.hpp"
+#include "NixLogForwardingLogger.hpp"
+#include "nix/cmd/installable-flake.hh"
+#include "nix/cmd/installables.hh"
+#include "nix/expr/eval-gc.hh"
+#include "nix/expr/eval.hh"
+#include "nix/expr/search-path.hh"
+#include "nix/flake/flakeref.hh"
+#include "nix/store/outputs-spec.hh"
+#include "nix/util/ref.hh"
+#include "nix/util/types.hh"
 #include "src/IdColor.hpp"
 #include "src/NixLogPlayer.hpp"
 
+#include <chrono>
+#include <filesystem>
 #include <fmt/color.h>
 #include <fmt/core.h>
+#include <nix/expr/eval-settings.hh>
+#include <nix/fetchers/fetch-settings.hh>
+#include <nix/flake/flake.hh>
 #include <nix/store/globals.hh>
 #include <nix/store/store-api.hh>
 #include <nix/store/store-open.hh>
+#include <nlohmann/json.hpp>
+#include <thread>
 
 #include <algorithm>
 #include <iostream>
 #include <limits>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace nixb
@@ -89,7 +107,7 @@ NixLogWatcher::format_activity_log_line (
       suffix = fmt::format (" @ {}", *info.store_base_url);
     }
 
-  return fmt::format ("{} [{} :: {}] {} {}{}\n",
+  return fmt::format ("{} [{} :: {}] {} {}{}",
                       fmt::styled (prefix, fmt::fg (color)),
                       styled_id (static_cast<uint64_t> (id)),
                       styled_parent (parent), *action, label, suffix);
@@ -97,13 +115,12 @@ NixLogWatcher::format_activity_log_line (
 
 NixLogWatcher::NixLogWatcher (bool quiet, UiMode ui_mode,
                               std::optional<std::string> record_path,
-                              std::atomic<bool> *stop_flag)
-    : quiet_ (quiet), stop_flag_ (stop_flag)
+                              std::atomic<bool> *stop_flag,
+                              double emit_delay_ms)
+    : quiet_ (quiet), emit_delay_ms_ (emit_delay_ms), stop_flag_ (stop_flag)
 {
   nix::initLibStore ();
   store_ = nix::openStore ();
-  fmt::print (stderr, "Yay! Nix store opened successfully: {}\n",
-              store_->config.getHumanReadableURI ());
 
   state_ = std::make_unique<NixBuildState> (store_);
 
@@ -121,6 +138,50 @@ NixLogWatcher::NixLogWatcher (bool quiet, UiMode ui_mode,
     {
       recorder_ = std::make_unique<NixLogRecorder> (*record_path);
     }
+}
+
+std::vector<std::string>
+NixLogWatcher::show_derivation (const std::string &installable)
+{
+  nix::initGC ();
+  nix::initLibStore ();
+  auto store = nix::openStore ();
+  auto evalStore = store;
+
+  bool readOnlyMode = true;
+  auto evalSettings = nix::EvalSettings{ readOnlyMode };
+
+  auto fetchSettings = nix::fetchers::Settings{};
+  auto lookupPath = nix::LookupPath{};
+  auto evalState = nix::make_ref<nix::EvalState> (lookupPath, store,
+                                                  fetchSettings, evalSettings);
+
+  auto [flakeRef, fragment] = nix::parseFlakeRefWithFragment (
+      fetchSettings, installable, std::filesystem::current_path ().string ());
+  nix::flake::LockFlags lockFlags; // set options if needed
+  nix::ExtendedOutputsSpec eos
+      = nix::ExtendedOutputsSpec::Default (); // default output selection
+  nix::Strings defaults
+      = { "packages." + nix::settings.thisSystem.get () + ".default",
+          "defaultPackage." + nix::settings.thisSystem.get () };
+  nix::Strings prefixes
+      = { "packages." + nix::settings.thisSystem.get () + ".",
+          "legacyPackages." + nix::settings.thisSystem.get () + "." };
+  auto inst = nix::make_ref<nix::InstallableFlake> (
+      nullptr, evalState, std::move (flakeRef), fragment, eos, defaults,
+      prefixes, lockFlags);
+
+  nix::Installables installables = { inst };
+  auto drvpaths = nix::Installable::toDerivations (store, installables, true);
+
+  std::vector<std::string> drv_json;
+  for (auto &drvpath : drvpaths)
+    {
+      auto drv = store->readDerivation (drvpath);
+      drv_json.push_back (drv.toJSON (store->config).dump ());
+    }
+
+  return drv_json;
 }
 
 void
@@ -142,6 +203,15 @@ NixLogWatcher::process_input ()
 }
 
 void
+NixLogWatcher::finish ()
+{
+  if (ui_ && ui_->enabled ())
+    {
+      ui_->finish ();
+    }
+}
+
+void
 NixLogWatcher::process_line (const std::string &line)
 {
   if (recorder_)
@@ -155,7 +225,7 @@ NixLogWatcher::process_line (const std::string &line)
     {
       if (!quiet_)
         {
-          emit_log (fmt::format ("{}\n", line));
+          emit_log (line);
         }
       return;
     }
@@ -211,7 +281,31 @@ NixLogWatcher::handle_start_event (const StartEvent &e)
         }
     }
 
-  emit_log (e.format ());
+  std::string line = e.format ();
+  if (!line.empty () && line.back () == '\n')
+    line.pop_back ();
+
+  nlohmann::json json;
+  json["id"] = e.id;
+  json["level"] = e.level;
+  json["type"] = e.type;
+  json["text"] = e.text;
+  if (e.parent)
+    json["parent"] = *e.parent;
+  if (!e.fields.empty ())
+    json["fields"] = e.fields;
+  if (e.store_ref)
+    {
+      nlohmann::json ref;
+      ref["path"] = e.store_ref->path;
+      if (e.store_ref->base_url)
+        ref["base_url"] = *e.store_ref->base_url;
+      json["store_ref"] = std::move (ref);
+    }
+
+  line += " json=" + json.dump ();
+  line += "\n";
+  emit_log (line);
 }
 
 void
@@ -266,6 +360,15 @@ NixLogWatcher::handle_stop_event (const StopEvent &e)
       activity_text = info->text;
       parent = info->parent;
       stopped_info = *info;
+    }
+  else
+    {
+      // If we never saw the start (e.g. interrupted early), try to infer a
+      // copy/hashing stop from the last parsed text.
+      if (activity_text.empty () && stopped_type == nix::actUnknown)
+        {
+          type_name = "Unknown";
+        }
     }
 
   state_->stop_activity (e.id);
@@ -331,13 +434,21 @@ NixLogWatcher::handle_msg_event (const MsgEvent &e)
 void
 NixLogWatcher::emit_log (const std::string &block)
 {
+  if (emit_delay_ms_ > 0.0)
+    {
+      auto delay = std::chrono::duration<double, std::milli> (emit_delay_ms_);
+      std::this_thread::sleep_for (delay);
+    }
+
   if (ui_ && ui_->enabled ())
     {
       ui_->print_log_block (block);
       ui_->redraw (ui_state_);
+      std::fflush (stdout);
       return;
     }
   fmt::print ("{}", block);
+  std::fflush (stdout);
 }
 
 void
@@ -354,13 +465,15 @@ NixLogWatcher::rebuild_ui_state ()
 
   std::unordered_map<int64_t, std::vector<int64_t>> children;
   std::vector<int64_t> roots;
+  std::unordered_set<int64_t> skipped;
 
   for (const auto &kv : activities)
     {
       const auto &info = kv.second;
-      if (info.parent && activities.count (*info.parent))
+      std::optional<int64_t> parent = info.parent;
+      if (parent && activities.count (*parent))
         {
-          children[*info.parent].push_back (kv.first);
+          children[*parent].push_back (kv.first);
         }
       else
         {
@@ -445,88 +558,166 @@ NixLogWatcher::rebuild_ui_state ()
       return aggregate;
     };
 
-  auto format_label = [&] (const ActivityInfo &info, int depth)
+  auto tag_for_type = [&] (ActivityType type)
     {
-      std::string tag;
-      switch (info.type)
+      switch (type)
         {
-        case nix::actBuilds:
-          tag = "[builds]";
-          break;
-        case nix::actBuild:
-          tag = "[build]";
-          break;
-        case nix::actBuildWaiting:
-          tag = "[queued]";
-          break;
-        case nix::actFileTransfer:
-          tag = "[dl]";
-          break;
-        case nix::actCopyPath:
-          tag = "[copy]";
-          break;
         case nix::actSubstitute:
-          tag = "[substitute]";
-          break;
+          return std::string{ "[substitute]" };
+        case nix::actCopyPath:
+          return std::string{ "[copy]" };
+        case nix::actFileTransfer:
+          return std::string{ "[dl]" };
         case nix::actQueryPathInfo:
-          tag = "[query]";
-          break;
+          return std::string{ "[query]" };
+        case nix::actBuilds:
+          return std::string{ "[builds]" };
+        case nix::actBuild:
+          return std::string{ "[build]" };
+        case nix::actBuildWaiting:
+          return std::string{ "[queued]" };
         case nix::actFetchTree:
-          tag = "[fetch]";
-          break;
+          return std::string{ "[fetch]" };
         default:
-          tag = fmt::format ("[{}]",
-                             NixLogParser::activity_type_name (info.type));
-          break;
+          return fmt::format ("[{}]", NixLogParser::activity_type_name (type));
+        }
+    };
+
+  auto strip_store_hash = [] (std::string_view name)
+    {
+      auto dash = name.find ('-');
+      if (dash != std::string_view::npos && dash + 1 < name.size ())
+        {
+          return std::string{ name.substr (dash + 1) };
+        }
+      return std::string{ name };
+    };
+
+  auto is_collapse_type = [] (ActivityType type)
+    {
+      switch (type)
+        {
+        case nix::actSubstitute:
+        case nix::actCopyPath:
+        case nix::actQueryPathInfo:
+        case nix::actFileTransfer:
+          return true;
+        default:
+          return false;
+        }
+    };
+
+  std::function<void (int64_t, int)> emit_node = [&] (int64_t id, int depth)
+    {
+      if (skipped.count (id))
+        {
+          return;
         }
 
-      std::string label = state_->format_activity_label (info);
+      const auto *info = state_->get_activity (id);
+      if (!info)
+        {
+          return;
+        }
+
+      std::string tag = tag_for_type (info->type);
+      bool allow_collapse = is_collapse_type (info->type);
+      std::optional<std::string> base_url = info->store_base_url;
+      std::string label = state_->format_activity_label (*info);
       if (label.empty ())
         {
           label = "activity";
         }
+      const ActivityInfo *display_info = info;
+
+      int64_t cursor = id;
+      while (allow_collapse)
+        {
+          auto it = children.find (cursor);
+          if (it == children.end () || it->second.size () != 1)
+            break;
+          int64_t child_id = it->second.front ();
+          const auto *child_info = state_->get_activity (child_id);
+          if (!child_info || !is_collapse_type (child_info->type))
+            {
+              break;
+            }
+          skipped.insert (child_id);
+          cursor = child_id;
+          tag = tag_for_type (child_info->type);
+          if (label.empty ())
+            {
+              label = state_->format_activity_label (*child_info);
+            }
+          if (!base_url && child_info->store_base_url)
+            {
+              base_url = child_info->store_base_url;
+            }
+          display_info = child_info;
+        }
 
       std::string indent (static_cast<std::size_t> (depth) * 2, ' ');
-      return fmt::format ("{}{} {}", indent, tag, label);
+      if (depth > 0)
+        {
+          indent.append ("- ");
+        }
+
+      std::string display_label = label;
+      if (display_info
+          && (display_info->type == nix::actBuild
+              || display_info->type == nix::actBuildWaiting))
+        {
+          if (display_info->store_path)
+            {
+              display_label
+                  = strip_store_hash (display_info->store_path->name ());
+            }
+          if (!display_info->current_phase.empty ())
+            {
+              std::string phase = display_info->current_phase;
+              constexpr std::string_view suffix = "Phase";
+              if (phase.size () > suffix.size ()
+                  && phase.compare (phase.size () - suffix.size (),
+                                    suffix.size (), suffix)
+                         == 0)
+                {
+                  phase.erase (phase.size () - suffix.size (), suffix.size ());
+                }
+              std::transform (
+                  phase.begin (), phase.end (), phase.begin (),
+                  [] (unsigned char c)
+                    { return static_cast<char> (std::tolower (c)); });
+              tag = fmt::format ("[{}]", phase);
+            }
+        }
+
+      std::string display
+          = fmt::format ("{}{} {}", indent, tag, display_label);
+      if (base_url && !base_url->empty ())
+        {
+          display = fmt::format ("{} {}", display, *base_url);
+        }
+
+      auto progress = compute_progress (cursor);
+      ui_state_.activity_lines.push_back (
+          UiActivityLine{ id, std::move (display), progress });
+
+      auto it = children.find (cursor);
+      if (it != children.end ())
+        {
+          for (int64_t child_id : it->second)
+            {
+              emit_node (child_id, depth + 1);
+            }
+        }
     };
-
-  std::function<void (int64_t, int)> emit_node
-      = [&] (int64_t id, int depth)
-  {
-    const auto *info = state_->get_activity (id);
-    if (!info)
-      {
-        return;
-      }
-
-    auto progress = compute_progress (id);
-    ui_state_.activity_lines.push_back (UiActivityLine{
-        id, format_label (*info, depth), progress });
-
-    if (auto it = children.find (id); it != children.end ())
-      {
-        for (int64_t child_id : it->second)
-          {
-            emit_node (child_id, depth + 1);
-          }
-      }
-  };
 
   for (int64_t root_id : roots)
     {
       emit_node (root_id, 0);
     }
 
-  // Copy builds progress
-  const auto &bp = state_->builds_progress ();
-  if (!bp.current_phase.empty ())
-    {
-      ui_state_.current_phase = fmt::format ("[phase] {}", bp.current_phase);
-    }
-  else
-    {
-      ui_state_.current_phase.clear ();
-    }
+  ui_state_.current_phase.clear ();
 }
 
 void
