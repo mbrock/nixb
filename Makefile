@@ -18,9 +18,4 @@ setup: CMakeLists.txt
 
 clean:; rm -rf build
 docs:; doxygen docs/Doxyfile.nix-api
-
-test: build vterm-test
-	./test.sh
-
-vterm-test: build
-	./build/nxb-vterm-tests
+test: build; $(MAKE) -C build test

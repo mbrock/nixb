@@ -1,119 +1,101 @@
 cmake_minimum_required(VERSION 3.24)
-project(nixb VERSION 0.1.0 LANGUAGES CXX)
+project(nixb VERSION 0.3.0 LANGUAGES CXX)
 
-set(CLICOLOR ON)
-set(CLICOLOR_FORCE ON)
+# Build configuration
 set(CMAKE_CXX_STANDARD 26)
 set(CMAKE_CXX_EXTENSIONS ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_COLOR_DIAGNOSTICS ON)
 
 if(NOT CMAKE_BUILD_TYPE)
-set(CMAKE_BUILD_TYPE Debug)
+    set(CMAKE_BUILD_TYPE Debug)
 endif()
 
-add_compile_options(
-  -Wno-missing-field-initializers
-  -Wno-unused-parameter
-  -Wno-deprecated-literal-operator
-  )
-
-
+# Dependencies
 cmake_policy(SET CMP0167 NEW)
 find_package(Boost REQUIRED)
 find_package(PkgConfig REQUIRED)
-pkg_check_modules(NIX_STORE REQUIRED IMPORTED_TARGET nix-store)
-pkg_check_modules(NIX_EXPR REQUIRED IMPORTED_TARGET nix-expr)
-pkg_check_modules(NIX_FLAKE REQUIRED IMPORTED_TARGET nix-flake)
-pkg_check_modules(NIX_CMD REQUIRED IMPORTED_TARGET nix-cmd)
-add_subdirectory(subprojects/fmt-12.0.0)
-add_subdirectory(subprojects/simdjson-3.10.1)
-add_subdirectory(subprojects/CLI11-2.4.2)
-add_subdirectory(subprojects/libcoro)
-add_subdirectory(subprojects/libvterm)
-add_subdirectory(subprojects/mdspan)
 
+foreach(nixpkg IN ITEMS NIX_STORE NIX_EXPR NIX_FLAKE NIX_CMD)
+    string(TOLOWER ${nixpkg} nixpkg_lower)
+    string(REPLACE "_" "-" nixpkg_name ${nixpkg_lower})
+    pkg_check_modules(${nixpkg} REQUIRED IMPORTED_TARGET ${nixpkg_name})
+endforeach()
+
+# Subprojects (suppress warnings from third-party code)
+foreach(subproj IN ITEMS fmt-12.0.0 simdjson-3.10.1 CLI11-2.4.2 libcoro libvterm mdspan)
+    add_subdirectory(subprojects/${subproj} EXCLUDE_FROM_ALL)
+endforeach()
+
+# Mark third-party libraries as system includes to suppress warnings
+foreach(target IN ITEMS fmt simdjson CLI11)
+    if(TARGET ${target})
+        get_target_property(inc_dirs ${target} INTERFACE_INCLUDE_DIRECTORIES)
+        if(inc_dirs)
+            set_target_properties(${target} PROPERTIES INTERFACE_SYSTEM_INCLUDE_DIRECTORIES "${inc_dirs}")
+        endif()
+    endif()
+endforeach()
+
+# Common dependencies for Nix targets
+set(NIX_LIBS PkgConfig::NIX_STORE PkgConfig::NIX_EXPR PkgConfig::NIX_FLAKE PkgConfig::NIX_CMD)
+
+# Common dependencies and compile definitions for UI targets
+set(UI_LIBS fmt::fmt libcoro mdspan)
+set(UI_DEFS MDSPAN_USE_BRACKET_OPERATOR=1 MDSPAN_USE_PAREN_OPERATOR=0)
+
+# Shared UI library (used by ui-example and tests)
+add_library(nixb_ui STATIC
+    src/ui-app.cpp
+    src/ui-dom.cpp
+    src/ui-layout.cpp
+    src/ui-paint.cpp
+    src/ui-widgets.cpp
+    src/ansi.cpp
+    src/glyph-table.cpp
+    src/tty-raster.cpp
+    src/tty-raster-diff.cpp
+)
+target_include_directories(nixb_ui PUBLIC src ${Boost_INCLUDE_DIRS})
+target_link_libraries(nixb_ui PUBLIC ${UI_LIBS})
+target_compile_definitions(nixb_ui PUBLIC ${UI_DEFS})
+
+# Main nixb executable (old implementation)
 add_executable(nixb
-    src/main.cpp
-    src/NixBuildState.cpp
-    src/NixLogParser.cpp
-    src/NixLogPlayer.cpp
-    src/NixLogRecorder.cpp
-    src/NixLogForwardingLogger.cpp
-    src/NixLogWatcher.cpp
-    src/Ui.cpp
-    src/Ansi.cpp
-    src/UiRender.cpp
-    src/UiStateBuilder.cpp
+    src/old/main.cpp
+    src/old/NixBuildState.cpp
+    src/old/NixLogParser.cpp
+    src/old/NixLogPlayer.cpp
+    src/old/NixLogRecorder.cpp
+    src/old/NixLogForwardingLogger.cpp
+    src/old/NixLogWatcher.cpp
+    src/old/Ui.cpp
+    src/old/Ansi.cpp
+    src/old/UiRender.cpp
+    src/old/UiStateBuilder.cpp
 )
-
 target_include_directories(nixb PRIVATE ${Boost_INCLUDE_DIRS})
+target_link_libraries(nixb PRIVATE fmt::fmt simdjson::simdjson CLI11::CLI11 ${NIX_LIBS})
 
-target_link_libraries(nixb PRIVATE
-    fmt::fmt
-    simdjson::simdjson
-    CLI11::CLI11
-    PkgConfig::NIX_STORE
-    PkgConfig::NIX_EXPR
-    PkgConfig::NIX_FLAKE
-    PkgConfig::NIX_CMD
+# UI example executable
+add_executable(ui-example src/ui-example.cpp)
+target_link_libraries(ui-example PRIVATE nixb_ui)
+
+# Test runner using vterm
+add_executable(nxb-vterm-tests src/test/vterm-ut-main.cpp)
+target_include_directories(nxb-vterm-tests PRIVATE src/test)
+target_link_libraries(nxb-vterm-tests PRIVATE nixb_ui libvterm)
+
+# Enable testing and register tests
+enable_testing()
+add_test(NAME vterm-tests COMMAND nxb-vterm-tests)
+
+# Auto-run tests after successful build
+add_custom_command(TARGET nxb-vterm-tests POST_BUILD
+    COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure -R vterm-tests
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+    COMMENT "Running vterm tests..."
 )
 
-# UI system with coroutine widgets
-add_executable(ui-example
-    src/new/ui-app.cpp
-    src/new/glyph-table.cpp
-    src/new/tty-raster.cpp
-    src/new/tty-raster-diff.cpp
-    src/new/ansi.cpp
-    src/new/ui-dom.cpp
-    src/new/ui-layout.cpp
-    src/new/ui-paint.cpp
-    src/new/ui-widgets.cpp
-    src/new/ui-example.cpp
-)
-
-target_link_libraries(ui-example PRIVATE
-    fmt::fmt
-    libcoro
-    mdspan
-)
-
-target_include_directories(ui-example PRIVATE ${Boost_INCLUDE_DIRS})
-
-target_compile_definitions(ui-example PRIVATE
-    MDSPAN_USE_BRACKET_OPERATOR=1
-    MDSPAN_USE_PAREN_OPERATOR=0
-)
-
-add_executable(nxb-vterm-tests
-    src/new/test/vterm-ut-main.cpp
-    src/new/ansi.cpp
-    src/new/glyph-table.cpp
-    src/new/tty-raster.cpp
-    src/new/tty-raster-diff.cpp
-    src/new/ui-app.cpp
-    src/new/ui-dom.cpp
-    src/new/ui-layout.cpp
-    src/new/ui-paint.cpp
-)
-
-target_include_directories(nxb-vterm-tests PRIVATE src/new/test)
-
-target_link_libraries(nxb-vterm-tests PRIVATE
-    fmt::fmt
-    libcoro
-    libvterm
-    mdspan
-)
-
-target_include_directories(nxb-vterm-tests PRIVATE ${Boost_INCLUDE_DIRS})
-
-target_compile_definitions(nxb-vterm-tests PRIVATE
-    MDSPAN_USE_BRACKET_OPERATOR=1
-    MDSPAN_USE_PAREN_OPERATOR=0
-)
-
-install(TARGETS nixb ui-example nxb-vterm-tests
-    RUNTIME DESTINATION bin
-)
+# Install
+install(TARGETS nixb ui-example nxb-vterm-tests RUNTIME DESTINATION bin)
