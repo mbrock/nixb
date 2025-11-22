@@ -51,3 +51,14 @@ mini_raster_demo = executable(
   ],
   install: false
 )
+
+nxbtest_001 = executable(
+  'nxbtest-001',
+  [
+    'test/nxbtest-001.cpp',
+  ],
+  dependencies: [
+    fmt_dep,
+  ],
+  install: false
+)
