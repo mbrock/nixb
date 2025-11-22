@@ -53,8 +53,7 @@ public:
                     children.end ());
 
     auto &deps = dependents_[child];
-    deps.erase (std::remove (deps.begin (), deps.end (), parent),
-                deps.end ());
+    deps.erase (std::remove (deps.begin (), deps.end (), parent), deps.end ());
 
     // If parent now has no children, clean up empty vector
     if (children.empty ())
@@ -243,9 +242,9 @@ public:
 
 private:
   std::unordered_map<NodeId, std::vector<NodeId>>
-      children_;   // parent -> [children]
+      children_; // parent -> [children]
   std::unordered_map<NodeId, std::vector<NodeId>>
-      dependents_; // child -> [dependents/parents]
+      dependents_;            // child -> [dependents/parents]
   std::vector<NodeId> roots_; // Nodes with no dependents
 };
 
@@ -352,4 +351,3 @@ private:
 };
 
 } // namespace nixb
-

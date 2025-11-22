@@ -37,8 +37,9 @@ progress_bar_widget (coro::io_scheduler &scheduler, Dom &dom,
               nodes.percent,
               fmt::format ("{:>5.0f}%", std::round (current * 100.0f)));
 
-          const int filled_cells = std::clamp (static_cast<int> (current * nodes.bar_width),
-                                               0, nodes.bar_width);
+          const int filled_cells
+              = std::clamp (static_cast<int> (current * nodes.bar_width), 0,
+                            nodes.bar_width);
 
           const auto &fill_node = dom.get (nodes.bar_fill);
           if (auto *elem = std::get_if<Element> (&fill_node.content))
@@ -46,7 +47,7 @@ progress_bar_widget (coro::io_scheduler &scheduler, Dom &dom,
               Style new_style = elem->style;
               new_style.width = Size::fixed (filled_cells);
               new_style.fg_color
-                  = Rgba8(finished ? fmt::color::cyan : fmt::color::green);
+                  = Rgba8 (finished ? fmt::color::cyan : fmt::color::green);
               dom.update_style (nodes.bar_fill, new_style);
             }
 

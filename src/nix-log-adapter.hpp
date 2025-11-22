@@ -50,8 +50,7 @@ public:
   void logEI (const nix::ErrorInfo &ei) override;
   void startActivity (nix::ActivityId act, nix::Verbosity lvl,
                       nix::ActivityType type, const std::string &text,
-                      const Fields &fields,
-                      nix::ActivityId parent) override;
+                      const Fields &fields, nix::ActivityId parent) override;
   void stopActivity (nix::ActivityId act) override;
   void result (nix::ActivityId act, nix::ResultType type,
                const Fields &fields) override;

@@ -57,8 +57,9 @@ LayoutEngine::layout_element (Dom &dom, const NodeId node_id,
       if (auto *child_elem = std::get_if<Element> (&child_node.content))
         {
           const bool is_main_axis_row = style.flex_dir == FlexDir::Row;
-          const auto &[value, is_grow] = is_main_axis_row ? child_elem->style.width
-                                                    : child_elem->style.height;
+          const auto &[value, is_grow] = is_main_axis_row
+                                             ? child_elem->style.width
+                                             : child_elem->style.height;
 
           if (is_grow)
             grow = value;
@@ -128,7 +129,8 @@ LayoutEngine::layout_element (Dom &dom, const NodeId node_id,
   // Position children
   std::size_t main_pos = initial_offset;
 
-  for (const auto &[id, intrinsic_width, intrinsic_height, grow_factor] : children)
+  for (const auto &[id, intrinsic_width, intrinsic_height, grow_factor] :
+       children)
     {
       std::size_t child_main_size
           = is_row ? intrinsic_width : intrinsic_height;

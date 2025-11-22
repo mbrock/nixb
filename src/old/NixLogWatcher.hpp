@@ -41,8 +41,7 @@ public:
   ~NixLogWatcher ();
 
   // Evaluate an installable and return derivation JSON strings.
-  std::vector<std::string>
-  show_derivation (const std::string &installable);
+  std::vector<std::string> show_derivation (const std::string &installable);
 
   void process_input ();
   void process_playback_file (const std::string &path);

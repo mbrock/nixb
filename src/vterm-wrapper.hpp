@@ -116,7 +116,8 @@ class Terminal
 {
 public:
   /// Create a new terminal with given size
-  Terminal (const int rows, const int cols) : vt_ (vterm_new (rows, cols), &vterm_free)
+  Terminal (const int rows, const int cols)
+      : vt_ (vterm_new (rows, cols), &vterm_free)
   {
     if (!vt_)
       throw std::runtime_error ("Failed to create VTerm");
@@ -189,7 +190,7 @@ public:
     std::string buffer (buf_size, '\0');
 
     const std::size_t written = vterm_screen_get_text (screen_, buffer.data (),
-                                                 buffer.size (), rect);
+                                                       buffer.size (), rect);
     buffer.resize (written);
 
     return buffer;
@@ -263,7 +264,10 @@ public:
     using const_cell_view_t
         = std::experimental::mdspan<const Cell, mdspan_extents>;
 
-    ScreenSnapshot (const int r, const int c) : cells (r * c), rows (r), cols (c) {}
+    ScreenSnapshot (const int r, const int c)
+        : cells (r * c), rows (r), cols (c)
+    {
+    }
 
     /// Get 2D view of cells
     [[nodiscard]] cell_view_t

@@ -27,13 +27,13 @@ struct Rgba8
   }
 
   /// Construct from fmt::rgb (opaque)
-   constexpr Rgba8 (const fmt::rgb rgb, const std::uint8_t a = 255) noexcept
+  constexpr Rgba8 (const fmt::rgb rgb, const std::uint8_t a = 255) noexcept
       : value (rgb.r | rgb.g << 8 | rgb.b << 16 | a << 24)
   {
   }
 
   /// Construct from fmt::color (opaque)
-   constexpr Rgba8 (const fmt::color c, const std::uint8_t a = 255) noexcept
+  constexpr Rgba8 (const fmt::color c, const std::uint8_t a = 255) noexcept
       : Rgba8 (fmt::rgb (c), a)
   {
   }
@@ -218,9 +218,8 @@ public:
   [[nodiscard]] std::span<const GlyphTable::GlyphId>
   glyphs () const noexcept
   {
-    return storage_glyphs_
-               ? std::span (*storage_glyphs_)
-               : std::span<const GlyphTable::GlyphId> ();
+    return storage_glyphs_ ? std::span (*storage_glyphs_)
+                           : std::span<const GlyphTable::GlyphId> ();
   }
   [[nodiscard]] std::span<const Rgba8>
   fgs () const noexcept
@@ -249,8 +248,8 @@ public:
   /// Helper: count cells in a region that match a predicate
   template <typename Pred>
   [[nodiscard]] std::size_t
-  count_if (const std::size_t x0, const std::size_t y0, std::size_t x1, std::size_t y1,
-            Pred &&pred) const
+  count_if (const std::size_t x0, const std::size_t y0, std::size_t x1,
+            std::size_t y1, Pred &&pred) const
   {
     const auto view = glyphs_2d ();
     std::size_t count = 0;

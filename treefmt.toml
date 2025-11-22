@@ -31,7 +31,7 @@
 # Defaults to the root of the current git worktree.
 # If not in a git repo, defaults to the directory containing the config file.
 # Env $TREEFMT_TREE_ROOT
-# tree-root = "/tmp/foo"
+tree-root = "./src"
 
 # File to search for to find the tree root (if tree-root is not set)
 # Env $TREEFMT_TREE_ROOT_FILE

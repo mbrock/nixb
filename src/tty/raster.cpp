@@ -64,8 +64,7 @@ Raster::set_bg (const std::size_t x, const std::size_t y,
 
 std::size_t
 Raster::write_text (const std::size_t x, const std::size_t y,
-                    const std::string_view text,
-                    GlyphTable &glyphs,
+                    const std::string_view text, GlyphTable &glyphs,
                     const Rgba8 fg, const Rgba8 bg) noexcept
 {
   if (y >= height ())
@@ -164,7 +163,7 @@ Raster::clear ()
   if (storage_glyphs_ && storage_fgs_ && storage_bgs_)
     {
       std::ranges::fill (*storage_glyphs_,
-                 32); // Space
+                         32); // Space
       std::ranges::fill (*storage_fgs_, DEFAULT_COLOR);
       std::ranges::fill (*storage_bgs_, DEFAULT_COLOR);
     }
@@ -198,8 +197,10 @@ Raster::subraster (const std::size_t x, const std::size_t y,
   // Create subviews using submdspan
   const auto glyph_sub
       = submdspan (glyph_view_, std::pair{ y0, y1 }, std::pair{ x0, x1 });
-  const auto fg_sub = submdspan (fg_view_, std::pair{ y0, y1 }, std::pair{ x0, x1 });
-  const auto bg_sub = submdspan (bg_view_, std::pair{ y0, y1 }, std::pair{ x0, x1 });
+  const auto fg_sub
+      = submdspan (fg_view_, std::pair{ y0, y1 }, std::pair{ x0, x1 });
+  const auto bg_sub
+      = submdspan (bg_view_, std::pair{ y0, y1 }, std::pair{ x0, x1 });
 
   // Return a non-owning Raster view
   return Raster (glyph_sub, fg_sub, bg_sub);

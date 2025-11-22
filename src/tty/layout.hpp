@@ -32,4 +32,3 @@ private:
 };
 
 } // namespace nxb::ui
-

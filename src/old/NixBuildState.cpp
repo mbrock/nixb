@@ -582,9 +582,10 @@ ActivityInfo::get_phase_timing_string () const
 
   // Common build phases in order
   const std::vector<std::string> phase_order
-      = { "unpackPhase", "patchPhase",     "configurePhase", "buildPhase",
-          "checkPhase",  "installPhase",   "fixupPhase",     "installCheckPhase",
-          "distPhase",   "postInstallPhase" };
+      = { "unpackPhase",     "patchPhase",        "configurePhase",
+          "buildPhase",      "checkPhase",        "installPhase",
+          "fixupPhase",      "installCheckPhase", "distPhase",
+          "postInstallPhase" };
 
   // Add phases in canonical order if they exist
   for (const auto &phase_name : phase_order)

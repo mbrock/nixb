@@ -43,8 +43,8 @@ struct PhaseTimer
   elapsed () const
   {
     auto end = end_time.value_or (std::chrono::steady_clock::now ());
-    return std::chrono::duration_cast<std::chrono::milliseconds> (end
-                                                                   - start_time);
+    return std::chrono::duration_cast<std::chrono::milliseconds> (
+        end - start_time);
   }
 };
 
@@ -96,8 +96,8 @@ struct ActivityInfo
   elapsed () const
   {
     auto end = end_time.value_or (std::chrono::steady_clock::now ());
-    return std::chrono::duration_cast<std::chrono::milliseconds> (end
-                                                                   - start_time);
+    return std::chrono::duration_cast<std::chrono::milliseconds> (
+        end - start_time);
   }
 };
 

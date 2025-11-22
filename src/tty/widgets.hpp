@@ -30,14 +30,13 @@ struct ProgressBarNodes
 /// Updates its own DOM node, runs until finished
 /// Uses coro::queue for communication
 coro::task<> progress_bar_widget (coro::io_scheduler &scheduler, Dom &dom,
-                                      ProgressBarNodes nodes,
-                                      coro::queue<ProgressState> &updates);
+                                  ProgressBarNodes nodes,
+                                  coro::queue<ProgressState> &updates);
 
 /// Widget coroutine: Text display
 coro::task<> text_widget (Dom &dom, NodeId my_node, std::string text);
 
 /// Container coroutine: Flex container managing child widgets
-coro::task<>
-flex_container_widget (std::vector<coro::task<>> children);
+coro::task<> flex_container_widget (std::vector<coro::task<>> children);
 
 } // namespace nxb::ui

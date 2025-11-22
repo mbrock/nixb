@@ -244,20 +244,24 @@ Writer &
 Writer::style (emphasis e)
 {
   // fmt::emphasis is a bitmask, emit all set bits
-  if ((static_cast<std::uint8_t> (e) & static_cast<std::uint8_t> (emphasis::bold))
+  if ((static_cast<std::uint8_t> (e)
+       & static_cast<std::uint8_t> (emphasis::bold))
       != 0)
     csi ("1", 'm');
-  if ((static_cast<std::uint8_t> (e) & static_cast<std::uint8_t> (emphasis::faint))
+  if ((static_cast<std::uint8_t> (e)
+       & static_cast<std::uint8_t> (emphasis::faint))
       != 0)
     csi ("2", 'm');
-  if ((static_cast<std::uint8_t> (e) & static_cast<std::uint8_t> (emphasis::italic))
+  if ((static_cast<std::uint8_t> (e)
+       & static_cast<std::uint8_t> (emphasis::italic))
       != 0)
     csi ("3", 'm');
   if ((static_cast<std::uint8_t> (e)
        & static_cast<std::uint8_t> (emphasis::underline))
       != 0)
     csi ("4", 'm');
-  if ((static_cast<std::uint8_t> (e) & static_cast<std::uint8_t> (emphasis::blink))
+  if ((static_cast<std::uint8_t> (e)
+       & static_cast<std::uint8_t> (emphasis::blink))
       != 0)
     csi ("5", 'm');
   if ((static_cast<std::uint8_t> (e)
@@ -386,4 +390,3 @@ scroll_down (std::size_t n)
 }
 
 } // namespace nxb::ansi
-

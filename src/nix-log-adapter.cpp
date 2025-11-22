@@ -28,8 +28,7 @@ void
 nix_log_adapter::startActivity (const nix::ActivityId act,
                                 const nix::Verbosity lvl,
                                 const nix::ActivityType type,
-                                const std::string &text,
-                                const Fields &fields,
+                                const std::string &text, const Fields &fields,
                                 const nix::ActivityId parent)
 {
   coro::sync_wait (
@@ -72,7 +71,7 @@ nix_log_adapter::extract_fields (const Fields &fields)
         }
       else
         {
-          result.emplace_back(static_cast<int64_t> (field.i));
+          result.emplace_back (static_cast<int64_t> (field.i));
         }
     }
 

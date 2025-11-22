@@ -67,7 +67,7 @@ Painter::fill_background (Raster &raster, const Rect &rect,
 }
 
 void
-Painter::draw_text (Raster &raster, GlyphTable &/*glyphs*/, const Rect &rect,
+Painter::draw_text (Raster &raster, GlyphTable & /*glyphs*/, const Rect &rect,
                     const std::string &text, const Rgba8 color)
 {
   std::size_t x = rect.x;

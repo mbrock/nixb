@@ -132,7 +132,8 @@ class Dom
 public:
   Dom ();
 
-  [[nodiscard]] NodeId create_element (const Style &style = Style::defaults ());
+  [[nodiscard]] NodeId create_element (const Style &style
+                                       = Style::defaults ());
 
   [[nodiscard]] NodeId create_text (std::string content,
                                     fmt::color color = fmt::color::white);

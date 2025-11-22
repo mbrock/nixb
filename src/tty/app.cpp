@@ -180,7 +180,8 @@ TerminalCompositor::present_frame (std::ostream &out)
   ansi::Writer w (buf);
   w.move_to (1, 1);
 
-  for (const auto &[x, y, glyphs, fg_change, bg_change, fg_reset, bg_reset] : diff_rasters (front_, back_))
+  for (const auto &[x, y, glyphs, fg_change, bg_change, fg_reset, bg_reset] :
+       diff_rasters (front_, back_))
     {
       w.move_to (y + 1, x + 1);
 
@@ -237,7 +238,8 @@ TerminalCompositor::present_loop (coro::io_scheduler &scheduler)
           co_await publish_size (size);
         }
 
-      const auto current_damage = g_damage_counter.load (std::memory_order_acquire);
+      const auto current_damage
+          = g_damage_counter.load (std::memory_order_acquire);
       if (current_damage == handled_damage)
         {
           damage_event ().reset ();

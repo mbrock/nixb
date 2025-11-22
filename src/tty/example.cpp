@@ -179,7 +179,8 @@ make_progress_row (Dom &dom, const NodeId container, std::string label_text,
   const NodeId row = dom.create_element (row_style);
   dom.append_child (container, row);
 
-  const NodeId label = dom.create_text (fmt::format ("{:<20}", label_text), color);
+  const NodeId label
+      = dom.create_text (fmt::format ("{:<20}", label_text), color);
   dom.append_child (row, label);
 
   Style bar_container_style = Style::defaults ();
