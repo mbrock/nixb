@@ -1,4 +1,4 @@
-#include "tty-raster-diff.hpp"
+#include "raster-diff.hpp"
 
 #include <algorithm>
 

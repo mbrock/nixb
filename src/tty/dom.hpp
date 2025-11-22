@@ -7,7 +7,7 @@
 #include <variant>
 #include <vector>
 
-#include "tty-raster.hpp"
+#include "raster.hpp"
 
 namespace nxb::ui
 {

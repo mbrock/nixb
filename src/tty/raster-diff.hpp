@@ -1,6 +1,6 @@
 #pragma once
 
-#include "tty-raster.hpp"
+#include "raster.hpp"
 
 #include <coro/generator.hpp>
 #include <optional>

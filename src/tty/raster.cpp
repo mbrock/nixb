@@ -1,4 +1,4 @@
-#include "tty-raster.hpp"
+#include "raster.hpp"
 
 #include <algorithm>
 #include <cstring>

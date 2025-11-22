@@ -1,8 +1,8 @@
-#include "ui-app.hpp"
-#include "ui-dom.hpp"
-#include "ui-layout.hpp"
-#include "ui-paint.hpp"
-#include "ui-widgets.hpp"
+#include "app.hpp"
+#include "dom.hpp"
+#include "layout.hpp"
+#include "paint.hpp"
+#include "widgets.hpp"
 
 #include <chrono>
 #include <coro/generator.hpp>

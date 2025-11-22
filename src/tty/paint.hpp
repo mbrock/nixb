@@ -1,7 +1,7 @@
 #pragma once
 
-#include "tty-raster.hpp"
-#include "ui-dom.hpp"
+#include "raster.hpp"
+#include "dom.hpp"
 
 namespace nxb::ui
 {

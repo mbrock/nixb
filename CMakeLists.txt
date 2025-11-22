@@ -46,15 +46,15 @@ set(UI_DEFS MDSPAN_USE_BRACKET_OPERATOR=1 MDSPAN_USE_PAREN_OPERATOR=0)
 
 # Shared UI library (used by ui-example and tests)
 add_library(nixb_ui STATIC
-    src/ui-app.cpp
-    src/ui-dom.cpp
-    src/ui-layout.cpp
-    src/ui-paint.cpp
-    src/ui-widgets.cpp
-    src/ansi.cpp
-    src/glyph-table.cpp
-    src/tty-raster.cpp
-    src/tty-raster-diff.cpp
+    src/tty/app.cpp
+    src/tty/dom.cpp
+    src/tty/layout.cpp
+    src/tty/paint.cpp
+    src/tty/widgets.cpp
+    src/tty/ansi.cpp
+    src/tty/glyph-table.cpp
+    src/tty/raster.cpp
+    src/tty/raster-diff.cpp
 )
 target_include_directories(nixb_ui PUBLIC src ${Boost_INCLUDE_DIRS})
 target_link_libraries(nixb_ui PUBLIC ${UI_LIBS})
@@ -78,8 +78,13 @@ target_include_directories(nixb PRIVATE ${Boost_INCLUDE_DIRS})
 target_link_libraries(nixb PRIVATE fmt::fmt simdjson::simdjson CLI11::CLI11 ${NIX_LIBS})
 
 # UI example executable
-add_executable(ui-example src/ui-example.cpp)
+add_executable(ui-example src/tty/example.cpp)
 target_link_libraries(ui-example PRIVATE nixb_ui)
+
+# nixbco executable
+add_executable(nixbco src/nixbco.cpp src/nix-log-adapter.cpp)
+target_include_directories(nixbco PRIVATE ${Boost_INCLUDE_DIRS} ${UI_LIBS})
+target_link_libraries(nixbco PRIVATE fmt::fmt simdjson::simdjson CLI11::CLI11 ${UI_LIBS} ${NIX_LIBS})
 
 # Test runner using vterm
 add_executable(nxb-vterm-tests src/test/vterm-ut-main.cpp)

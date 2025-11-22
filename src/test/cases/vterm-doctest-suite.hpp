@@ -2,11 +2,11 @@
 // boost-ut based vterm tests - replaces old YAML+emacs system.
 // Run: make vterm-test  or  ./build/src/new/nxb-vterm-tests
 
-#include "../../ansi.hpp"
-#include "../../ui-app.hpp"
-#include "../../ui-dom.hpp"
-#include "../../ui-layout.hpp"
-#include "../../ui-paint.hpp"
+#include "../../tty/ansi.hpp"
+#include "../../tty/app.hpp"
+#include "../../tty/dom.hpp"
+#include "../../tty/layout.hpp"
+#include "../../tty/paint.hpp"
 #include "../../vterm-wrapper.hpp"
 #include "../ut.hpp"
 

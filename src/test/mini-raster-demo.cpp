@@ -1,6 +1,6 @@
-#include "../glyph-table.hpp"
-#include "../tty-raster-diff.hpp"
-#include "../tty-raster.hpp"
+#include "../tty/glyph-table.hpp"
+#include "../tty/raster-diff.hpp"
+#include "../tty/raster.hpp"
 
 #include <array>
 #include <fmt/core.h>

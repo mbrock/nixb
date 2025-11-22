@@ -1,7 +1,7 @@
-#include "ui-app.hpp"
+#include "app.hpp"
 
 #include "ansi.hpp"
-#include "tty-raster-diff.hpp"
+#include "raster-diff.hpp"
 
 #include <algorithm>
 #include <atomic>

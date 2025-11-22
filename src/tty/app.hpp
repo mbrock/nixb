@@ -1,7 +1,7 @@
 #pragma once
 
 #include "glyph-table.hpp"
-#include "tty-raster.hpp"
+#include "raster.hpp"
 #include <coro/event.hpp>
 #include <coro/queue.hpp>
 #include <coro/task.hpp>

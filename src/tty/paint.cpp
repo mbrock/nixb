@@ -1,4 +1,4 @@
-#include "ui-paint.hpp"
+#include "paint.hpp"
 
 namespace nxb::ui
 {

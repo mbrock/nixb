@@ -1,6 +1,6 @@
 #pragma once
 
-#include "ui-dom.hpp"
+#include "dom.hpp"
 
 namespace nxb::ui
 {

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "ui-dom.hpp"
+#include "dom.hpp"
 
 #include <coro/io_scheduler.hpp>
 #include <coro/queue.hpp>
