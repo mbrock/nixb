@@ -1,0 +1,36 @@
+#pragma once
+
+#include "ui-dom.hpp"
+
+#include <chrono>
+#include <coro/io_scheduler.hpp>
+#include <coro/queue.hpp>
+#include <coro/task.hpp>
+
+namespace nxb::ui
+{
+
+/// Progress bar state
+struct ProgressState
+{
+  float fraction = 0.0f;
+  std::string label;
+  bool finished = false;
+};
+
+/// Widget coroutine: Animated progress bar
+/// Updates its own DOM node, runs until finished
+/// Uses coro::queue for communication
+coro::task<void> progress_bar_widget (coro::io_scheduler &scheduler, Dom &dom,
+                                      NodeId my_node,
+                                      coro::queue<ProgressState> &updates);
+
+/// Widget coroutine: Text display
+coro::task<void> text_widget (Dom &dom, NodeId my_node, std::string text);
+
+/// Container coroutine: Flex container managing child widgets
+coro::task<void>
+flex_container_widget (Dom &dom, NodeId my_node,
+                       std::vector<coro::task<void>> children);
+
+} // namespace nxb::ui

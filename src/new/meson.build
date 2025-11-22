@@ -14,3 +14,24 @@ nixbco = executable(
   ],
   install: true
 )
+
+# UI system with coroutine widgets
+ui_example = executable(
+  'ui-example',
+  [
+    'glyph-table.cpp',
+    'tty-raster.cpp',
+    'tty-raster-diff.cpp',
+    'ansi.cpp',
+    'ui-dom.cpp',
+    'ui-layout.cpp',
+    'ui-paint.cpp',
+    'ui-widgets.cpp',
+    'ui-example.cpp'
+  ],
+  dependencies: [
+    fmt_dep,
+    libcoro_dep
+  ],
+  install: false
+)
