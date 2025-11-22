@@ -1,7 +1,0 @@
-[wrap-git]
-url = https://github.com/jbaldwin/libcoro
-revision = head
-depth = 1
-
-[provide]
-libcoro = libcoro_dep

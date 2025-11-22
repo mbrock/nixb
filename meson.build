@@ -19,11 +19,16 @@ nix_cmd_dep = dependency('nix-cmd')
 nix_main_dep = dependency('nix-main')
 boost_dep = dependency('boost')
 
-# libcoro for coroutine prototype (header-only)
-libcoro_dep = dependency('libcoro',
-  required : false,
-  fallback : ['libcoro', 'libcoro_dep']
-)
+# libcoro for coroutine prototype (git subtree in subprojects/libcoro)
+# It's header-only and always available as a subtree
+if fs.is_dir('subprojects/libcoro')
+  libcoro_subproject = subproject('libcoro')
+  libcoro_dep = libcoro_subproject.get_variable('libcoro_dep')
+else
+  warning('libcoro subtree not found - coroutine prototypes will not be built')
+  warning('Run: git subtree add --prefix subprojects/libcoro https://github.com/jbaldwin/libcoro main --squash')
+  libcoro_dep = disabler()
+endif
 
 add_project_arguments(
   '-Wno-missing-field-initializers',
