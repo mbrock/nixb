@@ -36,3 +36,18 @@ ui_example = executable(
   ],
   install: false
 )
+
+mini_raster_demo = executable(
+  'mini-raster-demo',
+  [
+    'test/mini-raster-demo.cpp',
+    'glyph-table.cpp',
+    'tty-raster.cpp',
+    'tty-raster-diff.cpp',
+  ],
+  dependencies: [
+    fmt_dep,
+    libcoro_dep
+  ],
+  install: false
+)
