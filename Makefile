@@ -1,42 +1,33 @@
-.PHONY: all setup build build-opt clean docs test vterm-test
+.PHONY: all setup setup-opt build clean docs test vterm-test
 
 ifndef IN_NIX_SHELL
 $(error You need to run this under 'nix develop')
 endif
 
-# Default build dir
-BUILDDIR ?= build
 MESON ?= meson
 SETUP_FLAGS ?= --wrap-mode=nodownload
 
 all: build
+build: build/build.ninja; ninja -C build
 
-build: $(BUILDDIR)/build.ninja
-	ninja -C $(BUILDDIR)
+build/build.ninja: meson.build
+	$(MESON) setup build $(SETUP_FLAGS)
 
-setup: $(BUILDDIR)/build.ninja
-	ln -sf ./build/compile_commands.json ./compile_commands.json
+setup: build/build.ninja
 
-$(BUILDDIR)/build.ninja:
-	$(MESON) setup $(BUILDDIR) $(SETUP_FLAGS)
+setup-opt: build/meson.build
+	$(MESON) setup build $(SETUP_FLAGS) \
+		--buildtype=release \
+		-Doptimization=3 \
+		-Db_ndebug=true \
+		--reconfigure
 
-build-opt: $(BUILDDIR)/build.ninja
-	$(MESON) setup $(BUILDDIR) $(SETUP_FLAGS) --buildtype=release -Doptimization=3 -Db_ndebug=true --reconfigure
-	$(MESON) compile -C $(BUILDDIR) -j$$(nproc) -v
-
-clean:; rm -rf $(BUILDDIR)
+clean:; rm -rf build
 
 docs:; doxygen docs/Doxyfile.nix-api
 
-test: build
+test: build vterm-test
 	./test.sh
 
-# Modern vterm-based C++ tests using doctest
 vterm-test: build
-	reset; clear;
-	$(BUILDDIR)/src/new/nxb-vterm-tests
-
-# Run all tests including legacy test runner
-test-all: test vterm-test
-	$(BUILDDIR)/src/new/nxb-test-runner basic_ansi
-	$(BUILDDIR)/src/new/nxb-test-runner compositor_basic
+	./build/nxb-vterm-tests

@@ -1,6 +1,6 @@
-#include "glyph-table.hpp"
-#include "tty-raster-diff.hpp"
-#include "tty-raster.hpp"
+#include "../glyph-table.hpp"
+#include "../tty-raster-diff.hpp"
+#include "../tty-raster.hpp"
 
 #include <array>
 #include <fmt/core.h>
@@ -104,7 +104,7 @@ run_mini_raster_demo ()
           "Horizontal bar",
           [] (Raster &r, GlyphTable &g) {
             r.clear ();
-              const auto gid = g.intern ("=");
+            const auto gid = g.intern ("=");
             r.fill_rect (0, 1, r.width (), 1, gid, Rgba8 (fmt::color::green));
           },
       },

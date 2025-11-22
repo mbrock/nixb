@@ -1,4 +1,8 @@
-#define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
+// boost-ut based test runner
+#include "cases/vterm-ut-suite.hpp"
 
-// ReSharper disable once CppUnusedIncludeDirective
-#include <cases/vterm-doctest-suite.hpp>
+int
+main ()
+{
+  // boost-ut runs tests automatically via suite constructors
+}

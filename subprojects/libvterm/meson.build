@@ -1,6 +1,6 @@
 project('libvterm', 'c',
   version: '0.3.3',
-  default_options: ['c_std=c11'])
+  default_options: ['c_std=c17'])
 
 # Generate encoding tables from .tbl files using a helper script
 gen_includes = custom_target(
