@@ -1,4 +1,7 @@
 #include "NixLogWatcher.hpp"
+#include "NixLogPlayer.hpp"
+#include "UiStateBuilder.hpp"
+
 #include "nix/cmd/installable-flake.hh"
 #include "nix/cmd/installables.hh"
 #include "nix/expr/eval-gc.hh"
@@ -9,8 +12,6 @@
 #include "nix/util/logging.hh"
 #include "nix/util/ref.hh"
 #include "nix/util/types.hh"
-#include "src/NixLogPlayer.hpp"
-#include "src/UiStateBuilder.hpp"
 
 #include <chrono>
 #include <filesystem>

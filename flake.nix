@@ -1,5 +1,5 @@
 {
-  description = "Dev shell for nixb (meson + clang toolchain)";
+  description = "Dev shell for nixb (cmake + clang toolchain)";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
@@ -33,8 +33,6 @@
             runtimeInputs = [
               pkgs.nix.dev
               pkgs.git
-              pkgs.meson
-              pkgs.ninja
               pkgs.pkg-config
               pkgs.cmake
               pkgs.python3
@@ -87,19 +85,31 @@
             propagatedBuildInputs = with pkgs; [
             ];
             nativeBuildInputs = with pkgs; [
+            ];
+            buildInputs = with pkgs; [
               nix.dev
+              libblake3.dev
+              libsodium.dev
+              brotli.dev
+              libcpuid
+              curl.dev
+              libseccomp.dev
+              sqlite.dev
+              libgit2.dev
+              pcre2.dev
+              lowdown.dev
+              editline.dev
             ];
             packages = with pkgs; [
+              nix.dev
               boost
               pkg-config
-              meson
-              mesonlsp
-              ninja
               cmake
               python3
               git
               nixd
               treefmt
+              cmake-language-server
             ];
             shellHook = ''
               unset MACOSX_DEPLOYMENT_TARGET
@@ -109,9 +119,10 @@
               flake_include=$(pkg-config --variable=includedir nix-flake 2>/dev/null)
               expr_include=$(pkg-config --variable=includedir nix-expr 2>/dev/null)
               cmd_include=$(pkg-config --variable=includedir nix-cmd 2>/dev/null)
+              main_include=$(pkg-config --variable=includedir nix-main 2>/dev/null)
 
-              export NIX_API_INPUTS="''${store_include}/nix/store ''${util_include}/nix/util ''${flake_include}/nix/flake ''${expr_include}/nix/expr ''${cmd_include}/nix/cmd"
-              export NIX_API_INCLUDE_PATH="''${store_include} ''${util_include} ''${flake_include} ''${expr_include} ''${cmd_include}"
+              export NIX_API_INPUTS="''${store_include}/nix/store ''${util_include}/nix/util ''${flake_include}/nix/flake ''${expr_include}/nix/expr ''${cmd_include}/nix/cmd ''${main_include}/nix/main"
+              export NIX_API_INCLUDE_PATH="''${store_include} ''${util_include} ''${flake_include} ''${expr_include} ''${cmd_include} ''${main_include}"
             '';
           };
         }

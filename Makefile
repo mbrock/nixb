@@ -4,26 +4,19 @@ ifndef IN_NIX_SHELL
 $(error You need to run this under 'nix develop')
 endif
 
-MESON ?= meson
-SETUP_FLAGS ?= --wrap-mode=nodownload
+CMAKE ?= cmake
+BUILD_TYPE ?= Debug
+
+export CLICOLOR=1
 
 all: build
-build: build/build.ninja; ninja -C build
+build: build/Makefile; make -C build -j`nproc`
+build/Makefile: setup
 
-build/build.ninja: meson.build
-	$(MESON) setup build $(SETUP_FLAGS)
-
-setup: build/build.ninja
-
-setup-opt: build/meson.build
-	$(MESON) setup build $(SETUP_FLAGS) \
-		--buildtype=release \
-		-Doptimization=3 \
-		-Db_ndebug=true \
-		--reconfigure
+setup: CMakeLists.txt
+	$(CMAKE) -B build -DCMAKE_BUILD_TYPE=$(BUILD_TYPE)
 
 clean:; rm -rf build
-
 docs:; doxygen docs/Doxyfile.nix-api
 
 test: build vterm-test
