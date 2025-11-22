@@ -12,9 +12,10 @@ SETUP_FLAGS ?= --wrap-mode=nodownload
 all: build
 
 build: $(BUILDDIR)/build.ninja
-	$(MESON) compile -C $(BUILDDIR) -j$$(nproc) -v
+	ninja -C $(BUILDDIR)
 
 setup: $(BUILDDIR)/build.ninja
+	ln -sf ./build/compile_commands.json ./compile_commands.json
 
 $(BUILDDIR)/build.ninja:
 	$(MESON) setup $(BUILDDIR) $(SETUP_FLAGS)
@@ -23,8 +24,7 @@ build-opt: $(BUILDDIR)/build.ninja
 	$(MESON) setup $(BUILDDIR) $(SETUP_FLAGS) --buildtype=release -Doptimization=3 -Db_ndebug=true --reconfigure
 	$(MESON) compile -C $(BUILDDIR) -j$$(nproc) -v
 
-clean:
-	rm -rf $(BUILDDIR) meson-logs meson-private compile_commands.json
+clean:; rm -rf $(BUILDDIR)
 
 docs:; doxygen docs/Doxyfile.nix-api
 

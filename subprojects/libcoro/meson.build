@@ -17,11 +17,20 @@ libcoro_sources = files(
   'src/semaphore.cpp',
   'src/sync_wait.cpp',
   'src/thread_pool.cpp',
-  'src/detail/io_notifier_kqueue.cpp',
   'src/detail/pipe.cpp',
   'src/detail/task_self_deleting.cpp',
   'src/detail/timer_handle.cpp',
 )
+
+# Add platform-specific I/O notifier
+host_system = host_machine.system()
+if host_system == 'linux'
+  libcoro_sources += files('src/detail/io_notifier_epoll.cpp')
+elif host_system in ['darwin', 'freebsd', 'netbsd', 'openbsd']
+  libcoro_sources += files('src/detail/io_notifier_kqueue.cpp')
+else
+  error('Unsupported platform: ' + host_system + '. libcoro requires either epoll (Linux) or kqueue (BSD/macOS).')
+endif
 
 # Build as a static library
 libcoro_lib = static_library('coro',

@@ -37,7 +37,6 @@
               pkgs.ninja
               pkgs.pkg-config
               pkgs.cmake
-              pkgs.clang
               pkgs.python3
               emacsWithPkgs
             ];
@@ -85,13 +84,16 @@
         in
         {
           default = pkgs.mkShellNoCC {
-            buildInputs = with pkgs; [
+            propagatedBuildInputs = with pkgs; [
+            ];
+            nativeBuildInputs = with pkgs; [
               nix.dev
-              pkg-config
-              boost
             ];
             packages = with pkgs; [
+              boost
+              pkg-config
               meson
+              mesonlsp
               ninja
               cmake
               python3

@@ -1,7 +1,7 @@
 project('mdspan', 'cpp',
   version : '0.6.0',
   license : 'BSD-3-Clause',
-  default_options : ['cpp_std=c++17'])
+  default_options : ['cpp_std=gnu++23'])
 
 # mdspan is a header-only library
 mdspan_inc = include_directories('include')
