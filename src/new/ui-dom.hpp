@@ -1,16 +1,17 @@
 #pragma once
 
-#include "tty-raster.hpp"
 #include <cstddef>
-#include <cstdint>
 #include <fmt/color.h>
 #include <optional>
 #include <string>
 #include <variant>
 #include <vector>
 
+#include "tty-raster.hpp"
+
 namespace nxb::ui
 {
+using nxb::Rgba8;
 
 /// Forward declarations
 class Dom;
@@ -21,7 +22,7 @@ struct NodeId
 {
   std::size_t value;
 
-  explicit constexpr NodeId (std::size_t v = 0) : value (v) {}
+  explicit constexpr NodeId (const std::size_t v = 0) : value (v) {}
   constexpr auto operator<=> (const NodeId &) const = default;
 
   [[nodiscard]] constexpr bool
@@ -70,12 +71,12 @@ struct Size
   bool is_grow = false; // If true, value is flex-grow factor
 
   static constexpr Size
-  fixed (std::size_t v)
+  fixed (const std::size_t v)
   {
     return { v, false };
   }
   static constexpr Size
-  grow (std::size_t factor = 1)
+  grow (const std::size_t factor = 1)
   {
     return { factor, true };
   }
@@ -131,7 +132,7 @@ class Dom
 public:
   Dom ();
 
-  [[nodiscard]] NodeId create_element (Style style = Style::defaults ());
+  [[nodiscard]] NodeId create_element (const Style &style = Style::defaults ());
 
   [[nodiscard]] NodeId create_text (std::string content,
                                     fmt::color color = fmt::color::white);
@@ -141,7 +142,7 @@ public:
   void update_text (NodeId node, std::string new_text,
                     std::optional<fmt::color> color = std::nullopt);
 
-  void update_style (NodeId node, Style new_style);
+  void update_style (NodeId node, const Style &new_style);
 
   [[nodiscard]] const NodeData &get (NodeId node) const;
 

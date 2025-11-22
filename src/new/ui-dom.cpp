@@ -15,9 +15,9 @@ Dom::Dom ()
 }
 
 NodeId
-Dom::create_element (Style style)
+Dom::create_element (const Style &style)
 {
-  NodeId id{ nodes_.size () };
+  const NodeId id{ nodes_.size () };
   nodes_.push_back (NodeData{
       .parent = NodeId::null (),
       .content = Element{ .style = style, .children = {} },
@@ -28,9 +28,9 @@ Dom::create_element (Style style)
 }
 
 NodeId
-Dom::create_text (std::string content, fmt::color color)
+Dom::create_text (std::string content, const fmt::color color)
 {
-  NodeId id{ nodes_.size () };
+  const NodeId id{ nodes_.size () };
   nodes_.push_back (NodeData{
       .parent = NodeId::null (),
       .content = Text{ .content = std::move (content), .color = color },
@@ -41,7 +41,7 @@ Dom::create_text (std::string content, fmt::color color)
 }
 
 void
-Dom::append_child (NodeId parent, NodeId child)
+Dom::append_child (const NodeId parent, const NodeId child)
 {
   if (!parent.is_valid () || !child.is_valid ())
     return;
@@ -59,8 +59,8 @@ Dom::append_child (NodeId parent, NodeId child)
 }
 
 void
-Dom::update_text (NodeId node, std::string new_text,
-                  std::optional<fmt::color> color)
+Dom::update_text (const NodeId node, std::string new_text,
+                  const std::optional<fmt::color> color)
 {
   if (!node.is_valid ())
     return;
@@ -76,7 +76,7 @@ Dom::update_text (NodeId node, std::string new_text,
 }
 
 void
-Dom::update_style (NodeId node, Style new_style)
+Dom::update_style (const NodeId node, const Style &new_style)
 {
   if (!node.is_valid ())
     return;
@@ -90,7 +90,7 @@ Dom::update_style (NodeId node, Style new_style)
 }
 
 const NodeData &
-Dom::get (NodeId node) const
+Dom::get (const NodeId node) const
 {
   if (!node.is_valid () || node.value >= nodes_.size ())
     throw std::out_of_range ("Invalid NodeId");
@@ -98,7 +98,7 @@ Dom::get (NodeId node) const
 }
 
 NodeData &
-Dom::get_mut (NodeId node)
+Dom::get_mut (const NodeId node)
 {
   if (!node.is_valid () || node.value >= nodes_.size ())
     throw std::out_of_range ("Invalid NodeId");

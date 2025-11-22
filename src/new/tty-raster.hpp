@@ -2,7 +2,6 @@
 
 #include "glyph-table.hpp"
 
-#include <cstdint>
 #include <experimental/mdspan>
 #include <fmt/color.h>
 #include <optional>
@@ -21,20 +20,20 @@ struct Rgba8
   std::uint32_t value;
 
   /// Construct from RGBA components
-  constexpr Rgba8 (std::uint8_t r, std::uint8_t g, std::uint8_t b,
-                   std::uint8_t a = 255) noexcept
-      : value (r | (g << 8) | (b << 16) | (a << 24))
+  constexpr Rgba8 (const std::uint8_t r, const std::uint8_t g,
+                   const std::uint8_t b, const std::uint8_t a = 255) noexcept
+      : value (r | g << 8 | b << 16 | a << 24)
   {
   }
 
   /// Construct from fmt::rgb (opaque)
-  constexpr Rgba8 (fmt::rgb rgb, std::uint8_t a = 255) noexcept
-      : value (rgb.r | (rgb.g << 8) | (rgb.b << 16) | (a << 24))
+   constexpr Rgba8 (const fmt::rgb rgb, const std::uint8_t a = 255) noexcept
+      : value (rgb.r | rgb.g << 8 | rgb.b << 16 | a << 24)
   {
   }
 
   /// Construct from fmt::color (opaque)
-  constexpr Rgba8 (fmt::color c, std::uint8_t a = 255) noexcept
+   constexpr Rgba8 (const fmt::color c, const std::uint8_t a = 255) noexcept
       : Rgba8 (fmt::rgb (c), a)
   {
   }
@@ -62,17 +61,17 @@ struct Rgba8
   [[nodiscard]] constexpr std::uint8_t
   g () const noexcept
   {
-    return (value >> 8) & 0xFF;
+    return value >> 8 & 0xFF;
   }
   [[nodiscard]] constexpr std::uint8_t
   b () const noexcept
   {
-    return (value >> 16) & 0xFF;
+    return value >> 16 & 0xFF;
   }
   [[nodiscard]] constexpr std::uint8_t
   a () const noexcept
   {
-    return (value >> 24) & 0xFF;
+    return value >> 24 & 0xFF;
   }
 
   /// Convert to fmt::rgb (discards alpha)
@@ -117,7 +116,8 @@ public:
 
   /// Create a non-owning view from existing mdspan views.
   /// Used internally for subraster views.
-  Raster (glyph_view_t glyphs, color_view_t fgs, color_view_t bgs);
+  Raster (const glyph_view_t &glyphs, const color_view_t &fgs,
+          const color_view_t &bgs);
 
   /// Dimensions
   [[nodiscard]] std::size_t
@@ -141,21 +141,21 @@ public:
   /// storage. Coordinates are relative to this raster (works recursively for
   /// nested views).
   [[nodiscard]] Raster subraster (std::size_t x, std::size_t y, std::size_t w,
-                                  std::size_t h) noexcept;
+                                  std::size_t h) const noexcept;
 
   /// Set glyph at (x, y). Silently ignores out-of-bounds coordinates.
   void set_glyph (std::size_t x, std::size_t y,
-                  GlyphTable::GlyphId gid) noexcept;
+                  GlyphTable::GlyphId gid) const noexcept;
 
   /// Set foreground color at (x, y)
-  void set_fg (std::size_t x, std::size_t y, Rgba8 color) noexcept;
+  void set_fg (std::size_t x, std::size_t y, Rgba8 color) const noexcept;
 
   /// Set background color at (x, y)
-  void set_bg (std::size_t x, std::size_t y, Rgba8 color) noexcept;
+  void set_bg (std::size_t x, std::size_t y, Rgba8 color) const noexcept;
 
   /// Convenience: set ASCII character at (x, y)
   void
-  set_char (std::size_t x, std::size_t y, char ch) noexcept
+  set_char (const std::size_t x, const std::size_t y, const char ch) noexcept
   {
     set_glyph (x, y, static_cast<GlyphTable::GlyphId> (ch));
   }
@@ -219,19 +219,19 @@ public:
   glyphs () const noexcept
   {
     return storage_glyphs_
-               ? std::span<const GlyphTable::GlyphId> (*storage_glyphs_)
+               ? std::span (*storage_glyphs_)
                : std::span<const GlyphTable::GlyphId> ();
   }
   [[nodiscard]] std::span<const Rgba8>
   fgs () const noexcept
   {
-    return storage_fgs_ ? std::span<const Rgba8> (*storage_fgs_)
+    return storage_fgs_ ? std::span (*storage_fgs_)
                         : std::span<const Rgba8> ();
   }
   [[nodiscard]] std::span<const Rgba8>
   bgs () const noexcept
   {
-    return storage_bgs_ ? std::span<const Rgba8> (*storage_bgs_)
+    return storage_bgs_ ? std::span (*storage_bgs_)
                         : std::span<const Rgba8> ();
   }
 
@@ -249,10 +249,10 @@ public:
   /// Helper: count cells in a region that match a predicate
   template <typename Pred>
   [[nodiscard]] std::size_t
-  count_if (std::size_t x0, std::size_t y0, std::size_t x1, std::size_t y1,
+  count_if (const std::size_t x0, const std::size_t y0, std::size_t x1, std::size_t y1,
             Pred &&pred) const
   {
-    auto view = glyphs_2d ();
+    const auto view = glyphs_2d ();
     std::size_t count = 0;
 
     // Clamp to raster bounds

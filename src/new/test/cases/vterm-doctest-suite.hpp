@@ -21,7 +21,7 @@ template <typename Func>
 std::string
 capture_output (Func &&func)
 {
-  std::ostringstream capture;
+  const std::ostringstream capture;
   std::streambuf *old_cout = std::cout.rdbuf (capture.rdbuf ());
   std::streambuf *old_cerr = std::cerr.rdbuf (capture.rdbuf ());
 
@@ -48,7 +48,7 @@ dump_raster (const nxb::Raster &raster, const nxb::GlyphTable &glyphs)
           auto cell = raster.get_cell (x, y);
           if (cell.has_value ())
             {
-              char ch = (cell->glyph >= 32 && cell->glyph < 127)
+              const char ch = (cell->glyph >= 32 && cell->glyph < 127)
                             ? static_cast<char> (cell->glyph)
                             : '?';
               out << ch;
@@ -100,7 +100,7 @@ TEST_CASE ("basic-ansi: ANSI escape sequences render correctly")
   auto trim_end = [] (std::string s) {
     s.erase (
         std::find_if (s.rbegin (), s.rend (),
-                      [] (unsigned char ch) { return !std::isspace (ch); })
+                      [] (const unsigned char ch) { return !std::isspace (ch); })
             .base (),
         s.end ());
     return s;
@@ -228,7 +228,7 @@ TEST_CASE ("vterm: screen clearing")
   term.write ("\x1b[2J");
 
   // All cells should be empty (space with no attributes)
-  auto snap = term.snapshot ();
+  const auto snap = term.snapshot ();
   CHECK (snap.all_of ([] (const Cell &cell) {
     return cell.chars.empty ()
            || (cell.chars.size () == 1 && cell.chars[0] == U' ');
@@ -343,7 +343,7 @@ TEST_CASE ("compositor: basic rendering with DOM, layout, and paint")
   // The box should be filled with '#' (checking the layout worked)
   // Use Raster's count_if helper with mdspan underneath
   int box_cells_filled = back_buffer.count_if (
-      0, 1, 10, 4, [] (GlyphTable::GlyphId gid) { return gid == '#'; });
+      0, 1, 10, 4, [] (const GlyphTable::GlyphId gid) { return gid == '#'; });
 
   INFO ("Box cells filled with '#': ", box_cells_filled, " / 30");
   // Should have at least some '#' characters from the box

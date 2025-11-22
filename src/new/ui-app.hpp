@@ -55,13 +55,13 @@ struct TerminalGuard
 class TerminalCompositor
 {
 public:
-  TerminalCompositor (int width, int height, nxb::GlyphTable &glyphs);
+  TerminalCompositor (int width, int height, GlyphTable &glyphs);
 
   void resize (int width, int height);
-  nxb::Raster &back_buffer () noexcept;
-  nxb::GlyphTable &glyphs () noexcept;
+  Raster &back_buffer () noexcept;
+  GlyphTable &glyphs () const noexcept;
 
-  coro::task<void> present_loop (coro::io_scheduler &scheduler);
+  coro::task<> present_loop (coro::io_scheduler &scheduler);
 
   // Public for testing the rendering pipeline without async runtime
   // Pass an output stream, defaults to std::cout in cpp file
@@ -69,9 +69,9 @@ public:
   void present_frame (std::ostream &out);
 
 private:
-  nxb::Raster front_;
-  nxb::Raster back_;
-  nxb::GlyphTable &glyphs_;
+  Raster front_;
+  Raster back_;
+  GlyphTable &glyphs_;
 };
 
 } // namespace nxb::ui

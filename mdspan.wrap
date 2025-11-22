@@ -1,5 +1,5 @@
-[wrap-git]
-url = https://github.com/kokkos/mdspan.git
+[wrap-file]
+directory = mdspan
 revision = stable
 depth = 1
 

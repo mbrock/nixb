@@ -17,7 +17,7 @@ public:
 
 private:
   /// Layout a single element and its children
-  void layout_element (Dom &dom, NodeId node_id, Rect container_rect);
+  void layout_element (Dom &dom, NodeId node_id, const Rect &container_rect);
 
   /// Measure intrinsic size of a node
   std::pair<std::size_t, std::size_t> measure (Dom &dom, NodeId node_id,
@@ -25,10 +25,10 @@ private:
                                                std::size_t max_height);
 
   /// Count lines in text
-  std::size_t count_lines (const std::string &text);
+  static std::size_t count_lines (const std::string &text);
 
   /// Measure text width (naive: just length, no Unicode width yet)
-  std::size_t measure_text_width (const std::string &text);
+  static std::size_t measure_text_width (const std::string &text);
 };
 
 } // namespace nxb::ui

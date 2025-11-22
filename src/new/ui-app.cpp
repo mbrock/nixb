@@ -7,8 +7,6 @@
 #include <atomic>
 #include <coro/io_scheduler.hpp>
 #include <csignal>
-#include <cstdint>
-#include <fmt/core.h>
 #include <iostream>
 #include <sys/ioctl.h>
 #include <unistd.h>
@@ -20,10 +18,10 @@ coro::event g_shutdown_event{};
 coro::event g_damage_event{};
 coro::queue<nxb::ui::TermSize> g_resize_queue;
 coro::io_scheduler *g_scheduler = nullptr;
-std::atomic<int> g_term_width{ 80 };
-std::atomic<int> g_term_height{ 24 };
-std::atomic<bool> g_resize_requested{ false };
-std::atomic<bool> g_shutdown_flag{ false };
+std::atomic g_term_width{ 80 };
+std::atomic g_term_height{ 24 };
+std::atomic g_resize_requested{ false };
+std::atomic g_shutdown_flag{ false };
 std::atomic<std::uint64_t> g_damage_counter{ 0 };
 
 void
@@ -39,7 +37,7 @@ refresh_terminal_size_internal () noexcept
 }
 
 void
-signal_handler (int signal)
+signal_handler (const int signal)
 {
   if (signal == SIGWINCH)
     {
@@ -141,8 +139,8 @@ init_ui_runtime (coro::io_scheduler &scheduler)
   refresh_terminal_size_internal ();
 }
 
-TerminalCompositor::TerminalCompositor (int width, int height,
-                                        nxb::GlyphTable &glyphs)
+TerminalCompositor::TerminalCompositor (const int width, const int height,
+                                        GlyphTable &glyphs)
     : front_ (std::max (width, 10), std::max (height, 5)),
       back_ (std::max (width, 10), std::max (height, 5)), glyphs_ (glyphs)
 {
@@ -157,14 +155,14 @@ TerminalCompositor::resize (int width, int height)
   back_ = Raster (width, height);
 }
 
-nxb::Raster &
+Raster &
 TerminalCompositor::back_buffer () noexcept
 {
   return back_;
 }
 
-nxb::GlyphTable &
-TerminalCompositor::glyphs () noexcept
+GlyphTable &
+TerminalCompositor::glyphs () const noexcept
 {
   return glyphs_;
 }
@@ -182,21 +180,21 @@ TerminalCompositor::present_frame (std::ostream &out)
   ansi::Writer w (buf);
   w.move_to (1, 1);
 
-  for (const auto &run : diff_rasters (front_, back_))
+  for (const auto &[x, y, glyphs, fg_change, bg_change, fg_reset, bg_reset] : diff_rasters (front_, back_))
     {
-      w.move_to (run.y + 1, run.x + 1);
+      w.move_to (y + 1, x + 1);
 
-      if (run.bg_reset)
+      if (bg_reset)
         w.bg_default ();
-      else if (run.bg_change)
-        w.bg (run.bg_change->to_rgb ());
+      else if (bg_change)
+        w.bg (bg_change->to_rgb ());
 
-      if (run.fg_reset)
+      if (fg_reset)
         w.fg_default ();
-      else if (run.fg_change)
-        w.fg (run.fg_change->to_rgb ());
+      else if (fg_change)
+        w.fg (fg_change->to_rgb ());
 
-      for (auto gid : run.glyphs)
+      for (const auto gid : glyphs)
         {
           if (auto text = glyphs_.get (gid))
             w.text (*text);
@@ -215,14 +213,14 @@ TerminalCompositor::present_frame (std::ostream &out)
   std::swap (front_, back_);
 }
 
-coro::task<void>
+coro::task<>
 TerminalCompositor::present_loop (coro::io_scheduler &scheduler)
 {
   co_await scheduler.schedule ();
 
   std::uint64_t handled_damage = 0;
 
-  auto publish_size = [] (TermSize size) -> coro::task<void> {
+  auto publish_size = [] (const TermSize size) -> coro::task<> {
     co_await resize_channel ().push (size);
     co_return;
   };
@@ -234,12 +232,12 @@ TerminalCompositor::present_loop (coro::io_scheduler &scheduler)
       if (consume_resize_request ())
         {
           refresh_terminal_size_internal ();
-          auto size = terminal_size ();
+          const auto size = terminal_size ();
           resize (size.width, size.height);
           co_await publish_size (size);
         }
 
-      auto current_damage = g_damage_counter.load (std::memory_order_acquire);
+      const auto current_damage = g_damage_counter.load (std::memory_order_acquire);
       if (current_damage == handled_damage)
         {
           damage_event ().reset ();

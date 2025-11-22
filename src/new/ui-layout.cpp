@@ -6,20 +6,21 @@ namespace nxb::ui
 {
 
 void
-LayoutEngine::compute (Dom &dom, std::size_t container_width,
-                       std::size_t container_height)
+LayoutEngine::compute (Dom &dom, const std::size_t container_width,
+                       const std::size_t container_height)
 {
   // Layout from root
-  Rect root_rect{ 0, 0, container_width, container_height };
+  const Rect root_rect{ 0, 0, container_width, container_height };
   layout_element (dom, dom.root (), root_rect);
   dom.mark_clean ();
 }
 
 void
-LayoutEngine::layout_element (Dom &dom, NodeId node_id, Rect container_rect)
+LayoutEngine::layout_element (Dom &dom, const NodeId node_id,
+                              const Rect &container_rect)
 {
   auto &node = dom.get_mut (node_id);
-  auto *elem = std::get_if<Element> (&node.content);
+  const auto *elem = std::get_if<Element> (&node.content);
   if (!elem)
     {
       // Text node - just set rect to container
@@ -45,7 +46,7 @@ LayoutEngine::layout_element (Dom &dom, NodeId node_id, Rect container_rect)
   };
 
   std::vector<ChildInfo> children;
-  for (auto child_id : elem->children)
+  for (const auto child_id : elem->children)
     {
       auto [w, h]
           = measure (dom, child_id, container_rect.w, container_rect.h);
@@ -55,12 +56,12 @@ LayoutEngine::layout_element (Dom &dom, NodeId node_id, Rect container_rect)
       std::size_t grow = 0;
       if (auto *child_elem = std::get_if<Element> (&child_node.content))
         {
-          const bool is_main_axis_row = (style.flex_dir == FlexDir::Row);
-          const auto &child_size = is_main_axis_row ? child_elem->style.width
+          const bool is_main_axis_row = style.flex_dir == FlexDir::Row;
+          const auto &[value, is_grow] = is_main_axis_row ? child_elem->style.width
                                                     : child_elem->style.height;
 
-          if (child_size.is_grow)
-            grow = child_size.value;
+          if (is_grow)
+            grow = value;
 
           // Override with fixed size if specified
           if (!is_main_axis_row && child_elem->style.width.value > 0
@@ -75,7 +76,7 @@ LayoutEngine::layout_element (Dom &dom, NodeId node_id, Rect container_rect)
     }
 
   // Compute flex layout
-  const bool is_row = (style.flex_dir == FlexDir::Row);
+  const bool is_row = style.flex_dir == FlexDir::Row;
 
   // Sum up intrinsic sizes on main axis
   std::size_t total_intrinsic = 0;
@@ -92,10 +93,10 @@ LayoutEngine::layout_element (Dom &dom, NodeId node_id, Rect container_rect)
   const std::size_t cross_size = is_row ? container_rect.h : container_rect.w;
 
   // Distribute extra space to growing children
-  std::size_t extra_space
-      = (main_size > total_intrinsic) ? (main_size - total_intrinsic) : 0;
-  std::size_t space_per_grow
-      = (total_grow > 0) ? (extra_space / total_grow) : 0;
+  const std::size_t extra_space
+      = main_size > total_intrinsic ? main_size - total_intrinsic : 0;
+  const std::size_t space_per_grow
+      = total_grow > 0 ? extra_space / total_grow : 0;
 
   // Compute spacing for justify-content
   std::size_t spacing = 0;
@@ -127,16 +128,16 @@ LayoutEngine::layout_element (Dom &dom, NodeId node_id, Rect container_rect)
   // Position children
   std::size_t main_pos = initial_offset;
 
-  for (const auto &child : children)
+  for (const auto &[id, intrinsic_width, intrinsic_height, grow_factor] : children)
     {
       std::size_t child_main_size
-          = is_row ? child.intrinsic_width : child.intrinsic_height;
+          = is_row ? intrinsic_width : intrinsic_height;
       std::size_t child_cross_size
-          = is_row ? child.intrinsic_height : child.intrinsic_width;
+          = is_row ? intrinsic_height : intrinsic_width;
 
       // Add flex-grow space
-      if (child.grow_factor > 0)
-        child_main_size += space_per_grow * child.grow_factor;
+      if (grow_factor > 0)
+        child_main_size += space_per_grow * grow_factor;
 
       // Cross-axis alignment
       std::size_t cross_pos = 0;
@@ -146,13 +147,13 @@ LayoutEngine::layout_element (Dom &dom, NodeId node_id, Rect container_rect)
           cross_pos = 0;
           break;
         case Align::Center:
-          cross_pos = (cross_size > child_cross_size)
+          cross_pos = cross_size > child_cross_size
                           ? (cross_size - child_cross_size) / 2
                           : 0;
           break;
         case Align::End:
-          cross_pos = (cross_size > child_cross_size)
-                          ? (cross_size - child_cross_size)
+          cross_pos = cross_size > child_cross_size
+                          ? cross_size - child_cross_size
                           : 0;
           break;
         case Align::Stretch:
@@ -176,15 +177,16 @@ LayoutEngine::layout_element (Dom &dom, NodeId node_id, Rect container_rect)
         }
 
       // Recursively layout child
-      layout_element (dom, child.id, child_rect);
+      layout_element (dom, id, child_rect);
 
       main_pos += child_main_size + spacing;
     }
 }
 
 std::pair<std::size_t, std::size_t>
-LayoutEngine::measure (Dom &dom, NodeId node_id, std::size_t max_width,
-                       std::size_t max_height)
+LayoutEngine::measure (Dom &dom, const NodeId node_id,
+                       const std::size_t max_width,
+                       const std::size_t max_height)
 {
   const auto &node = dom.get (node_id);
 
@@ -199,12 +201,12 @@ LayoutEngine::measure (Dom &dom, NodeId node_id, std::size_t max_width,
   if (auto *elem = std::get_if<Element> (&node.content))
     {
       // Element: measure children
-      const bool is_row = (elem->style.flex_dir == FlexDir::Row);
+      const bool is_row = elem->style.flex_dir == FlexDir::Row;
 
       std::size_t total_main = 0;
       std::size_t max_cross = 0;
 
-      for (auto child_id : elem->children)
+      for (const auto child_id : elem->children)
         {
           auto [w, h] = measure (dom, child_id, max_width, max_height);
 
@@ -237,7 +239,7 @@ LayoutEngine::measure (Dom &dom, NodeId node_id, std::size_t max_width,
 std::size_t
 LayoutEngine::count_lines (const std::string &text)
 {
-  return std::count (text.begin (), text.end (), '\n') + 1;
+  return std::ranges::count (text, '\n') + 1;
 }
 
 std::size_t
@@ -247,7 +249,7 @@ LayoutEngine::measure_text_width (const std::string &text)
   std::size_t max_width = 0;
   std::size_t current_width = 0;
 
-  for (char c : text)
+  for (const char c : text)
     {
       if (c == '\n')
         {

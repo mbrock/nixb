@@ -19,24 +19,23 @@ namespace
 {
 
 char
-glyph_to_char (GlyphTable::GlyphId gid, GlyphTable &glyphs)
+glyph_to_char (const GlyphTable::GlyphId gid, const GlyphTable &glyphs)
 {
-  if (auto view = glyphs.get (gid))
+  if (const auto view = glyphs.get (gid))
     {
-      auto str = *view;
-      if (!str.empty ())
+      if (const auto str = *view; !str.empty ())
         return str.front ();
     }
   return '?';
 }
 
 std::string
-glyph_span_to_string (std::span<const GlyphTable::GlyphId> ids,
+glyph_span_to_string (const std::span<const GlyphTable::GlyphId> ids,
                       GlyphTable &glyphs)
 {
   std::string result;
   result.reserve (ids.size ());
-  for (auto gid : ids)
+  for (const auto gid : ids)
     result.push_back (glyph_to_char (gid, glyphs));
   return result;
 }
@@ -51,8 +50,7 @@ dump_snapshot (const Raster &raster, GlyphTable &glyphs)
       row.reserve (raster.width ());
       for (std::size_t x = 0; x < raster.width (); ++x)
         {
-          auto cell = raster.get_cell (x, y);
-          if (cell)
+          if (const auto cell = raster.get_cell (x, y))
             row.push_back (glyph_to_char (cell->glyph, glyphs));
           else
             row.push_back ('?');
@@ -87,7 +85,7 @@ run_mini_raster_demo ()
   front.clear ();
   back.clear ();
 
-  const std::array<Step, 4> steps{ {
+  constexpr std::array<Step, 4> steps{ {
       {
           "Blank grid",
           [] (Raster &r, GlyphTable &) { r.clear (); },
@@ -106,7 +104,7 @@ run_mini_raster_demo ()
           "Horizontal bar",
           [] (Raster &r, GlyphTable &g) {
             r.clear ();
-            auto gid = g.intern ("=");
+              const auto gid = g.intern ("=");
             r.fill_rect (0, 1, r.width (), 1, gid, Rgba8 (fmt::color::green));
           },
       },
@@ -121,11 +119,11 @@ run_mini_raster_demo ()
       },
   } };
 
-  for (const auto &step : steps)
+  for (const auto &[label, apply] : steps)
     {
-      fmt::print ("== {} ==\n", step.label);
+      fmt::print ("== {} ==\n", label);
       back.clear ();
-      step.apply (back, glyphs);
+      apply (back, glyphs);
       dump_snapshot (back, glyphs);
       dump_diff (front, back, glyphs);
       front = back;

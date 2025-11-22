@@ -2,7 +2,6 @@
 #include "nix-log-adapter.hpp"
 #include "nix/util/error.hh"
 
-#include <fmt/core.h>
 #include <nix/util/logging.hh>
 
 using namespace nixb::coro_adapter;
@@ -18,21 +17,21 @@ main ()
   auto logger = std::make_unique<nix_log_adapter> (std::ref (queue));
   nix::logger = std::move (logger);
 
-  auto task = [] (std::unique_ptr<coro::io_scheduler> &scheduler,
-                  coro::queue<log_event> &queue) -> coro::task<void> {
-    co_await scheduler->schedule ();
+  auto task = [] (const std::unique_ptr<coro::io_scheduler> &sched,
+                  coro::queue<log_event> &queue_) -> coro::task<> {
+    co_await sched->schedule ();
 
     while (true)
       {
-        auto expected = co_await queue.pop ();
+        auto expected = co_await queue_.pop ();
         if (!expected)
           break;
 
         if (std::holds_alternative<log_message> (*expected))
           {
-            auto &message = std::get<log_message> (*expected);
-            fmt::println ("{}: {}", static_cast<int> (message.level),
-                          message.text);
+            auto &[level, text] = std::get<log_message> (*expected);
+            fmt::println ("{}: {}", static_cast<int> (level),
+                          text);
           }
         else if (std::holds_alternative<activity_started> (*expected))
           {
@@ -41,8 +40,8 @@ main ()
           }
         else if (std::holds_alternative<activity_stopped> (*expected))
           {
-            auto &activity = std::get<activity_stopped> (*expected);
-            fmt::println ("stop {}", activity.id);
+            auto &[id] = std::get<activity_stopped> (*expected);
+            fmt::println ("stop {}", id);
           }
         else if (std::holds_alternative<activity_progress> (*expected))
           {

@@ -29,7 +29,7 @@ Painter::paint_node (const Dom &dom, const NodeData &node, Raster &raster,
         }
 
       // Paint children
-      for (auto child_id : elem->children)
+      for (const auto child_id : elem->children)
         {
           const auto &child = dom.get (child_id);
           paint_node (dom, child, raster, glyphs);
@@ -43,11 +43,12 @@ Painter::paint_node (const Dom &dom, const NodeData &node, Raster &raster,
 }
 
 void
-Painter::fill_background (Raster &raster, const Rect &rect, char bg_glyph,
-                          Rgba8 fg_color, Rgba8 bg_color)
+Painter::fill_background (Raster &raster, const Rect &rect,
+                          const char bg_glyph, const Rgba8 fg_color,
+                          const Rgba8 bg_color)
 {
   // Fill with glyph ID (just use ASCII for now)
-  GlyphTable::GlyphId gid = static_cast<GlyphTable::GlyphId> (bg_glyph);
+  const auto gid = static_cast<GlyphTable::GlyphId> (bg_glyph);
 
   // Get a subraster view of just the rectangle we want to fill
   auto sub = raster.subraster (rect.x, rect.y, rect.w, rect.h);
@@ -66,13 +67,13 @@ Painter::fill_background (Raster &raster, const Rect &rect, char bg_glyph,
 }
 
 void
-Painter::draw_text (Raster &raster, GlyphTable &glyphs, const Rect &rect,
-                    const std::string &text, Rgba8 color)
+Painter::draw_text (Raster &raster, GlyphTable &/*glyphs*/, const Rect &rect,
+                    const std::string &text, const Rgba8 color)
 {
   std::size_t x = rect.x;
   std::size_t y = rect.y;
 
-  for (char c : text)
+  for (const char c : text)
     {
       if (c == '\n')
         {

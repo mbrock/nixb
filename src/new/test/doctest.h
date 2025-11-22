@@ -496,7 +496,6 @@ DOCTEST_GCC_SUPPRESS_WARNING_POP
 // https://github.com/doctest/doctest/issues/126
 // https://github.com/doctest/doctest/issues/356
 #if DOCTEST_CLANG
-#include <ciso646>
 #endif // clang
 
 #ifdef _LIBCPP_VERSION
@@ -1097,8 +1096,8 @@ String toString() {
     String::size_type beginPos = ret.find('<');
     return ret.substr(beginPos + 1, ret.size() - beginPos - static_cast<String::size_type>(sizeof(">(void)")));
 #else
-    String ret = __PRETTY_FUNCTION__; // doctest::String toString() [with T = TYPE]
-    String::size_type begin = ret.find('=') + 2;
+  const String ret = __PRETTY_FUNCTION__; // doctest::String toString() [with T = TYPE]
+  const String::size_type begin = ret.find('=') + 2;
     return ret.substr(begin, ret.size() - begin - 1);
 #endif
 }
@@ -1292,8 +1291,8 @@ template <typename F>
 struct DOCTEST_INTERFACE_DECL IsNaN
 {
     F value; bool flipped;
-    IsNaN(F f, bool flip = false) : value(f), flipped(flip) { }
-    IsNaN<F> operator!() const { return { value, !flipped }; }
+    IsNaN(F f, const bool flip = false) : value(f), flipped(flip) { }
+    IsNaN operator!() const { return { value, !flipped }; }
     operator bool() const;
 };
 #ifndef __MINGW32__
@@ -1502,7 +1501,7 @@ DOCTEST_CLANG_SUPPRESS_WARNING_WITH_PUSH("-Wunused-comparison")
         L                lhs;
         assertType::Enum m_at;
 
-        explicit Expression_lhs(L&& in, assertType::Enum at)
+        explicit Expression_lhs(L&& in, const assertType::Enum at)
                 : lhs(static_cast<L&&>(in))
                 , m_at(at) {}
 
@@ -1583,7 +1582,7 @@ DOCTEST_CLANG_SUPPRESS_WARNING_POP
             return Expression_lhs<const L&&>(static_cast<const L&&>(operand), m_at);
         }
 
-        template <typename L,typename types::enable_if<!doctest::detail::types::is_rvalue_reference<L>::value,void >::type* = nullptr>
+        template <typename L,typename types::enable_if<!doctest::detail::types::is_rvalue_reference<L>::value>::type* = nullptr>
         Expression_lhs<const L&> operator<<(const L &operand) {
             return Expression_lhs<const L&>(operand, m_at);
         }
@@ -1762,10 +1761,10 @@ DOCTEST_CLANG_SUPPRESS_WARNING_POP
     throwException()
 
     template <int comparison, typename L, typename R>
-    DOCTEST_NOINLINE bool binary_assert(assertType::Enum at, const char* file, int line,
+    DOCTEST_NOINLINE bool binary_assert (const assertType::Enum at, const char* file, const int line,
                                         const char* expr, const DOCTEST_REF_WRAP(L) lhs,
                                         const DOCTEST_REF_WRAP(R) rhs) {
-        bool failed = !RelationalComparator<comparison, L, R>()(lhs, rhs);
+      const bool failed = !RelationalComparator<comparison, L, R>()(lhs, rhs);
 
         // ###################################################################################
         // IF THE DEBUGGER BREAKS HERE - GO 1 LEVEL UP IN THE CALLSTACK FOR THE FAILING ASSERT
@@ -1777,7 +1776,7 @@ DOCTEST_CLANG_SUPPRESS_WARNING_POP
     }
 
     template <typename L>
-    DOCTEST_NOINLINE bool unary_assert(assertType::Enum at, const char* file, int line,
+    DOCTEST_NOINLINE bool unary_assert (const assertType::Enum at, const char* file, const int line,
                                        const char* expr, const DOCTEST_REF_WRAP(L) val) {
         bool failed = !val;
 
@@ -2108,7 +2107,7 @@ namespace detail {
 } // namespace detail
 
 template <typename Reporter>
-int registerReporter(const char* name, int priority, bool isReporter) {
+int registerReporter(const char* name, const int priority, const bool isReporter) {
     detail::registerReporterImpl(name, priority, detail::reporterCreator<Reporter>, isReporter);
     return 0;
 }
@@ -3149,19 +3148,18 @@ DOCTEST_MAKE_STD_HEADERS_CLEAN_FROM_WARNINGS_ON_WALL_BEGIN
 // required includes - will go only in one translation unit!
 #include <ctime>
 #include <cmath>
-#include <climits>
-// borland (Embarcadero) compiler requires math.h and not cmath - https://github.com/doctest/doctest/pull/37
+// borland (Embarcadero) compiler requires math.h and not cmath -
+// https://github.com/doctest/doctest/pull/37
 #ifdef __BORLANDC__
 #include <math.h>
 #endif // __BORLANDC__
-#include <new>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <limits>
-#include <utility>
 #include <fstream>
+#include <limits>
 #include <sstream>
+#include <utility>
 #ifndef DOCTEST_CONFIG_NO_INCLUDE_IOSTREAM
 #include <iostream>
 #endif // DOCTEST_CONFIG_NO_INCLUDE_IOSTREAM
@@ -3179,16 +3177,14 @@ DOCTEST_MAKE_STD_HEADERS_CLEAN_FROM_WARNINGS_ON_WALL_BEGIN
 #define DOCTEST_DECLARE_STATIC_MUTEX(name)
 #define DOCTEST_LOCK_MUTEX(name)
 #endif // DOCTEST_CONFIG_NO_MULTITHREADING
-#include <set>
-#include <map>
-#include <unordered_set>
-#include <exception>
-#include <stdexcept>
-#include <csignal>
 #include <cfloat>
-#include <cctype>
-#include <cstdint>
+#include <csignal>
+#include <exception>
+#include <map>
+#include <set>
+#include <stdexcept>
 #include <string>
+#include <unordered_set>
 
 #ifdef DOCTEST_PLATFORM_MAC
 #include <sys/types.h>
@@ -3328,7 +3324,7 @@ namespace {
         static Arch which() {
             int x = 1;
             // casting any data pointer to char* is allowed
-            auto ptr = reinterpret_cast<char*>(&x);
+            const auto ptr = reinterpret_cast<char*>(&x);
             if(*ptr)
                 return Little;
             return Big;
@@ -3352,9 +3348,9 @@ namespace detail {
             if (stack.empty())
                 DOCTEST_INTERNAL_ERROR("TLSS was empty when trying to pop!");
 
-            std::streampos pos = stack.back();
+            const std::streampos pos = stack.back();
             stack.pop_back();
-            unsigned sz = static_cast<unsigned>(ss.tellp() - pos);
+            const unsigned sz = static_cast<unsigned>(ss.tellp() - pos);
             ss.rdbuf()->pubseekpos(pos, std::ios::in | std::ios::out);
             return String(ss, sz);
         }
@@ -3579,7 +3575,7 @@ using ticks_t = timer_large_integer::type;
                 }
             }
 
-            bool ok_to_fail = (TestCaseFailureReason::ShouldHaveFailedAndDid & failure_flags) ||
+            const bool ok_to_fail = (TestCaseFailureReason::ShouldHaveFailedAndDid & failure_flags) ||
                               (TestCaseFailureReason::CouldHaveFailedAndDid & failure_flags) ||
                               (TestCaseFailureReason::FailedExactlyNumTimes & failure_flags);
 
@@ -3600,7 +3596,7 @@ using ticks_t = timer_large_integer::type;
 #endif // DOCTEST_CONFIG_DISABLE
 } // namespace detail
 
-char* String::allocate(size_type sz) {
+char* String::allocate (const size_type sz) {
     if (sz <= last) {
         buf[sz] = '\0';
         setLast(last - sz);
@@ -3616,8 +3612,8 @@ char* String::allocate(size_type sz) {
 }
 
 void String::setOnHeap() noexcept { *reinterpret_cast<unsigned char*>(&buf[last]) = 128; }
-void String::setLast(size_type in) noexcept { buf[last] = char(in); }
-void String::setSize(size_type sz) noexcept {
+void String::setLast (const size_type in) noexcept { buf[last] = char(in); }
+void String::setSize (const size_type sz) noexcept {
     if (isOnStack()) { buf[sz] = '\0'; setLast(last - sz); }
     else { data.ptr[sz] = '\0'; data.size = sz; }
 }
@@ -3643,11 +3639,11 @@ String::~String() {
 String::String(const char* in)
         : String(in, strlen(in)) {}
 
-String::String(const char* in, size_type in_size) {
+String::String(const char* in, const size_type in_size) {
     memcpy(allocate(in_size), in, in_size);
 }
 
-String::String(std::istream& in, size_type in_size) {
+String::String(std::istream& in, const size_type in_size) {
     in.read(allocate(in_size), in_size);
 }
 
@@ -3731,11 +3727,11 @@ String& String::operator=(String&& other) noexcept {
     return *this;
 }
 
-char String::operator[](size_type i) const {
+char String::operator[] (const size_type i) const {
     return const_cast<String*>(this)->operator[](i);
 }
 
-char& String::operator[](size_type i) {
+char& String::operator[] (const size_type i) {
     if(isOnStack())
         return reinterpret_cast<char*>(buf)[i];
     return data.ptr[i];
@@ -3755,7 +3751,7 @@ String::size_type String::capacity() const {
     return data.capacity;
 }
 
-String String::substr(size_type pos, size_type cnt) && {
+String String::substr (const size_type pos, size_type cnt) && {
     cnt = std::min(cnt, size() - pos);
     char* cptr = c_str();
     memmove(cptr, cptr + pos, cnt);
@@ -3763,12 +3759,12 @@ String String::substr(size_type pos, size_type cnt) && {
     return std::move(*this);
 }
 
-String String::substr(size_type pos, size_type cnt) const & {
+String String::substr (const size_type pos, size_type cnt) const & {
     cnt = std::min(cnt, size() - pos);
     return String{ c_str() + pos, cnt };
 }
 
-String::size_type String::find(char ch, size_type pos) const {
+String::size_type String::find (const char ch, const size_type pos) const {
     const char* begin = c_str();
     const char* end = begin + size();
     const char* it = begin + pos;
@@ -3777,7 +3773,7 @@ String::size_type String::find(char ch, size_type pos) const {
     else { return npos; }
 }
 
-String::size_type String::rfind(char ch, size_type pos) const {
+String::size_type String::rfind (const char ch, const size_type pos) const {
     const char* begin = c_str();
     const char* it = begin + std::min(pos, size() - 1);
     for (; it >= begin && *it != ch; it--);
@@ -3785,13 +3781,13 @@ String::size_type String::rfind(char ch, size_type pos) const {
     else { return npos; }
 }
 
-int String::compare(const char* other, bool no_case) const {
+int String::compare(const char* other, const bool no_case) const {
     if(no_case)
         return doctest::stricmp(c_str(), other);
     return std::strcmp(c_str(), other);
 }
 
-int String::compare(const String& other, bool no_case) const {
+int String::compare(const String& other, const bool no_case) const {
     return compare(other.c_str(), no_case);
 }
 
@@ -3826,14 +3822,14 @@ namespace {
 } // namespace
 
 namespace Color {
-    std::ostream& operator<<(std::ostream& s, Color::Enum code) {
+    std::ostream& operator<<(std::ostream& s, const Color::Enum code) {
         color_to_stream(s, code);
         return s;
     }
 } // namespace Color
 
 // clang-format off
-const char* assertString(assertType::Enum at) {
+const char* assertString(const assertType::Enum at) {
     DOCTEST_MSVC_SUPPRESS_WARNING_WITH_PUSH(4061) // enum 'x' in switch of enum 'y' is not explicitly handled
     #define DOCTEST_GENERATE_ASSERT_TYPE_CASE(assert_type) case assertType::DT_ ## assert_type: return #assert_type
     #define DOCTEST_GENERATE_ASSERT_TYPE_CASES(assert_type) \
@@ -3873,7 +3869,7 @@ const char* assertString(assertType::Enum at) {
 }
 // clang-format on
 
-const char* failureString(assertType::Enum at) {
+const char* failureString (const assertType::Enum at) {
     if(at & assertType::is_warn) //!OCLINT bitwise operator in conditional
         return "WARNING";
     if(at & assertType::is_check) //!OCLINT bitwise operator in conditional
@@ -3889,7 +3885,7 @@ DOCTEST_GCC_SUPPRESS_WARNING_WITH_PUSH("-Wnull-dereference")
 const char* skipPathFromFilename(const char* file) {
 #ifndef DOCTEST_CONFIG_DISABLE
     if(getContextOptions()->no_path_in_filenames) {
-        auto back    = std::strrchr(file, '\\');
+        const auto back    = std::strrchr(file, '\\');
         auto forward = std::strrchr(file, '/');
         if(back || forward) {
             if(back > forward)
@@ -3904,7 +3900,7 @@ const char* skipPathFromFilename(const char* file) {
         {
             const auto prefix_start = pos;
             pos = std::min(prefixes.find(separator, prefix_start), prefixes.size());
-            
+
             const auto prefix_size = pos - prefix_start;
             if(prefix_size > longest_match)
             {
@@ -3966,61 +3962,61 @@ String toString(String in) { return in; }
 
 String toString(std::nullptr_t) { return "nullptr"; }
 
-String toString(bool in) { return in ? "true" : "false"; }
+String toString (const bool in) { return in ? "true" : "false"; }
 
-String toString(float in) { return toStreamLit(in); }
-String toString(double in) { return toStreamLit(in); }
-String toString(double long in) { return toStreamLit(in); }
+String toString (const float in) { return toStreamLit(in); }
+String toString (const double in) { return toStreamLit(in); }
+String toString (const double long in) { return toStreamLit(in); }
 
-String toString(char in) { return toStreamLit(static_cast<signed>(in)); }
-String toString(char signed in) { return toStreamLit(static_cast<signed>(in)); }
-String toString(char unsigned in) { return toStreamLit(static_cast<unsigned>(in)); }
-String toString(short in) { return toStreamLit(in); }
-String toString(short unsigned in) { return toStreamLit(in); }
-String toString(signed in) { return toStreamLit(in); }
-String toString(unsigned in) { return toStreamLit(in); }
-String toString(long in) { return toStreamLit(in); }
-String toString(long unsigned in) { return toStreamLit(in); }
-String toString(long long in) { return toStreamLit(in); }
-String toString(long long unsigned in) { return toStreamLit(in); }
+String toString (const char in) { return toStreamLit(static_cast<signed>(in)); }
+String toString (const char signed in) { return toStreamLit(static_cast<signed>(in)); }
+String toString (const char unsigned in) { return toStreamLit(static_cast<unsigned>(in)); }
+String toString (const short in) { return toStreamLit(in); }
+String toString (const short unsigned in) { return toStreamLit(in); }
+String toString (const signed in) { return toStreamLit(in); }
+String toString (const unsigned in) { return toStreamLit(in); }
+String toString (const long in) { return toStreamLit(in); }
+String toString (const long unsigned in) { return toStreamLit(in); }
+String toString (const long long in) { return toStreamLit(in); }
+String toString (const long long unsigned in) { return toStreamLit(in); }
 
-Approx::Approx(double value)
+Approx::Approx (const double value)
         : m_epsilon(static_cast<double>(std::numeric_limits<float>::epsilon()) * 100)
         , m_scale(1.0)
         , m_value(value) {}
 
-Approx Approx::operator()(double value) const {
+Approx Approx::operator() (const double value) const {
     Approx approx(value);
     approx.epsilon(m_epsilon);
     approx.scale(m_scale);
     return approx;
 }
 
-Approx& Approx::epsilon(double newEpsilon) {
+Approx& Approx::epsilon (const double newEpsilon) {
     m_epsilon = newEpsilon;
     return *this;
 }
-Approx& Approx::scale(double newScale) {
+Approx& Approx::scale (const double newScale) {
     m_scale = newScale;
     return *this;
 }
 
-bool operator==(double lhs, const Approx& rhs) {
+bool operator== (const double lhs, const Approx& rhs) {
     // Thanks to Richard Harris for his help refining this formula
     return std::fabs(lhs - rhs.m_value) <
            rhs.m_epsilon * (rhs.m_scale + std::max<double>(std::fabs(lhs), std::fabs(rhs.m_value)));
 }
-bool operator==(const Approx& lhs, double rhs) { return operator==(rhs, lhs); }
-bool operator!=(double lhs, const Approx& rhs) { return !operator==(lhs, rhs); }
-bool operator!=(const Approx& lhs, double rhs) { return !operator==(rhs, lhs); }
-bool operator<=(double lhs, const Approx& rhs) { return lhs < rhs.m_value || lhs == rhs; }
-bool operator<=(const Approx& lhs, double rhs) { return lhs.m_value < rhs || lhs == rhs; }
-bool operator>=(double lhs, const Approx& rhs) { return lhs > rhs.m_value || lhs == rhs; }
-bool operator>=(const Approx& lhs, double rhs) { return lhs.m_value > rhs || lhs == rhs; }
-bool operator<(double lhs, const Approx& rhs) { return lhs < rhs.m_value && lhs != rhs; }
-bool operator<(const Approx& lhs, double rhs) { return lhs.m_value < rhs && lhs != rhs; }
-bool operator>(double lhs, const Approx& rhs) { return lhs > rhs.m_value && lhs != rhs; }
-bool operator>(const Approx& lhs, double rhs) { return lhs.m_value > rhs && lhs != rhs; }
+bool operator==(const Approx& lhs, const double rhs) { return operator==(rhs, lhs); }
+bool operator!= (const double lhs, const Approx& rhs) { return !operator==(lhs, rhs); }
+bool operator!=(const Approx& lhs, const double rhs) { return !operator==(rhs, lhs); }
+bool operator<= (const double lhs, const Approx& rhs) { return lhs < rhs.m_value || lhs == rhs; }
+bool operator<=(const Approx& lhs, const double rhs) { return lhs.m_value < rhs || lhs == rhs; }
+bool operator>= (const double lhs, const Approx& rhs) { return lhs > rhs.m_value || lhs == rhs; }
+bool operator>=(const Approx& lhs, const double rhs) { return lhs.m_value > rhs || lhs == rhs; }
+bool operator< (const double lhs, const Approx& rhs) { return lhs < rhs.m_value && lhs != rhs; }
+bool operator<(const Approx& lhs, const double rhs) { return lhs.m_value < rhs && lhs != rhs; }
+bool operator> (const double lhs, const Approx& rhs) { return lhs > rhs.m_value && lhs != rhs; }
+bool operator>(const Approx& lhs, const double rhs) { return lhs.m_value > rhs && lhs != rhs; }
 
 String toString(const Approx& in) {
     return "Approx( " + doctest::toString(in.m_value) + " )";
@@ -4038,9 +4034,9 @@ template struct DOCTEST_INTERFACE_DEF IsNaN<double>;
 template struct DOCTEST_INTERFACE_DEF IsNaN<long double>;
 template <typename F>
 String toString(IsNaN<F> in) { return String(in.flipped ? "! " : "") + "IsNaN( " + doctest::toString(in.value) + " )"; }
-String toString(IsNaN<float> in) { return toString<float>(in); }
-String toString(IsNaN<double> in) { return toString<double>(in); }
-String toString(IsNaN<double long> in) { return toString<double long>(in); }
+String toString (const IsNaN<float> in) { return toString<float>(in); }
+String toString (const IsNaN<double> in) { return toString<double>(in); }
+String toString (const IsNaN<double long> in) { return toString<double long>(in); }
 
 } // namespace doctest
 
@@ -4108,7 +4104,7 @@ namespace detail {
     for(auto& curr_rep : g_cs->reporters_currently_used)                                           \
     curr_rep->function(__VA_ARGS__)
 
-    bool checkIfShouldThrow(assertType::Enum at) {
+    bool checkIfShouldThrow (const assertType::Enum at) {
         if(at & assertType::is_require) //!OCLINT bitwise operator in conditional
             return true;
 
@@ -4135,7 +4131,7 @@ namespace {
     using namespace detail;
     // matching of a string against a wildcard mask (case sensitivity configurable) taken from
     // https://www.codeproject.com/Articles/1088/Wildcard-string-compare-globbing
-    int wildcmp(const char* str, const char* wild, bool caseSensitive) {
+    int wildcmp(const char* str, const char* wild, const bool caseSensitive) {
         const char* cp = str;
         const char* mp = wild;
 
@@ -4172,8 +4168,8 @@ namespace {
     }
 
     // checks if the name matches any of the filters (and can be configured what to do when empty)
-    bool matchesAny(const char* name, const std::vector<String>& filters, bool matchEmpty,
-        bool caseSensitive) {
+    bool matchesAny(const char* name, const std::vector<String>& filters,
+                const bool matchEmpty, const bool caseSensitive) {
         if (filters.empty() && matchEmpty)
             return true;
         for (auto& curr : filters)
@@ -4183,7 +4179,7 @@ namespace {
     }
 
     DOCTEST_NO_SANITIZE_INTEGER
-    unsigned long long hash(unsigned long long a, unsigned long long b) {
+    unsigned long long hash (const unsigned long long a, const unsigned long long b) {
         return (a << 5) + b;
     }
 
@@ -4201,9 +4197,9 @@ namespace {
         return hash(hash(hash(sig.m_file), hash(sig.m_name.c_str())), sig.m_line);
     }
 
-    unsigned long long hash(const std::vector<SubcaseSignature>& sigs, size_t count) {
+    unsigned long long hash(const std::vector<SubcaseSignature>& sigs, const size_t count) {
         unsigned long long running = 0;
-        auto end = sigs.begin() + count;
+      const auto end = sigs.begin() + count;
         for (auto it = sigs.begin(); it != end; it++) {
             running = hash(running, hash(*it));
         }
@@ -4229,7 +4225,7 @@ namespace detail {
         return false;
     }
 
-    Subcase::Subcase(const String& name, const char* file, int line)
+    Subcase::Subcase(const String& name, const char* file, const int line)
             : m_signature({name, file, line}) {
         if (!g_cs->reachedLeaf) {
             if (g_cs->nextSubcaseStack.size() <= g_cs->subcaseStack.size()
@@ -4249,8 +4245,9 @@ namespace detail {
                 m_entered = true;
                 DOCTEST_ITERATE_THROUGH_REPORTERS(subcase_start, m_signature);
             } else if (g_cs->nextSubcaseStack.size() <= g_cs->currentSubcaseDepth
-                    && g_cs->fullyTraversedSubcases.find(hash(hash(g_cs->subcaseStack, g_cs->currentSubcaseDepth), hash(m_signature)))
-                    == g_cs->fullyTraversedSubcases.end()) {
+                    && !g_cs->fullyTraversedSubcases.contains (hash (
+                         hash (g_cs->subcaseStack, g_cs->currentSubcaseDepth),
+                         hash (m_signature)))) {
                 if (checkFilters()) { return; }
                 // This subcase is part of the one to be executed next.
                 g_cs->nextSubcaseStack.clear();
@@ -4303,11 +4300,11 @@ namespace detail {
 
     Subcase::operator bool() const { return m_entered; }
 
-    Result::Result(bool passed, const String& decomposition)
+    Result::Result (const bool passed, const String& decomposition)
             : m_passed(passed)
             , m_decomp(decomposition) {}
 
-    ExpressionDecomposer::ExpressionDecomposer(assertType::Enum at)
+    ExpressionDecomposer::ExpressionDecomposer (const assertType::Enum at)
             : m_at(at) {}
 
     TestSuite& TestSuite::operator*(const char* in) {
@@ -4315,8 +4312,9 @@ namespace detail {
         return *this;
     }
 
-    TestCase::TestCase(funcType test, const char* file, unsigned line, const TestSuite& test_suite,
-                       const String& type, int template_id) {
+    TestCase::TestCase (const funcType test, const char* file,
+                        const unsigned line, const TestSuite& test_suite,
+                       const String& type, const int template_id) {
         m_file              = file;
         m_line              = line;
         m_name              = nullptr; // will be later overridden in operator*
@@ -4415,7 +4413,7 @@ namespace {
     }
 
     DOCTEST_CLANG_SUPPRESS_WARNING_WITH_PUSH("-Wdeprecated-declarations")
-    void color_to_stream(std::ostream& s, Color::Enum code) {
+    void color_to_stream(std::ostream& s, const Color::Enum code) {
         static_cast<void>(s);    // for DOCTEST_CONFIG_COLORS_NONE or DOCTEST_CONFIG_COLORS_WINDOWS
         static_cast<void>(code); // for DOCTEST_CONFIG_COLORS_NONE
 #ifdef DOCTEST_CONFIG_COLORS_ANSI
@@ -4498,8 +4496,8 @@ namespace {
     String translateActiveException() {
 #ifndef DOCTEST_CONFIG_NO_EXCEPTIONS
         String res;
-        auto&  translators = getExceptionTranslators();
-        for(auto& curr : translators)
+      const auto &  translators = getExceptionTranslators();
+        for (const auto & curr : translators)
             if(curr->translate(res))
                 return res;
         // clang-format off
@@ -4595,7 +4593,7 @@ namespace detail {
 #endif // DOCTEST_IS_DEBUGGER_ACTIVE
 
     void registerExceptionTranslatorImpl(const IExceptionTranslator* et) {
-        if(std::find(getExceptionTranslators().begin(), getExceptionTranslators().end(), et) ==
+        if(std::ranges::find (getExceptionTranslators (), et) ==
            getExceptionTranslators().end())
             getExceptionTranslators().push_back(et);
     }
@@ -4822,10 +4820,10 @@ namespace {
         static size_t           altStackSize;
         static char*            altStackMem;
 
-        static void handleSignal(int sig) {
+        static void handleSignal (const int sig) {
             const char* name = "<unknown signal>";
             for(std::size_t i = 0; i < DOCTEST_COUNTOF(signalDefs); ++i) {
-                SignalDefs& def = signalDefs[i];
+                const SignalDefs & def = signalDefs[i];
                 if(sig == def.id) {
                     name = def.name;
                     break;
@@ -4894,12 +4892,12 @@ namespace {
 #define DOCTEST_OUTPUT_DEBUG_STRING(text)
 #endif // Platform
 
-    void addAssert(assertType::Enum at) {
+    void addAssert (const assertType::Enum at) {
         if((at & assertType::is_warn) == 0) //!OCLINT bitwise operator in conditional
             g_cs->numAssertsCurrentTest_atomic++;
     }
 
-    void addFailedAssert(assertType::Enum at) {
+    void addFailedAssert (const assertType::Enum at) {
         if((at & assertType::is_warn) == 0) //!OCLINT bitwise operator in conditional
             g_cs->numAssertsFailedCurrentTest_atomic++;
     }
@@ -4924,7 +4922,8 @@ namespace {
 #endif // DOCTEST_CONFIG_POSIX_SIGNALS || DOCTEST_CONFIG_WINDOWS_SEH
 } // namespace
 
-AssertData::AssertData(assertType::Enum at, const char* file, int line, const char* expr,
+AssertData::AssertData (const assertType::Enum at, const char* file,
+                        const int line, const char* expr,
     const char* exception_type, const StringContains& exception_string)
     : m_test_case(g_cs->currentTest), m_at(at), m_file(file), m_line(line), m_expr(expr),
     m_failed(true), m_threw(false), m_threw_as(false), m_exception_type(exception_type),
@@ -4936,11 +4935,13 @@ AssertData::AssertData(assertType::Enum at, const char* file, int line, const ch
 }
 
 namespace detail {
-    ResultBuilder::ResultBuilder(assertType::Enum at, const char* file, int line, const char* expr,
+    ResultBuilder::ResultBuilder (const assertType::Enum at, const char* file,
+                              const int line, const char* expr,
                                  const char* exception_type, const String& exception_string)
         : AssertData(at, file, line, expr, exception_type, exception_string) { }
 
-    ResultBuilder::ResultBuilder(assertType::Enum at, const char* file, int line, const char* expr,
+    ResultBuilder::ResultBuilder (const assertType::Enum at, const char* file,
+                              const int line, const char* expr,
         const char* exception_type, const Contains& exception_string)
         : AssertData(at, file, line, expr, exception_type, exception_string) { }
 
@@ -4996,9 +4997,9 @@ namespace detail {
             std::abort();
     }
 
-    bool decomp_assert(assertType::Enum at, const char* file, int line, const char* expr,
+    bool decomp_assert (const assertType::Enum at, const char* file, const int line, const char* expr,
                        const Result& result) {
-        bool failed = !result.m_passed;
+      const bool failed = !result.m_passed;
 
         // ###################################################################################
         // IF THE DEBUGGER BREAKS HERE - GO 1 LEVEL UP IN THE CALLSTACK FOR THE FAILING ASSERT
@@ -5009,7 +5010,8 @@ namespace detail {
         return !failed;
     }
 
-    MessageBuilder::MessageBuilder(const char* file, int line, assertType::Enum severity) {
+    MessageBuilder::MessageBuilder(const char* file, const int line,
+                                    const assertType::Enum severity) {
         m_stream   = tlssPush();
         m_file     = file;
         m_line     = line;
@@ -5158,7 +5160,7 @@ using uchar = unsigned char;
 
 namespace {
 
-    size_t trailingBytes(unsigned char c) {
+    size_t trailingBytes(const unsigned char c) {
         if ((c & 0xE0) == 0xC0) {
             return 2;
         }
@@ -5171,7 +5173,7 @@ namespace {
         DOCTEST_INTERNAL_ERROR("Invalid multibyte utf-8 start byte encountered");
     }
 
-    uint32_t headerValue(unsigned char c) {
+    uint32_t headerValue(const unsigned char c) {
         if ((c & 0xE0) == 0xC0) {
             return c & 0x1F;
         }
@@ -5184,8 +5186,8 @@ namespace {
         DOCTEST_INTERNAL_ERROR("Invalid multibyte utf-8 start byte encountered");
     }
 
-    void hexEscapeChar(std::ostream& os, unsigned char c) {
-        std::ios_base::fmtflags f(os.flags());
+    void hexEscapeChar(std::ostream& os, const unsigned char c) {
+        const std::ios_base::fmtflags f(os.flags());
         os << "\\x"
             << std::uppercase << std::hex << std::setfill('0') << std::setw(2)
             << static_cast<int>(c);
@@ -5194,7 +5196,7 @@ namespace {
 
 } // anonymous namespace
 
-    XmlEncode::XmlEncode( std::string const& str, ForWhat forWhat )
+    XmlEncode::XmlEncode( std::string const& str, const ForWhat forWhat )
     :   m_str( str ),
         m_forWhat( forWhat )
     {}
@@ -5204,7 +5206,7 @@ namespace {
         // (see: https://www.w3.org/TR/xml/#syntax)
 
         for( std::size_t idx = 0; idx < m_str.size(); ++ idx ) {
-            uchar c = m_str[idx];
+            const uchar c = m_str[idx];
             switch (c) {
             case '<':   os << "&lt;"; break;
             case '&':   os << "&amp;"; break;
@@ -5252,7 +5254,7 @@ namespace {
                     break;
                 }
 
-                auto encBytes = trailingBytes(c);
+                const auto encBytes = trailingBytes(c);
                 // Are there enough bytes left to avoid accessing out-of-bounds memory?
                 if (idx + encBytes - 1 >= m_str.size()) {
                     hexEscapeChar(os, c);
@@ -5264,7 +5266,7 @@ namespace {
                 bool valid = true;
                 uint32_t value = headerValue(c);
                 for (std::size_t n = 1; n < encBytes; ++n) {
-                    uchar nc = m_str[idx + n];
+                    const uchar nc = m_str[idx + n];
                     valid &= ((nc & 0xC0) == 0x80);
                     value = (value << 6) | (nc & 0x3F);
                 }
@@ -5321,7 +5323,7 @@ namespace {
             m_writer->endElement();
     }
 
-    XmlWriter::ScopedElement& XmlWriter::ScopedElement::writeText( std::string const& text, bool indent ) {
+    XmlWriter::ScopedElement& XmlWriter::ScopedElement::writeText( std::string const& text, const bool indent ) {
         m_writer->writeText( text, indent );
         return *this;
     }
@@ -5379,14 +5381,14 @@ namespace {
         return *this;
     }
 
-    XmlWriter& XmlWriter::writeAttribute( std::string const& name, bool attribute ) {
+    XmlWriter& XmlWriter::writeAttribute( std::string const& name, const bool attribute ) {
         m_os << ' ' << name << "=\"" << ( attribute ? "true" : "false" ) << '"';
         return *this;
     }
 
-    XmlWriter& XmlWriter::writeText( std::string const& text, bool indent ) {
+    XmlWriter& XmlWriter::writeText( std::string const& text, const bool indent ) {
         if( !text.empty() ){
-            bool tagWasOpen = m_tagIsOpen;
+            const bool tagWasOpen = m_tagIsOpen;
             ensureTagClosed();
             if( tagWasOpen && indent )
                 m_os << m_indent;
@@ -5451,9 +5453,9 @@ namespace {
                 , opt(co) {}
 
         void log_contexts() {
-            int num_contexts = get_num_active_contexts();
+          const int num_contexts = get_num_active_contexts();
             if(num_contexts) {
-                auto              contexts = get_active_contexts();
+              const auto              contexts = get_active_contexts();
                 std::stringstream ss;
                 for(int i = 0; i < num_contexts; ++i) {
                     contexts[i]->stringify(&ss);
@@ -5463,7 +5465,7 @@ namespace {
             }
         }
 
-        unsigned line(unsigned l) const { return opt.no_line_numbers ? 0 : l; }
+        unsigned line (const unsigned l) const { return opt.no_line_numbers ? 0 : l; }
 
         void test_case_start_impl(const TestCaseData& in) {
             bool open_ts_tag = false;
@@ -5824,7 +5826,7 @@ namespace {
                 : xml(*co.cout)
                 , opt(co) {}
 
-        unsigned line(unsigned l) const { return opt.no_line_numbers ? 0 : l; }
+        unsigned line (const unsigned l) const { return opt.no_line_numbers ? 0 : l; }
 
         // =========================================================================================
         // WHAT FOLLOWS ARE OVERRIDES OF THE VIRTUAL METHODS OF THE REPORTER INTERFACE
@@ -5951,9 +5953,9 @@ namespace {
         void test_case_skipped(const TestCaseData&) override {}
 
         void log_contexts(std::ostringstream& s) {
-            int num_contexts = get_num_active_contexts();
+          const int num_contexts = get_num_active_contexts();
             if(num_contexts) {
-                auto contexts = get_active_contexts();
+              const auto contexts = get_active_contexts();
 
                 s << "  logged: ";
                 for(int i = 0; i < num_contexts; ++i) {
@@ -5970,7 +5972,7 @@ namespace {
     struct Whitespace
     {
         int nrSpaces;
-        explicit Whitespace(int nr)
+        explicit Whitespace (const int nr)
                 : nrSpaces(nr) {}
     };
 
@@ -6010,28 +6012,29 @@ namespace {
                  "\n";
         }
 
-        const char* getSuccessOrFailString(bool success, assertType::Enum at,
+        const char* getSuccessOrFailString (const bool success, const assertType::Enum at,
                                            const char* success_str) {
             if(success)
                 return success_str;
             return failureString(at);
         }
 
-        Color::Enum getSuccessOrFailColor(bool success, assertType::Enum at) {
+        Color::Enum getSuccessOrFailColor (const bool success, const assertType::Enum at) {
             return success ? Color::BrightGreen :
                              (at & assertType::is_warn) ? Color::Yellow : Color::Red;
         }
 
-        void successOrFailColoredStringToStream(bool success, assertType::Enum at,
+        void successOrFailColoredStringToStream (const bool success,
+                                            const assertType::Enum at,
                                                 const char* success_str = "SUCCESS") {
             s << getSuccessOrFailColor(success, at)
               << getSuccessOrFailString(success, at, success_str) << ": ";
         }
 
         void log_contexts() {
-            int num_contexts = get_num_active_contexts();
+          const int num_contexts = get_num_active_contexts();
             if(num_contexts) {
-                auto contexts = get_active_contexts();
+              const auto contexts = get_active_contexts();
 
                 s << Color::None << "  logged: ";
                 for(int i = 0; i < num_contexts; ++i) {
@@ -6045,7 +6048,7 @@ namespace {
         }
 
         // this was requested to be made virtual so users could override it
-        virtual void file_line_to_stream(const char* file, int line,
+        virtual void file_line_to_stream(const char* file, const int line,
                                         const char* tail = "") {
             s << Color::LightGrey << skipPathFromFilename(file) << (opt.gnu_file_line ? ":" : "(")
             << (opt.no_line_numbers ? 0 : line) // 0 or the real num depending on the option
@@ -6099,7 +6102,7 @@ namespace {
         }
 
         void printHelp() {
-            int sizePrefixDisplay = static_cast<int>(strlen(DOCTEST_OPTIONS_PREFIX_DISPLAY));
+          const int sizePrefixDisplay = static_cast<int>(strlen(DOCTEST_OPTIONS_PREFIX_DISPLAY));
             printVersion();
             // clang-format off
             s << Color::Cyan << "[doctest]\n" << Color::None;
@@ -6288,9 +6291,9 @@ namespace {
             separator_to_stream();
             s << std::dec;
 
-            auto totwidth = int(std::ceil(log10(static_cast<double>(std::max(p.numTestCasesPassingFilters, static_cast<unsigned>(p.numAsserts))) + 1)));
-            auto passwidth = int(std::ceil(log10(static_cast<double>(std::max(p.numTestCasesPassingFilters - p.numTestCasesFailed, static_cast<unsigned>(p.numAsserts - p.numAssertsFailed))) + 1)));
-            auto failwidth = int(std::ceil(log10(static_cast<double>(std::max(p.numTestCasesFailed, static_cast<unsigned>(p.numAssertsFailed))) + 1)));
+            const auto totwidth = int(std::ceil(log10(static_cast<double>(std::max(p.numTestCasesPassingFilters, static_cast<unsigned>(p.numAsserts))) + 1)));
+            const auto passwidth = int(std::ceil(log10(static_cast<double>(std::max(p.numTestCasesPassingFilters - p.numTestCasesFailed, static_cast<unsigned>(p.numAsserts - p.numAssertsFailed))) + 1)));
+            const auto failwidth = int(std::ceil(log10(static_cast<double>(std::max(p.numTestCasesFailed, static_cast<unsigned>(p.numAssertsFailed))) + 1)));
             const bool anythingFailed = p.numTestCasesFailed > 0 || p.numAssertsFailed > 0;
             s << Color::Cyan << "[doctest] " << Color::None << "test cases: " << std::setw(totwidth)
               << p.numTestCasesPassingFilters << " | "
@@ -6377,9 +6380,9 @@ namespace {
             s << Color::Red << (e.is_crash ? "test case CRASHED: " : "test case THREW exception: ")
               << Color::Cyan << e.error_string << "\n";
 
-            int num_stringified_contexts = get_num_stringified_contexts();
+            const int num_stringified_contexts = get_num_stringified_contexts();
             if(num_stringified_contexts) {
-                auto stringified_contexts = get_stringified_contexts();
+                const auto stringified_contexts = get_stringified_contexts();
                 s << Color::None << "  logged: ";
                 for(int i = num_stringified_contexts; i > 0; --i) {
                     s << (i == num_stringified_contexts ? "" : "          ")
@@ -6474,10 +6477,10 @@ namespace {
 #endif // DOCTEST_PLATFORM_WINDOWS
 
     // the implementation of parseOption()
-    bool parseOptionImpl(int argc, const char* const* argv, const char* pattern, String* value) {
+    bool parseOptionImpl (const int argc, const char* const* argv, const char* pattern, String* value) {
         // going from the end to the beginning and stopping on the first occurrence from the end
         for(int i = argc; i > 0; --i) {
-            auto index = i - 1;
+            const auto index = i - 1;
             auto temp = std::strstr(argv[index], pattern);
             if(temp && (value || strlen(temp) == strlen(pattern))) { //!OCLINT prefer early exits and continue
                 // eliminate matches in which the chars before the option are not '-'
@@ -6509,7 +6512,7 @@ namespace {
     }
 
     // parses an option and returns the string after the '=' character
-    bool parseOption(int argc, const char* const* argv, const char* pattern, String* value = nullptr,
+    bool parseOption (const int argc, const char* const* argv, const char* pattern, String* value = nullptr,
                      const String& defaultVal = String()) {
         if(value)
             *value = defaultVal;
@@ -6522,19 +6525,19 @@ namespace {
     }
 
     // locates a flag on the command line
-    bool parseFlag(int argc, const char* const* argv, const char* pattern) {
+    bool parseFlag (const int argc, const char* const* argv, const char* pattern) {
         return parseOption(argc, argv, pattern);
     }
 
     // parses a comma separated list of words after a pattern in one of the arguments in argv
-    bool parseCommaSepArgs(int argc, const char* const* argv, const char* pattern,
+    bool parseCommaSepArgs (const int argc, const char* const* argv, const char* pattern,
                            std::vector<String>& res) {
         String filtersString;
         if(parseOption(argc, argv, pattern, &filtersString)) {
             // tokenize with "," as a separator, unless escaped with backslash
             std::ostringstream s;
             auto flush = [&s, &res]() {
-                auto string = s.str();
+                const auto string = s.str();
                 if(string.size() > 0) {
                     res.push_back(string.c_str());
                 }
@@ -6545,7 +6548,7 @@ namespace {
             const char* current = filtersString.c_str();
             const char* end = current + strlen(current);
             while(current != end) {
-                char character = *current++;
+                const char character = *current++;
                 if(seenBackslash) {
                     seenBackslash = false;
                     if(character == ',' || character == '\\') {
@@ -6579,7 +6582,7 @@ namespace {
     };
 
     // parses an int/bool option from the command line
-    bool parseIntOption(int argc, const char* const* argv, const char* pattern, optionType type,
+    bool parseIntOption (const int argc, const char* const* argv, const char* pattern, const optionType type,
                         int& res) {
         String parsedValue;
         if(!parseOption(argc, argv, pattern, &parsedValue))
@@ -6587,8 +6590,9 @@ namespace {
 
         if(type) {
             // integer
-            // TODO: change this to use std::stoi or something else! currently it uses undefined behavior - assumes '0' on failed parse...
-            int theInt = std::atoi(parsedValue.c_str());
+            // TODO: change this to use std::stoi or something else! currently
+            // it uses undefined behavior - assumes '0' on failed parse...
+            const int theInt = std::atoi(parsedValue.c_str());
             if (theInt != 0) {
                 res = theInt; //!OCLINT parameter reassignment
                 return true;
@@ -6614,7 +6618,7 @@ namespace {
     }
 } // namespace
 
-Context::Context(int argc, const char* const* argv)
+Context::Context (const int argc, const char* const* argv)
         : p(new detail::ContextState) {
     parseArgs(argc, argv, true);
     if(argc)
@@ -6627,14 +6631,15 @@ Context::~Context() {
     delete p;
 }
 
-void Context::applyCommandLine(int argc, const char* const* argv) {
+void Context::applyCommandLine (const int argc, const char* const* argv) {
     parseArgs(argc, argv);
     if(argc)
         p->binary_name = argv[0];
 }
 
 // parses args
-void Context::parseArgs(int argc, const char* const* argv, bool withDefaults) {
+void Context::parseArgs (const int argc, const char* const* argv,
+                    const bool withDefaults) {
     using namespace detail;
 
     // clang-format off
@@ -6770,19 +6775,19 @@ void Context::clearFilters() {
 }
 
 // allows the user to override procedurally the bool options from the command line
-void Context::setOption(const char* option, bool value) {
+void Context::setOption(const char* option, const bool value) {
     setOption(option, value ? "true" : "false");
 }
 
 // allows the user to override procedurally the int options from the command line
-void Context::setOption(const char* option, int value) {
+void Context::setOption(const char* option, const int value) {
     setOption(option, toString(value).c_str());
 }
 
 // allows the user to override procedurally the string options from the command line
 void Context::setOption(const char* option, const char* value) {
     auto argv   = String("-") + option + "=" + value;
-    auto lvalue = argv.c_str();
+  const auto lvalue = argv.c_str();
     parseArgs(1, &lvalue);
 }
 
@@ -6791,7 +6796,7 @@ bool Context::shouldExit() { return p->exit; }
 
 void Context::setAsDefaultForAssertsOutOfTestCases() { g_cs = p; }
 
-void Context::setAssertHandler(detail::assert_handler ah) { p->ah = ah; }
+void Context::setAssertHandler (const detail::assert_handler ah) { p->ah = ah; }
 
 void Context::setCout(std::ostream* out) { p->cout = out; }
 
@@ -6805,9 +6810,9 @@ private:
         char buf[1024];
 
     protected:
-        std::streamsize xsputn(const char_type*, std::streamsize count) override { return count; }
+        std::streamsize xsputn(const char_type*, const std::streamsize count) override { return count; }
 
-        int_type overflow(int_type ch) override {
+        int_type overflow (const int_type ch) override {
             setp(std::begin(buf), std::end(buf));
             return traits_type::not_eof(ch);
         }
@@ -6862,7 +6867,7 @@ int Context::run() {
         is_running_in_test = false;
 
         // we have to free the reporters which were allocated when the run started
-        for(auto& curr : p->reporters_currently_used)
+        for (const auto & curr : p->reporters_currently_used)
             delete curr;
         p->reporters_currently_used.clear();
 
@@ -6907,11 +6912,11 @@ int Context::run() {
     // sort the collected records
     if(!testArray.empty()) {
         if(p->order_by.compare("file", true) == 0) {
-            std::sort(testArray.begin(), testArray.end(), fileOrderComparator);
+            std::ranges::sort (testArray, fileOrderComparator);
         } else if(p->order_by.compare("suite", true) == 0) {
-            std::sort(testArray.begin(), testArray.end(), suiteOrderComparator);
+            std::ranges::sort (testArray, suiteOrderComparator);
         } else if(p->order_by.compare("name", true) == 0) {
-            std::sort(testArray.begin(), testArray.end(), nameOrderComparator);
+            std::ranges::sort (testArray, nameOrderComparator);
         } else if(p->order_by.compare("rand", true) == 0) {
             std::srand(p->rand_seed);
 
@@ -7096,7 +7101,8 @@ const String* IReporter::get_stringified_contexts() {
 }
 
 namespace detail {
-    void registerReporterImpl(const char* name, int priority, reporterCreatorFunc c, bool isReporter) {
+    void registerReporterImpl(const char* name, int priority, reporterCreatorFunc c,
+                      const bool isReporter) {
         if(isReporter)
             getReporters().insert(reporterMap::value_type(reporterMap::key_type(priority, name), c));
         else
@@ -7110,7 +7116,7 @@ namespace detail {
 
 #ifdef DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 DOCTEST_MSVC_SUPPRESS_WARNING_WITH_PUSH(4007) // 'function' : must be 'attribute' - see issue #182
-int main(int argc, char** argv) { return doctest::Context(argc, argv).run(); }
+int main (const int argc, char** argv) { return doctest::Context(argc, argv).run(); }
 DOCTEST_MSVC_SUPPRESS_WARNING_POP
 #endif // DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 

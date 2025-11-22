@@ -2,7 +2,6 @@
 
 #include "terminal-layout.hpp"
 
-#include <cstdint>
 #include <fmt/color.h>
 #include <fmt/format.h>
 #include <string_view>
@@ -87,7 +86,7 @@ public:
 
   /// Write a single character
   Writer &
-  text (char ch)
+  text (const char ch)
   {
     buf_.push_back (ch);
     return *this;

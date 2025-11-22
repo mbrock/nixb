@@ -1,6 +1,6 @@
 project('libcoro', 'cpp',
   version : '0.15.0',
-  default_options : ['cpp_std=c++20']
+  default_options : ['cpp_std=gnu++23']
 )
 
 # libcoro is NOT header-only, it has implementation files
@@ -17,7 +17,7 @@ libcoro_sources = files(
   'src/semaphore.cpp',
   'src/sync_wait.cpp',
   'src/thread_pool.cpp',
-  'src/detail/io_notifier_epoll.cpp',
+  'src/detail/io_notifier_kqueue.cpp',
   'src/detail/pipe.cpp',
   'src/detail/task_self_deleting.cpp',
   'src/detail/timer_handle.cpp',

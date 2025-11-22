@@ -9,8 +9,8 @@ namespace detail
 {
 
 std::optional<std::size_t>
-find_next_diff_in_line (const DiffState &state, std::size_t y,
-                        std::size_t start_x) noexcept
+find_next_diff_in_line (const DiffState &state, const std::size_t y,
+                        const std::size_t start_x) noexcept
 {
   if (y >= state.back->height () || start_x >= state.back->width ())
     return std::nullopt;
@@ -22,8 +22,6 @@ find_next_diff_in_line (const DiffState &state, std::size_t y,
   const auto back_fgs = state.back->fgs_2d ();
   const auto front_bgs = state.front->bgs_2d ();
   const auto back_bgs = state.back->bgs_2d ();
-
-  std::optional<std::size_t> min_diff;
 
   // Scan row from start_x to end
   for (std::size_t x = start_x; x < state.back->width (); ++x)
@@ -40,16 +38,16 @@ find_next_diff_in_line (const DiffState &state, std::size_t y,
 }
 
 std::size_t
-find_run_end (const DiffState &state, std::size_t y, std::size_t start_x,
-              std::optional<Rgba8> run_fg,
-              std::optional<Rgba8> run_bg) noexcept
+find_run_end (const DiffState &state, const std::size_t y,
+              const std::size_t start_x, const std::optional<Rgba8> run_fg,
+              const std::optional<Rgba8> run_bg) noexcept
 {
   if (start_x + 1 >= state.back->width ())
     return start_x + 1;
 
   const auto back_fgs = state.back->fgs_2d ();
   const auto back_bgs = state.back->bgs_2d ();
-  const auto default_color = Raster::DEFAULT_COLOR;
+  constexpr auto default_color = Raster::DEFAULT_COLOR;
 
   std::size_t end_x = state.back->width (); // Default to end of line
 
@@ -148,7 +146,7 @@ diff_rasters (const Raster &front, const Raster &back)
           run.glyphs = back.glyphs ().subspan (idx, end_x - x);
 
           // Determine color changes needed
-          const auto default_color = Raster::DEFAULT_COLOR;
+          constexpr auto default_color = Raster::DEFAULT_COLOR;
 
           // Foreground color logic
           if (run_fg == default_color && state.current_fg.has_value ())

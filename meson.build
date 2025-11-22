@@ -1,7 +1,7 @@
 project('nixb', 'cpp',
   version : '0.1.0',
   default_options : [
-    'cpp_std=c++23',
+    'cpp_std=gnu++26',
     'warning_level=2',
     'werror=false',
     'b_ndebug=if-release',

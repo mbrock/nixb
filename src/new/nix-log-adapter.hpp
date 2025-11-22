@@ -50,15 +50,15 @@ public:
   void logEI (const nix::ErrorInfo &ei) override;
   void startActivity (nix::ActivityId act, nix::Verbosity lvl,
                       nix::ActivityType type, const std::string &text,
-                      const nix::Logger::Fields &fields,
+                      const Fields &fields,
                       nix::ActivityId parent) override;
   void stopActivity (nix::ActivityId act) override;
   void result (nix::ActivityId act, nix::ResultType type,
-               const nix::Logger::Fields &fields) override;
+               const Fields &fields) override;
 
 private:
   static std::vector<std::variant<int64_t, std::string>>
-  extract_fields (const nix::Logger::Fields &fields);
+  extract_fields (const Fields &fields);
 
   coro::queue<log_event> &queue_;
 };

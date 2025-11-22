@@ -1,6 +1,6 @@
 #include "ansi.hpp"
 
-#include <fmt/core.h>
+#include <iterator>
 
 namespace nxb::ansi
 {
@@ -8,7 +8,6 @@ namespace nxb::ansi
 namespace
 {
 constexpr std::string_view CSI = "\x1b[";
-constexpr std::string_view OSC = "\x1b]";
 }
 
 // ============================================================================
@@ -111,7 +110,7 @@ Writer::clear_line_to_cursor ()
 }
 
 Writer &
-Writer::set_scroll_region (RowSpan rows)
+Writer::set_scroll_region (const RowSpan rows)
 {
   return set_scroll_region (rows.first, rows.last);
 }
@@ -175,7 +174,7 @@ Writer::restore_cursor ()
 }
 
 Writer &
-Writer::fg (rgb color)
+Writer::fg (const rgb color)
 {
   return fg (color.r, color.g, color.b);
 }
@@ -188,13 +187,13 @@ Writer::fg (std::uint8_t r, std::uint8_t g, std::uint8_t b)
 }
 
 Writer &
-Writer::fg (color c)
+Writer::fg (const color c)
 {
   return fg (rgb (c));
 }
 
 Writer &
-Writer::bg (rgb color)
+Writer::bg (const rgb color)
 {
   return bg (color.r, color.g, color.b);
 }
@@ -207,7 +206,7 @@ Writer::bg (std::uint8_t r, std::uint8_t g, std::uint8_t b)
 }
 
 Writer &
-Writer::bg (color c)
+Writer::bg (const color c)
 {
   return bg (rgb (c));
 }
@@ -355,7 +354,7 @@ show_cursor ()
 }
 
 void
-set_scroll_region (RowSpan rows)
+set_scroll_region (const RowSpan rows)
 {
   set_scroll_region (rows.first, rows.last);
 }

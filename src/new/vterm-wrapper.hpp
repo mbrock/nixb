@@ -5,7 +5,6 @@
 
 #include <vterm.h>
 
-#include <cstdint>
 #include <experimental/mdspan>
 #include <memory>
 #include <optional>
@@ -27,7 +26,8 @@ struct Color
   }
 
   static Color
-  rgb (std::uint8_t r, std::uint8_t g, std::uint8_t b) noexcept
+  rgb (const std::uint8_t r, const std::uint8_t g,
+       const std::uint8_t b) noexcept
   {
     Color col;
     vterm_color_rgb (&col.c, r, g, b);
@@ -35,7 +35,7 @@ struct Color
   }
 
   static Color
-  indexed (std::uint8_t idx) noexcept
+  indexed (const std::uint8_t idx) noexcept
   {
     Color col;
     vterm_color_indexed (&col.c, idx);
@@ -116,7 +116,7 @@ class Terminal
 {
 public:
   /// Create a new terminal with given size
-  Terminal (int rows, int cols) : vt_ (vterm_new (rows, cols), &vterm_free)
+  Terminal (const int rows, const int cols) : vt_ (vterm_new (rows, cols), &vterm_free)
   {
     if (!vt_)
       throw std::runtime_error ("Failed to create VTerm");
@@ -132,16 +132,16 @@ public:
 
   /// Write ANSI sequences to the terminal
   void
-  write (std::string_view data)
+  write (const std::string_view data) const
   {
     vterm_input_write (vt_.get (), data.data (), data.size ());
   }
 
   /// Get a cell at the given position (0-based)
   [[nodiscard]] std::optional<Cell>
-  get_cell (int row, int col) const
+  get_cell (const int row, const int col) const
   {
-    VTermPos pos{ row, col };
+    const VTermPos pos{ row, col };
     VTermScreenCell cell;
 
     if (!vterm_screen_get_cell (screen_, pos, &cell))
@@ -152,7 +152,7 @@ public:
 
   /// Get entire row as cells (0-based row)
   [[nodiscard]] std::vector<Cell>
-  get_row (int row) const
+  get_row (const int row) const
   {
     int rows, cols;
     vterm_get_size (vt_.get (), &rows, &cols);
@@ -178,16 +178,17 @@ public:
 
   /// Get text from the screen (0-based coordinates)
   [[nodiscard]] std::string
-  get_text (int start_row, int start_col, int end_row, int end_col) const
+  get_text (const int start_row, const int start_col, const int end_row,
+            const int end_col) const
   {
-    VTermRect rect{ start_row, end_row + 1, start_col, end_col + 1 };
+    const VTermRect rect{ start_row, end_row + 1, start_col, end_col + 1 };
 
     // Allocate buffer (estimate: 4 bytes per cell for UTF-8)
-    std::size_t buf_size
+    const std::size_t buf_size
         = (end_row - start_row + 1) * (end_col - start_col + 1) * 4;
     std::string buffer (buf_size, '\0');
 
-    std::size_t written = vterm_screen_get_text (screen_, buffer.data (),
+    const std::size_t written = vterm_screen_get_text (screen_, buffer.data (),
                                                  buffer.size (), rect);
     buffer.resize (written);
 
@@ -205,7 +206,7 @@ public:
 
   /// Get a single row as text (0-based)
   [[nodiscard]] std::string
-  get_row_text (int row) const
+  get_row_text (const int row) const
   {
     int rows, cols;
     vterm_get_size (vt_.get (), &rows, &cols);
@@ -223,14 +224,14 @@ public:
 
   /// Resize terminal
   void
-  set_size (int rows, int cols)
+  set_size (const int rows, const int cols)
   {
     vterm_set_size (vt_.get (), rows, cols);
   }
 
   /// Reset terminal to initial state
   void
-  reset (bool hard = true)
+  reset (const bool hard = true)
   {
     vterm_screen_reset (screen_, hard ? 1 : 0);
   }
@@ -262,7 +263,7 @@ public:
     using const_cell_view_t
         = std::experimental::mdspan<const Cell, mdspan_extents>;
 
-    ScreenSnapshot (int r, int c) : cells (r * c), rows (r), cols (c) {}
+    ScreenSnapshot (const int r, const int c) : cells (r * c), rows (r), cols (c) {}
 
     /// Get 2D view of cells
     [[nodiscard]] cell_view_t
@@ -282,7 +283,7 @@ public:
     [[nodiscard]] bool
     all_of (Pred &&pred) const
     {
-      auto v = view ();
+      const auto v = view ();
       for (int r = 0; r < rows; ++r)
         {
           for (int c = 0; c < cols; ++c)
@@ -299,7 +300,7 @@ public:
     [[nodiscard]] bool
     any_of (Pred &&pred) const
     {
-      auto v = view ();
+      const auto v = view ();
       for (int r = 0; r < rows; ++r)
         {
           for (int c = 0; c < cols; ++c)
@@ -316,7 +317,7 @@ public:
     [[nodiscard]] int
     count_if (Pred &&pred) const
     {
-      auto v = view ();
+      const auto v = view ();
       int count = 0;
       for (int r = 0; r < rows; ++r)
         {
@@ -336,7 +337,7 @@ public:
   {
     auto [rows, cols] = get_size ();
     ScreenSnapshot snap (rows, cols);
-    auto view = snap.view ();
+    const auto view = snap.view ();
 
     for (int r = 0; r < rows; ++r)
       {
@@ -346,7 +347,7 @@ public:
               {
                 view[r, c] = *cell;
                 // Handle wide characters by filling continuation cells
-                int width = cell->width;
+                const int width = cell->width;
                 for (int i = 1; i < width && c + i < cols; ++i)
                   {
                     view[r, c + i] = *cell; // Duplicate for wide char

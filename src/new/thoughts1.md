@@ -2,27 +2,41 @@
 
 ## Introduction
 
-Terminal user interfaces might seem like a solved problem - just print some ANSI codes and call it a day. But building a *responsive*, *efficient*, and *maintainable* TUI for complex real-time applications reveals surprising architectural challenges. This article explores the design of a modern terminal UI framework inspired by windowing systems like Wayland and Rob Pike's Plan 9 innovations, implemented using C++20 coroutines.
+Terminal user interfaces might seem like a solved problem - just print some ANSI
+codes and call it a day. But building a *responsive*, *efficient*, and
+*maintainable* TUI for complex real-time applications reveals surprising
+architectural challenges. This article explores the design of a modern terminal
+UI framework inspired by windowing systems like Wayland and Rob Pike's Plan 9
+innovations, implemented using C++20 coroutines.
 
-The motivating use case is a live build monitor for Nix package builds - imagine 32 CPU cores simultaneously churning through compilation, each generating hundreds of log events per second, with dynamically changing dependency relationships, progress bars, phase transitions, and a user watching it all over SSH on a terminal that might resize at any moment.
+The motivating use case is a live build monitor for Nix package builds - imagine
+32 CPU cores simultaneously churning through compilation, each generating
+hundreds of log events per second, with dynamically changing dependency
+relationships, progress bars, phase transitions, and a user watching it all over
+SSH on a terminal that might resize at any moment.
 
 ## The Fundamental Problem: Many Worlds Running at Different Speeds
 
-A complex TUI has multiple concurrent concerns operating at vastly different rates:
+A complex TUI has multiple concurrent concerns operating at vastly different
+rates:
 
 - **Event ingestion**: 1000+ events/second (build logs, state changes)
-- **State updates**: Hundreds/second (dependency graph mutations, progress updates)
+- **State updates**: Hundreds/second (dependency graph mutations, progress
+  updates)
 - **Rendering**: 60 frames/second (what humans can perceive)
 - **Display I/O**: 60fps or less (terminal refresh rate)
 - **User input**: Sporadic (resize events, keyboard input)
 
-The naive approach - re-render everything on every event - creates a firehose of terminal output, flickering displays, and wasted CPU cycles rendering frames that are immediately overwritten.
+The naive approach - re-render everything on every event - creates a firehose of
+terminal output, flickering displays, and wasted CPU cycles rendering frames
+that are immediately overwritten.
 
 ## Architecture: Three Distinct Layers
 
 ### Layer 1: The State Model (Retained-Mode)
 
-The state model is a plain data structure that absorbs the event firehose. It's updated at event rate but not rendered at event rate:
+The state model is a plain data structure that absorbs the event firehose. It's
+updated at event rate but not rendered at event rate:
 
 ```cpp
 class NixBuildState {
@@ -48,11 +62,15 @@ class NixBuildState {
 };
 ```
 
-The state model is the **impedance matcher** between fast events and slow rendering. It maintains the ground truth without concerning itself with display.
+The state model is the **impedance matcher** between fast events and slow
+rendering. It maintains the ground truth without concerning itself with display.
 
 ### Layer 2: View Generators (Stateful Rendering)
 
-View generators are coroutines that sample the state model at display rate and transform it into visual output. Critically, they maintain *local rendering state* - smoothing buffers, animation timelines, history - separate from the domain state:
+View generators are coroutines that sample the state model at display rate and
+transform it into visual output. Critically, they maintain *local rendering
+state* - smoothing buffers, animation timelines, history - separate from the
+domain state:
 
 ```cpp
 coro::generator<Raster> download_section_view(
@@ -87,7 +105,8 @@ coro::generator<Raster> download_section_view(
 }
 ```
 
-**Why generators?** Manual state machines for UI rendering quickly become nightmarish:
+**Why generators?** Manual state machines for UI rendering quickly become
+nightmarish:
 
 ```cpp
 // Manual state machine - imagine debugging this
@@ -146,11 +165,14 @@ coro::generator<Raster> progress_animation(coro::queue<Progress>& updates) {
 }
 ```
 
-Natural control flow - loops, conditionals, sequential steps - with state preservation implicit in the call stack. No manual phase tracking, no explicit state variables for loop counters or transition conditions.
+Natural control flow - loops, conditionals, sequential steps - with state
+preservation implicit in the call stack. No manual phase tracking, no explicit
+state variables for loop counters or transition conditions.
 
 ### Layer 3: The Compositor (Scheduled I/O)
 
-The compositor runs at display rate, pulling frames from generators and emitting ANSI codes:
+The compositor runs at display rate, pulling frames from generators and emitting
+ANSI codes:
 
 ```cpp
 class TerminalCompositor {
@@ -196,19 +218,22 @@ coro::task<void> compositor_loop(
 }
 ```
 
-The compositor is event-driven but rate-limited. If nothing changes, it sleeps. If updates arrive faster than 60fps, it naturally coalesces them.
+The compositor is event-driven but rate-limited. If nothing changes, it sleeps.
+If updates arrive faster than 60fps, it naturally coalesces them.
 
 ## The Wayland Connection: Buffers and Composition
 
 The architecture mirrors Wayland's design philosophy:
 
 **In Wayland:**
+
 - Clients render into their own buffers
 - Clients send buffer handles + positions to compositor
 - Compositor assembles final screen, handles Z-order, alpha blending
 - No intermediate compositing in client
 
 **In our TUI:**
+
 - Widgets (generators) render into their own raster buffers
 - Widgets don't know global screen positions, just local coordinates
 - Compositor flattens the widget tree, blits to screen positions
@@ -216,7 +241,8 @@ The architecture mirrors Wayland's design philosophy:
 
 ### Why Not Blit Intermediate Buffers?
 
-Early designs had a hierarchical structure where each container composited its children's buffers:
+Early designs had a hierarchical structure where each container composited its
+children's buffers:
 
 ```
 ProgressWidget → render into 80x1 buffer
@@ -229,7 +255,8 @@ Terminal → render into 80x24 buffer
   ↓ diff → ANSI
 ```
 
-But this is wasteful! Each blit copies memory that will just be copied again. Instead:
+But this is wasteful! Each blit copies memory that will just be copied again.
+Instead:
 
 ```cpp
 // Compositor just tracks positions
@@ -249,11 +276,14 @@ for (auto& [widget, pos] : placed_widgets) {
 }
 ```
 
-**Zero intermediate buffers.** Compositors are just layout managers, tracking positions. Only leaf widgets allocate buffers.
+**Zero intermediate buffers.** Compositors are just layout managers, tracking
+positions. Only leaf widgets allocate buffers.
 
 ## Pike's Insight: Channels and Multiplexing
 
-Rob Pike's Plan 9 window system treated windows as file system resources with channels for communication. Each window process communicated via channels - reading mouse/keyboard events, writing drawing commands.
+Rob Pike's Plan 9 window system treated windows as file system resources with
+channels for communication. Each window process communicated via channels -
+reading mouse/keyboard events, writing drawing commands.
 
 Our responsive layouts use the same multiplexing concept:
 
@@ -278,17 +308,22 @@ struct ResponsiveLayout {
 };
 ```
 
-This is Pike's message routing through a circuit, where the "control signal" (terminal width) determines which processing path is active.
+This is Pike's message routing through a circuit, where the "control signal" (
+terminal width) determines which processing path is active.
 
-When width changes, we just switch which generator we're driving. The other generators remain suspended with their state intact - no cancellation, no restart, no cleanup.
+When width changes, we just switch which generator we're driving. The other
+generators remain suspended with their state intact - no cancellation, no
+restart, no cleanup.
 
 ## Responsive Design for Terminals
 
-"Responsive design" usually refers to web UIs adapting to screen size. Terminals need this too:
+"Responsive design" usually refers to web UIs adapting to screen size. Terminals
+need this too:
 
 **Terminal viewport ranges:**
+
 - Classic: 80×24
-- Laptop: 100×30, 120×35  
+- Laptop: 100×30, 120×35
 - Desktop: 140×45, 160×50
 - Ultrawide: 200×60
 - Tmux pane: 40×20
@@ -312,11 +347,13 @@ struct ResponsiveProgressLayout {
 };
 ```
 
-CSS container queries for terminals - the widget asks "how wide is MY container?" not "how wide is the terminal?"
+CSS container queries for terminals - the widget asks "how wide is MY
+container?" not "how wide is the terminal?"
 
 ### Terminal Scroll Regions: A Hidden Gem
 
-ANSI terminals support scroll regions - a way to partition the screen into independently scrolling sections:
+ANSI terminals support scroll regions - a way to partition the screen into
+independently scrolling sections:
 
 ```cpp
 // Set scroll region to lines 1-40
@@ -326,7 +363,8 @@ ansi::set_scroll_region(1, 40);
 // Lines 41+ stay fixed!
 ```
 
-This creates a natural boundary between flowing content (logs) and fixed UI (status HUD):
+This creates a natural boundary between flowing content (logs) and fixed UI (
+status HUD):
 
 ```
 ┌─────────────────────────────────┐
@@ -341,7 +379,9 @@ This creates a natural boundary between flowing content (logs) and fixed UI (sta
 └─────────────────────────────────┘
 ```
 
-The scroll region and fixed HUD are **completely independent** - different compositors managing different regions, neither knowing about the other. The terminal hardware does the work of keeping them separate.
+The scroll region and fixed HUD are **completely independent** - different
+compositors managing different regions, neither knowing about the other. The
+terminal hardware does the work of keeping them separate.
 
 ## Memory Layout and Cache Efficiency
 
@@ -393,7 +433,8 @@ Cell& dst = dst_cells[idx];
 dst = src;  // 16-byte copy, all fields together
 ```
 
-**But there's a subtlety:** Terminal content has **run-length properties**. Most cells share colors with neighbors:
+**But there's a subtlety:** Terminal content has **run-length properties**. Most
+cells share colors with neighbors:
 
 ```
 "libx11  [████████░░] 50% 1024M"
@@ -401,11 +442,15 @@ dst = src;  // 16-byte copy, all fields together
 // All " " chars have same color (white)
 ```
 
-Finding these color runs is faster with SoA (vectorized search). For most TUIs, diffing happens once per frame while blitting happens multiple times (at each compositor level), so **AoS is probably the better default**, with the option to add SoA caching for hot diff paths if profiling shows it matters.
+Finding these color runs is faster with SoA (vectorized search). For most TUIs,
+diffing happens once per frame while blitting happens multiple times (at each
+compositor level), so **AoS is probably the better default**, with the option to
+add SoA caching for hot diff paths if profiling shows it matters.
 
 ## Alpha Blending and Composition
 
-Supporting alpha transparency enables smooth fade-out animations and translucent overlays:
+Supporting alpha transparency enables smooth fade-out animations and translucent
+overlays:
 
 ```cpp
 struct Cell {
@@ -424,10 +469,12 @@ float effective = cell.alpha * widget.global_alpha_;
 ```
 
 This hybrid approach supports both:
+
 - **Per-cell effects**: Gradient fades, sparkline dimming
 - **Global widget fade**: Entire widget fading out when finished
 
-Blending happens during composition using perceptually-uniform color spaces (OKLCH) to avoid muddy colors:
+Blending happens during composition using perceptually-uniform color spaces (
+OKLCH) to avoid muddy colors:
 
 ```cpp
 Rgba8 blend_oklch(Rgba8 fg, Rgba8 bg, float alpha) {
@@ -443,12 +490,14 @@ Rgba8 blend_oklch(Rgba8 fg, Rgba8 bg, float alpha) {
 C++20 conflates two distinct coroutine types:
 
 **Generators (synchronous):**
+
 - `co_yield` = pause, return value, wait for next call
 - State preserved in suspended stack frame
 - No scheduler, no I/O, pure control flow
 - Used for: rendering, layout, stateful transformations
 
 **Async coroutines (asynchronous):**
+
 - `co_await` = suspend, wait for I/O or event
 - Scheduled by event loop
 - Actually waits for external conditions
@@ -473,6 +522,7 @@ coro::task<void> network_fetch() {
 ```
 
 The architecture uses both:
+
 - **Generators** for rendering (sync, stateful, no I/O)
 - **Async tasks** for events, scheduling, terminal I/O
 
@@ -624,29 +674,48 @@ Three layers, three rates, clean separation.
 
 ## Lessons Learned
 
-1. **Generators are not async** - they're synchronous, stateful functions. Use them for rendering logic where control flow as state is powerful.
+1. **Generators are not async** - they're synchronous, stateful functions. Use
+   them for rendering logic where control flow as state is powerful.
 
-2. **Separate model from view** - the state model absorbs fast events, view generators sample slowly. This impedance matching is critical for performance.
+2. **Separate model from view** - the state model absorbs fast events, view
+   generators sample slowly. This impedance matching is critical for
+   performance.
 
-3. **Compositor !== renderer** - the compositor schedules and orchestrates, it doesn't need to know about your domain model (DOM, build state, whatever).
+3. **Compositor !== renderer** - the compositor schedules and orchestrates, it
+   doesn't need to know about your domain model (DOM, build state, whatever).
 
-4. **Wayland got it right** - buffer handles + positions, compositor assembles. No intermediate compositing needed.
+4. **Wayland got it right** - buffer handles + positions, compositor assembles.
+   No intermediate compositing needed.
 
-5. **Responsive design matters for terminals** - container queries, breakpoints, adaptive layouts - all relevant for TUIs.
+5. **Responsive design matters for terminals** - container queries, breakpoints,
+   adaptive layouts - all relevant for TUIs.
 
-6. **Manual state machines are tedious** - generators make complex UI state transitions tractable.
+6. **Manual state machines are tedious** - generators make complex UI state
+   transitions tractable.
 
-7. **Scroll regions are underused** - ANSI scroll regions create natural boundaries between flowing and fixed content.
+7. **Scroll regions are underused** - ANSI scroll regions create natural
+   boundaries between flowing and fixed content.
 
 ## Conclusion
 
-Building a responsive, efficient TUI requires thinking about the same problems that windowing systems solved decades ago: how do you compose multiple independent visual elements, each updating at their own rate, into a coherent display? The answer involves careful layering - a retained-mode state model to absorb events, stateful generators for rendering logic, and an async compositor for scheduling and I/O.
+Building a responsive, efficient TUI requires thinking about the same problems
+that windowing systems solved decades ago: how do you compose multiple
+independent visual elements, each updating at their own rate, into a coherent
+display? The answer involves careful layering - a retained-mode state model to
+absorb events, stateful generators for rendering logic, and an async compositor
+for scheduling and I/O.
 
 The result is a framework where:
+
 - Individual widgets are simple generators with natural control flow
 - The state model and view are cleanly separated
-- Performance scales gracefully from idle (0% CPU) to firehose (1000+ events/sec)
-- The architecture supports responsive layouts, animations, and complex compositions
+- Performance scales gracefully from idle (0% CPU) to firehose (1000+
+  events/sec)
+- The architecture supports responsive layouts, animations, and complex
+  compositions
 - Terminal quirks (scroll regions, resize, SSH) are handled systematically
 
-Whether you're building a package build monitor, an LLM agent interface, or any other complex TUI, these patterns provide a solid foundation. The code may use modern C++20 coroutines, but the ideas trace back to Pike's elegant channel-based designs and the hard-won lessons of the Wayland protocol.
+Whether you're building a package build monitor, an LLM agent interface, or any
+other complex TUI, these patterns provide a solid foundation. The code may use
+modern C++20 coroutines, but the ideas trace back to Pike's elegant
+channel-based designs and the hard-won lessons of the Wayland protocol.
