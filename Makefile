@@ -1,4 +1,4 @@
-.PHONY: all setup build build-opt clean docs test
+.PHONY: all setup build build-opt clean docs test ttytest
 
 ifndef IN_NIX_SHELL
 $(error You need to run this under 'nix develop')
@@ -30,3 +30,6 @@ docs:; doxygen docs/Doxyfile.nix-api
 
 test: build
 	./test.sh
+
+ttytest:
+	./src/new/test/nxb-ttytest src/new/test/*.yaml

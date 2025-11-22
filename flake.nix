@@ -42,37 +42,37 @@
               emacsWithPkgs
             ];
             text = ''
+              set -euo pipefail
+
               usage() {
                 cat <<'EOF' >&2
-              Usage: nxb-ttytest <meson-target> [yaml-file]
+              Usage: nxb-ttytest [YAML_FILE...]
 
-              Build the given Meson target (using ./build by default) and
-              run the YAML-defined terminal tests via Emacs/EAT.
+              Build and run terminal tests described in YAML using Emacs/EAT.
+              If no files are provided, defaults to src/new/test/tests.yaml.
               EOF
                 exit 1
               }
 
-              if [ "$#" -lt 1 ]; then
-                usage
+              if [ "$#" -eq 0 ]; then
+                set -- src/new/test/tests.yaml
               fi
 
-              target="$1"
-              shift
-              yaml_file="''${1:-src/new/test/tests.yaml}"
-              if [ "$#" -ge 1 ]; then
-                shift
-              fi
+              files=("$@")
+              list=""
+              for f in "''${files[@]}"; do
+                list+="$f"$'\n'
+              done
 
-              build_dir=''${BUILD_DIR:-build}
-              if [ ! -d "$build_dir/meson-info" ]; then
-                meson setup "$build_dir" --wrap-mode=nodownload "$@"
-              fi
+              export NXB_TTYTEST_FILES="''${list}"
 
-              ninja -C "$build_dir" "$target"
+              root=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+              cd "$root"
 
-              ${emacs}/bin/emacs -Q -batch -l ert \
-                -l "${./src/new/test/nxb-term-tests.el}" \
-                --eval "(nxb-run-yaml-tests \"$yaml_file\")"
+              : "''${EMACS:=emacs}"
+              "$EMACS" -Q -batch -l ert \
+                -l "$root/src/new/test/nxb-term-tests.el" \
+                --eval "(nxb-run-yaml-tests nil)"
             '';
           };
         }

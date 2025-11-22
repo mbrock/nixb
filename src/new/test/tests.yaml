@@ -1,13 +1,16 @@
-- name: nxbtest-001-basic
-  command: build/src/new/nxbtest-001
-  size:
-    width: 8
-    height: 4
-  expect:
-    scrollback: []
-    display:
-      - "HELLO   "
-      - "WORLD!! "
-      - ""
-      - ""
-    cursor: [4, 8]
+tests:
+  - name: nxbtest-001-basic
+    build:
+      target: src/new/nxbtest-001
+      dir: build
+    size:
+      width: 8
+      height: 4
+    expect:
+      scrollback: []
+      display:
+        - "HELLO   "
+        - "WORLD!! "
+        - ""
+        - ""
+      cursor: [4, 8]
