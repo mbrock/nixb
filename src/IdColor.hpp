@@ -74,6 +74,80 @@ oklch_to_srgb (float L, float C, float h_rad)
   return { to_srgb (r), to_srgb (g), to_srgb (b) };
 }
 
+inline std::tuple<float, float, float>
+srgb_to_oklch (uint8_t r8, uint8_t g8, uint8_t b8)
+{
+  // Convert sRGB 0-255 to linear RGB 0-1
+  auto from_srgb = [] (uint8_t v) -> float {
+    float c = static_cast<float> (v) / 255.0f;
+    return c <= 0.04045f ? c / 12.92f : std::pow ((c + 0.055f) / 1.055f, 2.4f);
+  };
+
+  float r = from_srgb (r8);
+  float g = from_srgb (g8);
+  float b = from_srgb (b8);
+
+  // Linear RGB to XYZ (D65)
+  float X = 0.4124564f * r + 0.3575761f * g + 0.1804375f * b;
+  float Y = 0.2126729f * r + 0.7151522f * g + 0.0721750f * b;
+  float Z = 0.0193339f * r + 0.1191920f * g + 0.9503041f * b;
+
+  // XYZ to LMS
+  float l = 0.8189330101f * X + 0.3618667424f * Y - 0.1288597137f * Z;
+  float m = 0.0329845436f * X + 0.9293118715f * Y + 0.0361456387f * Z;
+  float s = 0.0482003018f * X + 0.2643662691f * Y + 0.6338517070f * Z;
+
+  // Apply cube root
+  float l_ = std::cbrt (std::max (l, 0.0f));
+  float m_ = std::cbrt (std::max (m, 0.0f));
+  float s_ = std::cbrt (std::max (s, 0.0f));
+
+  // LMS to OKLab
+  float L = 0.2104542553f * l_ + 0.7936177850f * m_ - 0.0040720468f * s_;
+  float a = 1.9779984951f * l_ - 2.4285922050f * m_ + 0.4505937099f * s_;
+  float b_ = 0.0259040371f * l_ + 0.7827717662f * m_ - 0.8086757660f * s_;
+
+  // OKLab to OKLCH
+  float C = std::sqrt (a * a + b_ * b_);
+  float h = std::atan2 (b_, a);
+
+  return { L, C, h };
+}
+
+inline fmt::rgb
+blend_oklch (fmt::rgb fg, fmt::rgb bg, float alpha)
+{
+  alpha = std::clamp (alpha, 0.0f, 1.0f);
+
+  // Convert both colors to OKLCH
+  auto [L1, C1, h1] = srgb_to_oklch (fg.r, fg.g, fg.b);
+  auto [L2, C2, h2] = srgb_to_oklch (bg.r, bg.g, bg.b);
+
+  // Interpolate in OKLCH space
+  float L = L1 * alpha + L2 * (1.0f - alpha);
+
+  // For chroma, use a power curve to desaturate faster when blending to
+  // background This prevents colors from staying too chromatic as they fade
+  float alpha_chroma = alpha * alpha; // Square for faster desaturation
+  float C = C1 * alpha_chroma + C2 * (1.0f - alpha_chroma);
+
+  // Handle hue interpolation (shortest path around the circle)
+  float h_diff = h2 - h1;
+  if (h_diff > static_cast<float> (M_PI))
+    {
+      h_diff -= 2.0f * static_cast<float> (M_PI);
+    }
+  else if (h_diff < -static_cast<float> (M_PI))
+    {
+      h_diff += 2.0f * static_cast<float> (M_PI);
+    }
+  float h = h1 + h_diff * (1.0f - alpha);
+
+  // Convert back to sRGB
+  auto [r, g, b] = oklch_to_srgb (L, C, h);
+  return fmt::rgb (r, g, b);
+}
+
 inline fmt::rgb
 color_for_id (uint64_t id)
 {

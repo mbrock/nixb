@@ -135,17 +135,14 @@ bool
 UiStateBuilder::should_hide_activity (int64_t id) const
 {
   const auto *info = state_.get_activity (id);
+
   if (!info)
-    {
-      return true; // Hide activities we can't find
-    }
-  return false;
+    return true;
+
   if (info->type == nix::actRealise || info->type == nix::actBuilds
       || info->type == nix::actSubstitute || info->type == nix::actFileTransfer
-      || info->type == nix::actUnknown)
-    {
-      return true;
-    }
+      || info->type == nix::actCopyPath || info->type == nix::actUnknown)
+    return true;
 
   return false;
 }
@@ -197,10 +194,26 @@ UiStateBuilder::emit_tree_node (int64_t yearning_id, int visible_depth,
                                 std::unordered_set<int64_t> &emitted_ids)
 {
   // We're iterating YEARNINGS now, not activities!
+  // Try to get yearning (negative IDs) or standalone activity (positive IDs)
   const auto *yearning = state_.get_yearning (yearning_id);
+  const ActivityInfo *activity = nullptr;
+
+  // If this is a standalone activity (no yearning), get it directly
   if (!yearning)
     {
-      return;
+      activity = state_.get_activity (yearning_id);
+      if (!activity)
+        {
+          return; // Neither yearning nor activity found
+        }
+    }
+  else
+    {
+      // Get linked activity for this yearning (if any)
+      if (yearning->live_activity_id)
+        {
+          activity = state_.get_activity (*yearning->live_activity_id);
+        }
     }
 
   // Stop recursion if we've hit max depth
@@ -216,33 +229,43 @@ UiStateBuilder::emit_tree_node (int64_t yearning_id, int visible_depth,
     }
 
   // Mark this node as emitted
-  emitted_ids.insert (yearning_id);
+  if (yearning)
+    emitted_ids.insert (yearning_id);
 
-  // Get linked activity (if any) to merge state
-  const ActivityInfo *activity = nullptr;
-  if (yearning->live_activity_id)
-    {
-      activity = state_.get_activity (*yearning->live_activity_id);
-    }
+  // Determine if we should show this line
+  bool show_this_line = activity->type == nix::actBuild
+                        || activity->type == nix::actBuildWaiting
+                        || activity->type == nix::actCopyPath;
 
-  // Determine if we should show this line (don't hide yearnings for now)
-  bool show_this_line = true;
   int next_visible_depth = visible_depth;
 
   if (show_this_line)
     {
-      // Merge yearning metadata + activity state
+      // Build display info from yearning or activity
       std::string tag;
-      std::string label = std::string{ yearning->derivation.name } + " "
-                          + yearning->derivation.platform;
+      std::string label;
       std::optional<std::string> url_part;
       std::optional<ActivityProgress> progress;
       bool is_finished = false;
       double fade_factor = 0.0;
+      size_t num_input_deps = 0;
+      size_t num_dependents = 0;
 
+      // Get label from yearning or activity
+      if (yearning)
+        {
+          label = std::string{ yearning->derivation.name } + " "
+                  + yearning->derivation.platform;
+          num_input_deps = yearning->dependency_yearning_ids.size ();
+        }
+      else if (activity)
+        {
+          label = state_.format_activity_label (*activity);
+        }
+
+      // Get tag and state from activity
       if (activity)
         {
-          // Has live activity - use its state
           tag = tag_for_type (activity->type);
 
           // Use current phase if available
@@ -291,10 +314,17 @@ UiStateBuilder::emit_tree_node (int64_t yearning_id, int visible_depth,
               url_part = std::string (url);
             }
         }
-      else
+      else if (yearning)
         {
-          // No live activity - show as queued
+          // Yearning without live activity - show as queued
           tag = "queued";
+        }
+
+      // Get dependency counts
+      auto dep_it = dependents_.find (yearning_id);
+      if (dep_it != dependents_.end ())
+        {
+          num_dependents = dep_it->second.size ();
         }
 
       std::string indent;
@@ -307,15 +337,6 @@ UiStateBuilder::emit_tree_node (int64_t yearning_id, int visible_depth,
       if (!tag.empty ())
         display += tag + " ";
       display += label;
-
-      // Get dependency counts from yearning
-      size_t num_input_deps = yearning->dependency_yearning_ids.size ();
-      size_t num_dependents = 0;
-      auto dep_it = dependents_.find (yearning_id);
-      if (dep_it != dependents_.end ())
-        {
-          num_dependents = dep_it->second.size ();
-        }
 
       result_.activity_lines.push_back (UiActivityLine{
           yearning_id, std::move (display), url_part, progress, is_finished,
@@ -386,7 +407,7 @@ UiStateBuilder::tag_for_type (ActivityType type)
     case nix::actSubstitute:
       return std::string{ "substitute" };
     case nix::actCopyPath:
-      return std::string{ "%" };
+      return std::string{ "" };
     case nix::actFileTransfer:
       return std::string{ "transfer" };
     case nix::actQueryPathInfo:
@@ -394,7 +415,7 @@ UiStateBuilder::tag_for_type (ActivityType type)
     case nix::actBuilds:
       return std::string{ "builds" };
     case nix::actBuild:
-      return std::string{ "$" };
+      return std::string{ "" };
     case nix::actBuildWaiting:
       return std::string{ "queued" };
     case nix::actFetchTree:

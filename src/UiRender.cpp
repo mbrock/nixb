@@ -1,4 +1,5 @@
 #include "UiRender.hpp"
+#include "IdColor.hpp"
 #include "fmt/color.h"
 
 #include <fmt/core.h>
@@ -48,7 +49,7 @@ std::string ellipsize_middle (std::string_view text, int max_width);
 inline fmt::rgb
 terminal_green ()
 {
-  return fmt::rgb (0, 255, 0);
+  return fmt::rgb (100, 200, 140);
 }
 
 inline fmt::rgb
@@ -85,7 +86,7 @@ render_counter_line (HudRaster &raster, int row, std::string_view label,
   if (static_cast<int> (display_label.size ()) > max_label_width)
     display_label = ellipsize_middle (display_label, max_label_width);
 
-  int col = 0;
+  int col = 1;
 
   // Write label (no special color)
   raster.write_text (row, col, display_label);
@@ -227,13 +228,11 @@ render_bar_line (HudRaster &raster, int row, std::string_view label,
     }
 
   // Left box separator
-  raster.set_cell (row, col, "│", label_color, std::nullopt, alpha);
+  raster.set_cell (row, col, " ", label_color, std::nullopt, alpha);
   ++col;
 
   // Bar background color - lighter to distinguish from default bg
-  fmt::rgb bar_bg_color = (is_finished && total > 0)
-                              ? fmt::rgb (45, 65, 50)  // Greenish tint
-                              : fmt::rgb (55, 60, 70); // Lighter grey
+  fmt::rgb bar_bg_color = DEFAULT_HUD_BG_COLOR;
 
   // Filled blocks foreground color
   fmt::rgb bar_color
@@ -242,7 +241,7 @@ render_bar_line (HudRaster &raster, int row, std::string_view label,
   // Full blocks with background
   for (int i = 0; i < full_blocks && i < bar_width; ++i)
     {
-      raster.set_cell (row, col, "█", bar_color, bar_bg_color, alpha);
+      raster.set_cell (row, col, "█", bar_color, std::nullopt, alpha);
       ++col;
     }
 
@@ -263,7 +262,7 @@ render_bar_line (HudRaster &raster, int row, std::string_view label,
     }
 
   // Right box separator
-  raster.set_cell (row, col, "│", std::nullopt, std::nullopt, alpha);
+  raster.set_cell (row, col, " ", std::nullopt, std::nullopt, alpha);
   ++col;
 
   // Calculate where stats should start to be right-aligned
@@ -339,16 +338,16 @@ render_activity_line (HudRaster &raster, int row, const UiActivityLine &line,
     {
       if (line.num_input_deps > 0 && line.num_dependents > 0)
         {
-          dep_suffix = fmt::format (" [↓{} ↑{}]", line.num_input_deps,
+          dep_suffix = fmt::format (" ↓{} ↑{}", line.num_input_deps,
                                     line.num_dependents);
         }
       else if (line.num_input_deps > 0)
         {
-          dep_suffix = fmt::format (" [↓{}]", line.num_input_deps);
+          dep_suffix = fmt::format (" ↓{}", line.num_input_deps);
         }
       else
         {
-          dep_suffix = fmt::format (" [↑{}]", line.num_dependents);
+          dep_suffix = fmt::format (" ↑{}", line.num_dependents);
         }
     }
 
@@ -368,7 +367,7 @@ render_activity_line (HudRaster &raster, int row, const UiActivityLine &line,
         }
     }
 
-  int col = 0;
+  int col = 1;
   raster.write_text (row, col, label);
   col += label.size ();
 
@@ -380,15 +379,12 @@ render_activity_line (HudRaster &raster, int row, const UiActivityLine &line,
     }
 }
 
-// Blend foreground color towards background based on alpha
+// Blend foreground color towards background based on alpha using OKLCH color
+// space
 inline fmt::rgb
 blend_color (fmt::rgb fg, fmt::rgb bg, float alpha)
 {
-  alpha = std::clamp (alpha, 0.0f, 1.0f);
-  uint8_t r = static_cast<uint8_t> (fg.r * alpha + bg.r * (1.0f - alpha));
-  uint8_t g = static_cast<uint8_t> (fg.g * alpha + bg.g * (1.0f - alpha));
-  uint8_t b = static_cast<uint8_t> (fg.b * alpha + bg.b * (1.0f - alpha));
-  return fmt::rgb (r, g, b);
+  return nixb::blend_oklch (fg, bg, alpha);
 }
 
 std::vector<std::string>

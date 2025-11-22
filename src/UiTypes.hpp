@@ -10,7 +10,7 @@ namespace nixb
 {
 
 // Default background color for HUD
-constexpr fmt::rgb DEFAULT_HUD_BG_COLOR{ 50, 60, 120 };
+constexpr fmt::rgb DEFAULT_HUD_BG_COLOR{ 0, 0, 0 }; // { 20, 30, 40 };
 
 enum class ProgressUnit
 {

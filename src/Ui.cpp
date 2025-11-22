@@ -7,7 +7,6 @@
 #include <unistd.h>
 
 #include <algorithm>
-#include <cstddef>
 #include <cstdio>
 #include <cstdlib>
 #include <iterator>
@@ -99,7 +98,7 @@ public:
     else
       {
         // Always smooth toward target (happens every frame)
-        constexpr double alpha = 0.3;
+        constexpr double alpha = 0.05;
         smoothed_status_lines_ = static_cast<float> (
             alpha * clamped_needed + (1.0 - alpha) * smoothed_status_lines_);
       }
@@ -214,11 +213,18 @@ private:
 
         // Clear line
         fmt::format_to (std::back_inserter (output), "\x1b[K");
+        fmt::format_to (std::back_inserter (output), "\x1b[48;2;{};{};{}m",
+                        bg_color.r, bg_color.g, bg_color.b);
 
         // Emit the raster row content
-        if (i < static_cast<int> (raster_rows.size ()))
+        if (i + 1 < static_cast<int> (raster_rows.size ()))
           {
             fmt::format_to (std::back_inserter (output), "{}", raster_rows[i]);
+          }
+        else
+          {
+            fmt::format_to (std::back_inserter (output), "{}",
+                            std::string (cols_, ' '));
           }
 
         // Reset at end of line

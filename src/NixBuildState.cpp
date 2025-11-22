@@ -27,20 +27,23 @@ NixBuildState::yearn ()
 {
   for (const auto &path : derivations_to_build_)
     {
-      auto drv = store_->readDerivation (path);
-      for (const auto &[inputDrv, inputNode] : drv.inputDrvs.map)
+      try
         {
-          deps_.insert (std::make_pair (path, inputDrv));
+          auto drv = store_->readDerivation (path);
+          for (const auto &[inputDrv, inputNode] : drv.inputDrvs.map)
+            {
+              deps_.insert (std::make_pair (path, inputDrv));
+            }
+        }
+      catch (...)
+        {
+          // Ignore errors when reading derivation
+          // (may happen when paths are not valid in current store context)
         }
     }
 
-  // Create synthetic activities for all the derivations we know about
   create_synthetic_activities ();
-
-  // Build the activity tree once after all synthetic activities are created
   build_activity_tree ();
-
-  generation_++;
 }
 
 void
@@ -94,38 +97,21 @@ void
 NixBuildState::build_activity_tree ()
 {
   // Build tree from YEARNINGS, not activities!
-  activity_children_.clear ();
-  activity_roots_.clear ();
-  activity_dependents_.clear ();
+  activity_graph_.clear ();
 
   // Build dependency tree from yearnings
   for (const auto &[yearning_id, yearning] : yearnings_)
-    {
-      // This yearning's children are its dependencies
-      for (int64_t dep_yearning_id : yearning.dependency_yearning_ids)
-        {
-          activity_children_[yearning_id].push_back (dep_yearning_id);
-          // So dep has this yearning as a dependent
-          activity_dependents_[dep_yearning_id].push_back (yearning_id);
-        }
-    }
+    // This yearning's children are its dependencies
+    for (int64_t dep_yearning_id : yearning.dependency_yearning_ids)
+      activity_graph_.add_edge (yearning_id, dep_yearning_id);
 
   // Find roots: yearnings that aren't dependencies of anything
-  std::unordered_set<int64_t> is_dependency;
-  for (const auto &[parent_id, child_ids] : activity_children_)
-    {
-      is_dependency.insert (child_ids.begin (), child_ids.end ());
-    }
-
+  std::vector<int64_t> all_yearning_ids;
+  all_yearning_ids.reserve (yearnings_.size ());
   for (const auto &[yearning_id, yearning] : yearnings_)
-    {
-      if (!is_dependency.contains (yearning_id))
-        {
-          activity_roots_.push_back (yearning_id);
-        }
-    }
+    all_yearning_ids.push_back (yearning_id);
 
-  // Note: drv_path_to_activity_ is now built incrementally as activities start
+  activity_graph_.update_roots (all_yearning_ids);
 
   // Sort by importance: works on yearning IDs
   // Checks if they have live activities to determine priority
@@ -168,19 +154,20 @@ NixBuildState::build_activity_tree ()
     return a < b;
   };
 
-  for (auto &[parent_id, child_ids] : activity_children_)
+  for (auto &[parent_id, child_ids] : activity_graph_.children_mut ())
     {
       std::sort (child_ids.begin (), child_ids.end (), importance_cmp);
       child_ids.erase (std::unique (child_ids.begin (), child_ids.end ()),
                        child_ids.end ());
     }
-  std::sort (activity_roots_.begin (), activity_roots_.end (), importance_cmp);
+
+  std::sort (activity_graph_.roots_mut ().begin (),
+             activity_graph_.roots_mut ().end (), importance_cmp);
 }
 
 void
 NixBuildState::add_activity_to_tree (int64_t id, const ActivityInfo &info)
 {
-  // Add to drv_path_to_activity mapping
   if (info.derivation_path)
     {
       try
@@ -194,7 +181,6 @@ NixBuildState::add_activity_to_tree (int64_t id, const ActivityInfo &info)
         }
     }
 
-  // Add dependency relationships
   for (const auto &input_drv : info.input_drv_paths)
     {
       try
@@ -204,16 +190,7 @@ NixBuildState::add_activity_to_tree (int64_t id, const ActivityInfo &info)
           if (it != drv_path_to_activity_.end ())
             {
               int64_t dep_activity_id = it->second;
-              activity_dependents_[dep_activity_id].push_back (id);
-              activity_children_[dep_activity_id].push_back (id);
-
-              // Remove from roots if it now has a parent
-              auto root_it = std::find (activity_roots_.begin (),
-                                        activity_roots_.end (), id);
-              if (root_it != activity_roots_.end ())
-                {
-                  activity_roots_.erase (root_it);
-                }
+              activity_graph_.add_edge (dep_activity_id, id);
             }
         }
       catch (...)
@@ -221,26 +198,9 @@ NixBuildState::add_activity_to_tree (int64_t id, const ActivityInfo &info)
         }
     }
 
-  // If no dependencies found, it's a root
-  if (activity_children_.find (id) == activity_children_.end ()
-      || activity_children_[id].empty ())
-    {
-      // Check if it's not already a child of something
-      bool is_child = false;
-      for (const auto &[parent_id, children] : activity_children_)
-        {
-          if (std::find (children.begin (), children.end (), id)
-              != children.end ())
-            {
-              is_child = true;
-              break;
-            }
-        }
-      if (!is_child)
-        {
-          activity_roots_.push_back (id);
-        }
-    }
+  if (!activity_graph_.has_children (id))
+    if (!activity_graph_.has_dependents (id))
+      activity_graph_.add_root (id);
 }
 
 void
@@ -250,41 +210,13 @@ NixBuildState::remove_activity_from_tree (int64_t id)
   if (!info)
     return;
 
-  // Remove from drv_path_to_activity mapping
   if (info->derivation_path)
     {
-      try
-        {
-          std::string drv_str
-              = std::string{ info->derivation_path->to_string () };
-          drv_path_to_activity_.erase (drv_str);
-        }
-      catch (...)
-        {
-        }
+      std::string drv_str = std::string{ info->derivation_path->to_string () };
+      drv_path_to_activity_.erase (drv_str);
     }
 
-  // Remove from dependents and children maps
-  activity_dependents_.erase (id);
-  activity_children_.erase (id);
-
-  // Remove from any parent's children list
-  for (auto &[parent_id, children] : activity_children_)
-    {
-      auto it = std::find (children.begin (), children.end (), id);
-      if (it != children.end ())
-        {
-          children.erase (it);
-        }
-    }
-
-  // Remove from roots
-  auto root_it
-      = std::find (activity_roots_.begin (), activity_roots_.end (), id);
-  if (root_it != activity_roots_.end ())
-    {
-      activity_roots_.erase (root_it);
-    }
+  activity_graph_.remove_node (id);
 }
 
 const ActivityInfo *
@@ -306,6 +238,7 @@ NixBuildState::start_activity (const StartEvent &e)
 {
   ActivityType inferred_type = infer_activity_type (e);
   ActivityInfo info{ inferred_type, e.text };
+
   info.parent = e.parent;
   info.start_order = next_activity_order_++;
 
@@ -318,47 +251,28 @@ NixBuildState::start_activity (const StartEvent &e)
       info.progress.unit = ProgressUnit::Bytes;
     }
 
-  // Link this activity to its yearning (if one exists)
   if (info.derivation_path)
     {
-      try
-        {
-          std::string drv_str
-              = std::string{ info.derivation_path->to_string () };
+      std::string drv_str = std::string{ info.derivation_path->to_string () };
 
-          // Find yearning by derivation path
-          for (auto &[yearning_id, yearning] : yearnings_)
-            {
-              try
-                {
-                  if (std::string{ yearning.derivation_path.to_string () }
-                      == drv_str)
-                    {
-                      // Link them!
-                      yearning.live_activity_id = e.id;
-                      activity_to_yearning_[e.id] = yearning_id;
-                      yearning_to_activity_[yearning_id] = e.id;
+      for (auto &[yearning_id, yearning] : yearnings_)
+        if (std::string{ yearning.derivation_path.to_string () } == drv_str)
+          {
+            yearning.live_activity_id = e.id;
+            yearning_activity_map_.insert (yearning_id, e.id);
 
-                      drv_path_to_activity_[drv_str] = e.id;
-                      break;
-                    }
-                }
-              catch (...)
-                {
-                }
-            }
-        }
-      catch (...)
-        {
-        }
+            drv_path_to_activity_[drv_str] = e.id;
+
+            break;
+          }
     }
 
   activities_[e.id] = info;
 
-  // Note: We don't add activities to the tree anymore!
-  // Tree structure comes from yearnings only.
-
-  generation_++;
+  // Add activity to tree even when there are no yearnings
+  // This allows showing activities from build logs without pre-existing
+  // derivations
+  add_activity_to_tree (e.id, info);
 }
 
 ActivityType
@@ -366,7 +280,6 @@ NixBuildState::infer_activity_type (const StartEvent &e) const
 {
   if (e.type != nix::actUnknown)
     return e.type;
-
   if (e.text.rfind ("hashing '", 0) == 0)
     return nix::actFileTransfer;
   if (e.text.rfind ("copying '", 0) == 0)
@@ -409,9 +322,7 @@ NixBuildState::process_text_fallback (const StartEvent &e, ActivityType type,
                                       ActivityInfo &info)
 {
   if (type == nix::actFileTransfer || type == nix::actCopyPath)
-    {
-      extract_label_from_quotes (e.text, info);
-    }
+    extract_label_from_quotes (e.text, info);
 }
 
 void
@@ -439,7 +350,6 @@ NixBuildState::stop_activity (int64_t id)
   if (it == activities_.end ())
     return;
 
-  // For file transfer/download activities, mark as finished instead of erasing
   if (it->second.type == nix::actFileTransfer
       || it->second.type == nix::actCopyPath)
     {
@@ -448,21 +358,17 @@ NixBuildState::stop_activity (int64_t id)
     }
   else
     {
-      // Incrementally remove from tree before erasing
       remove_activity_from_tree (id);
-      // For other activities, erase immediately
       activities_.erase (it);
     }
-  generation_++;
 }
 
 void
 NixBuildState::cleanup_finished_activities ()
 {
   auto now = std::chrono::steady_clock::now ();
-  constexpr auto timeout = std::chrono::milliseconds (2000); // 1 second
+  constexpr auto timeout = std::chrono::milliseconds (2000);
 
-  bool erased_any = false;
   for (auto it = activities_.begin (); it != activities_.end ();)
     {
       if (it->second.is_finished && it->second.finish_time)
@@ -473,14 +379,11 @@ NixBuildState::cleanup_finished_activities ()
               // Incrementally remove from tree before erasing
               remove_activity_from_tree (it->first);
               it = activities_.erase (it);
-              erased_any = true;
               continue;
             }
         }
       ++it;
     }
-  if (erased_any)
-    generation_++;
 }
 
 void
@@ -492,25 +395,21 @@ NixBuildState::update_progress (const ResultEvent &e)
         {
           auto it = activities_.find (e.id);
           if (it != activities_.end ())
-            {
-              it->second.current_phase = std::string{ *phase };
-            }
+            it->second.current_phase = std::string{ *phase };
         }
+
       return;
     }
 
   if (e.type != nix::resProgress)
-    {
-      return;
-    }
+    return;
 
   auto it = activities_.find (e.id);
   if (it == activities_.end ())
-    {
-      return;
-    }
+    return;
 
   ActivityProgress progress;
+
   if (auto v = e.get_int (0))
     progress.done = *v;
   if (auto v = e.get_int (1))
@@ -520,16 +419,11 @@ NixBuildState::update_progress (const ResultEvent &e)
   if (auto v = e.get_int (3))
     progress.failed = *v;
 
-  // Set unit type based on activity type
   if (it->second.type == nix::actFileTransfer
       || it->second.type == nix::actCopyPath)
-    {
-      progress.unit = ProgressUnit::Bytes;
-    }
+    progress.unit = ProgressUnit::Bytes;
   if (it->second.type == nix::actCopyPaths)
-    {
-      progress.unit = ProgressUnit::Count;
-    }
+    progress.unit = ProgressUnit::Count;
 
   it->second.progress = progress;
   it->second.has_progress = true;
@@ -539,34 +433,23 @@ std::string
 NixBuildState::format_activity_label (const ActivityInfo &info) const
 {
   if (info.derivation)
-    {
-      return std::string{ info.derivation->name } + " "
-             + info.derivation->platform;
-    }
+    return std::string{ info.derivation->name } + " "
+           + info.derivation->platform;
   if (info.store_path)
-    {
-      return std::string{ info.store_path->name () };
-    }
+    return std::string{ info.store_path->name () };
   if (!info.label.empty ())
-    {
-      return info.label;
-    }
+    return info.label;
   if (info.derivation_path)
     {
       if (info.derivation)
-        {
-          return std::string{ info.derivation->name } + " "
-                 + info.derivation->platform;
-        }
+        return std::string{ info.derivation->name } + " "
+               + info.derivation->platform;
       else
-        {
-          return std::string{ info.derivation_path->name () };
-        }
+        return std::string{ info.derivation_path->name () };
     }
   if (!info.text.empty ())
-    {
-      return info.text;
-    }
+    return info.text;
+
   return "";
 }
 

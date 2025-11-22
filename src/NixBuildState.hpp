@@ -1,5 +1,6 @@
 #pragma once
 
+#include "DependencyGraph.hpp"
 #include "NixLogParser.hpp"
 #include "UiTypes.hpp"
 
@@ -11,7 +12,6 @@
 #include <optional>
 #include <string>
 #include <unordered_map>
-#include <unordered_set>
 
 namespace nix
 {
@@ -83,23 +83,15 @@ public:
 
   std::string format_activity_label (const ActivityInfo &info) const;
 
-  // Returns a generation counter that increments whenever activities change
-  size_t
-  generation () const
-  {
-    return generation_;
-  }
-
-  // Retained-mode tree structure accessors
   const std::unordered_map<int64_t, std::vector<int64_t>> &
   activity_children () const
   {
-    return activity_children_;
+    return activity_graph_.children ();
   }
   const std::vector<int64_t> &
   activity_roots () const
   {
-    return activity_roots_;
+    return activity_graph_.get_roots ();
   }
   const std::map<std::string, int64_t> &
   drv_path_to_activity () const
@@ -109,7 +101,7 @@ public:
   const std::unordered_map<int64_t, std::vector<int64_t>> &
   activity_dependents () const
   {
-    return activity_dependents_;
+    return activity_graph_.dependents ();
   }
 
   void yearn_for_derivation (const nix::StorePath &path);
@@ -138,22 +130,17 @@ private:
   size_t next_activity_order_ = 0;
 
   // Association between yearnings and activities
-  std::unordered_map<int64_t, int64_t>
-      yearning_to_activity_; // yearning_id -> activity_id
-  std::unordered_map<int64_t, int64_t>
-      activity_to_yearning_; // activity_id -> yearning_id
+  BidirectionalMap<int64_t, int64_t>
+      yearning_activity_map_; // yearning_id <-> activity_id
 
   // Temporary: for building yearnings
   std::vector<nix::StorePath> derivations_to_build_;
   std::multimap<nix::StorePath, nix::StorePath> deps_;
 
-  size_t generation_ = 0; // Increments whenever state changes
-
   // Retained-mode tree (built from yearnings, not activities!)
-  std::unordered_map<int64_t, std::vector<int64_t>> activity_children_;
-  std::vector<int64_t> activity_roots_;
+  DependencyGraph<int64_t>
+      activity_graph_; // Handles children/dependents/roots
   std::map<std::string, int64_t> drv_path_to_activity_;
-  std::unordered_map<int64_t, std::vector<int64_t>> activity_dependents_;
 };
 
 } // namespace nixb

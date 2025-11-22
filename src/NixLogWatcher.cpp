@@ -376,13 +376,7 @@ NixLogWatcher::refresh_ui ()
   std::lock_guard<std::mutex> lock (state_mutex_);
   state_->cleanup_finished_activities ();
 
-  // Only rebuild UI state if activities have changed
-  size_t current_gen = state_->generation ();
-  if (current_gen != last_rendered_generation_)
-    {
-      rebuild_ui_state ();
-      last_rendered_generation_ = current_gen;
-    }
+  rebuild_ui_state ();
 
   ui_.hud ().present (ui_state_);
 }
@@ -390,13 +384,25 @@ NixLogWatcher::refresh_ui ()
 void
 NixLogWatcher::render_loop ()
 {
+  const auto fps = 60.0;
+  const auto frame_interval
+      = std::chrono::milliseconds (static_cast<int> (1000.0 / fps));
+
   while (!stop_requested ())
     {
+      const auto frame_start = std::chrono::steady_clock::now ();
+
       refresh_ui ();
-      const auto fps = 60.0;
-      const auto frame_interval
-          = std::chrono::milliseconds (static_cast<int> (1000.0 / fps));
-      std::this_thread::sleep_for (frame_interval);
+
+      const auto frame_end = std::chrono::steady_clock::now ();
+      const auto elapsed
+          = std::chrono::duration_cast<std::chrono::milliseconds> (
+              frame_end - frame_start);
+
+      if (elapsed < frame_interval)
+        {
+          std::this_thread::sleep_for (frame_interval - elapsed);
+        }
     }
 
   ui_.log ().println (fmt::format (
