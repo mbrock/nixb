@@ -5,6 +5,7 @@
 #include <coro/event.hpp>
 #include <coro/queue.hpp>
 #include <coro/task.hpp>
+#include <iosfwd>
 
 namespace coro
 {
@@ -62,9 +63,12 @@ public:
 
   coro::task<void> present_loop (coro::io_scheduler &scheduler);
 
-private:
+  // Public for testing the rendering pipeline without async runtime
+  // Pass an output stream, defaults to std::cout in cpp file
   void present_frame ();
+  void present_frame (std::ostream &out);
 
+private:
   nxb::Raster front_;
   nxb::Raster back_;
   nxb::GlyphTable &glyphs_;

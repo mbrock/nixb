@@ -1,5 +1,6 @@
 #pragma once
 
+#include "tty-raster.hpp"
 #include <cstddef>
 #include <cstdint>
 #include <fmt/color.h>
@@ -90,8 +91,8 @@ struct Style
   Size height{};
 
   char bg_glyph = ' '; // Background fill character
-  fmt::color fg_color = fmt::color::white;
-  fmt::color bg_color = fmt::color::black;
+  Rgba8 fg_color = Rgba8::transparent ();
+  Rgba8 bg_color = Rgba8::transparent ();
 
   [[nodiscard]] static Style
   defaults ()
@@ -103,23 +104,21 @@ struct Style
 struct Text
 {
   std::string content;
-  fmt::color color = fmt::color::white;
+  Rgba8 color = Rgba8::transparent ();
 };
-/// Rectangle (layout result)
+
 struct Rect
 {
   std::size_t x = 0, y = 0;
   std::size_t w = 0, h = 0;
 };
 
-/// Node types
 struct Element
 {
   Style style;
   std::vector<NodeId> children;
 };
 
-/// Node data
 struct NodeData
 {
   NodeId parent = NodeId::null ();
@@ -127,58 +126,45 @@ struct NodeData
   Rect rect; // Computed by layout
 };
 
-/// Persistent DOM tree
-/// Nodes are stable (indexed by NodeId), can be updated by coroutines
 class Dom
 {
 public:
   Dom ();
 
-  /// Create element node with style
   [[nodiscard]] NodeId create_element (Style style = Style::defaults ());
 
-  /// Create text node
   [[nodiscard]] NodeId create_text (std::string content,
                                     fmt::color color = fmt::color::white);
 
-  /// Add child to parent
   void append_child (NodeId parent, NodeId child);
 
-  /// Update text content (triggers dirty flag)
   void update_text (NodeId node, std::string new_text,
                     std::optional<fmt::color> color = std::nullopt);
 
-  /// Update style (triggers dirty flag)
   void update_style (NodeId node, Style new_style);
 
-  /// Get node data (const)
   [[nodiscard]] const NodeData &get (NodeId node) const;
 
-  /// Get mutable node data
   [[nodiscard]] NodeData &get_mut (NodeId node);
 
-  /// Check if layout is needed
   [[nodiscard]] bool
   is_dirty () const
   {
     return dirty_;
   }
 
-  /// Clear dirty flag (called after layout)
   void
   mark_clean ()
   {
     dirty_ = false;
   }
 
-  /// Get root node
   [[nodiscard]] NodeId
   root () const
   {
     return root_;
   }
 
-  /// Get all nodes (for traversal)
   [[nodiscard]] const std::vector<NodeData> &
   nodes () const
   {
@@ -186,9 +172,9 @@ public:
   }
 
 private:
-  std::vector<NodeData> nodes_; // Index 0 is unused (null node)
-  NodeId root_;                 // Root of the tree
-  bool dirty_ = true;           // Needs layout
+  std::vector<NodeData> nodes_;
+  NodeId root_;
+  bool dirty_ = true;
 
   friend class LayoutEngine;
 };

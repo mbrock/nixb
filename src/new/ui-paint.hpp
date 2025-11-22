@@ -21,11 +21,11 @@ private:
 
   /// Fill rect with background glyph
   void fill_background (Raster &raster, const Rect &rect, char bg_glyph,
-                        fmt::color fg, fmt::color bg);
+                        Rgba8 fg_color, Rgba8 bg_color);
 
   /// Draw text within rect
   void draw_text (Raster &raster, GlyphTable &glyphs, const Rect &rect,
-                  const std::string &text, fmt::color color);
+                  const std::string &text, Rgba8 color);
 };
 
 } // namespace nxb::ui

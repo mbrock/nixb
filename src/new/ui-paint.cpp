@@ -44,34 +44,33 @@ Painter::paint_node (const Dom &dom, const NodeData &node, Raster &raster,
 
 void
 Painter::fill_background (Raster &raster, const Rect &rect, char bg_glyph,
-                          fmt::color fg, fmt::color bg)
+                          Rgba8 fg_color, Rgba8 bg_color)
 {
   // Fill with glyph ID (just use ASCII for now)
   GlyphTable::GlyphId gid = static_cast<GlyphTable::GlyphId> (bg_glyph);
-  Rgba8 fg_rgba (fg);
-  Rgba8 bg_rgba (bg);
 
-  for (std::size_t y = rect.y; y < rect.y + rect.h && y < raster.height ();
-       ++y)
+  // Get a subraster view of just the rectangle we want to fill
+  auto sub = raster.subraster (rect.x, rect.y, rect.w, rect.h);
+
+  // Fill the subraster - coordinates are now local (0,0) based!
+  for (std::size_t row = 0; row < sub.height (); ++row)
     {
-      for (std::size_t x = rect.x; x < rect.x + rect.w && x < raster.width ();
-           ++x)
+      for (std::size_t col = 0; col < sub.width (); ++col)
         {
-          raster.set_glyph (x, y, gid);
-          raster.set_fg (x, y, fg_rgba);
-          if (bg != fmt::color::black)
-            raster.set_bg (x, y, bg_rgba);
+          sub.set_glyph (col, row, gid);
+          sub.set_fg (col, row, fg_color);
+          if (bg_color != Rgba8::transparent ())
+            sub.set_bg (col, row, bg_color);
         }
     }
 }
 
 void
 Painter::draw_text (Raster &raster, GlyphTable &glyphs, const Rect &rect,
-                    const std::string &text, fmt::color color)
+                    const std::string &text, Rgba8 color)
 {
   std::size_t x = rect.x;
   std::size_t y = rect.y;
-  Rgba8 fg_rgba (color);
 
   for (char c : text)
     {
@@ -89,7 +88,7 @@ Painter::draw_text (Raster &raster, GlyphTable &glyphs, const Rect &rect,
       if (x < rect.x + rect.w && x < raster.width () && y < raster.height ())
         {
           raster.set_char (x, y, c);
-          raster.set_fg (x, y, fg_rgba);
+          raster.set_fg (x, y, color);
           ++x;
         }
       else

@@ -1,4 +1,4 @@
-.PHONY: all setup build build-opt clean docs test ttytest
+.PHONY: all setup build build-opt clean docs test vterm-test
 
 ifndef IN_NIX_SHELL
 $(error You need to run this under 'nix develop')
@@ -31,5 +31,12 @@ docs:; doxygen docs/Doxyfile.nix-api
 test: build
 	./test.sh
 
-ttytest:
-	./src/new/test/nxb-ttytest src/new/test/*.yaml
+# Modern vterm-based C++ tests using doctest
+vterm-test: build
+	reset; clear;
+	$(BUILDDIR)/src/new/nxb-vterm-tests
+
+# Run all tests including legacy test runner
+test-all: test vterm-test
+	$(BUILDDIR)/src/new/nxb-test-runner basic_ansi
+	$(BUILDDIR)/src/new/nxb-test-runner compositor_basic

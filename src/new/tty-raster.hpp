@@ -3,6 +3,7 @@
 #include "glyph-table.hpp"
 
 #include <cstdint>
+#include <experimental/mdspan>
 #include <fmt/color.h>
 #include <optional>
 #include <span>
@@ -13,7 +14,8 @@ namespace nxb
 {
 
 /// Packed RGBA color (RGBA8888 format: 0xRRGGBBAA in memory)
-/// Interoperable with fmt::rgb for seamless integration with fmt's color system.
+/// Interoperable with fmt::rgb for seamless integration with fmt's color
+/// system.
 struct Rgba8
 {
   std::uint32_t value;
@@ -86,32 +88,60 @@ struct Rgba8
 /// Terminal raster using Structure-of-Arrays layout for cache efficiency.
 /// Each cell contains a glyph ID (maps to UTF-8 via GlyphTable), foreground
 /// color, and background color.
+///
+/// Uses std::mdspan for efficient 2D indexing with zero overhead.
+/// Can be either an owning raster (with storage) or a non-owning view
+/// (subraster).
 class Raster
 {
 public:
+  /// Type aliases for mdspan views
+  /// Using dynamic extents for both dimensions (rows, cols)
+  using mdspan_extents
+      = std::experimental::extents<std::size_t, std::dynamic_extent,
+                                   std::dynamic_extent>;
+  using glyph_view_t
+      = std::experimental::mdspan<GlyphTable::GlyphId, mdspan_extents>;
+  using const_glyph_view_t
+      = std::experimental::mdspan<const GlyphTable::GlyphId, mdspan_extents>;
+  using color_view_t = std::experimental::mdspan<Rgba8, mdspan_extents>;
+  using const_color_view_t
+      = std::experimental::mdspan<const Rgba8, mdspan_extents>;
+
   /// Default color for terminal cells (transparent = use terminal default)
   static constexpr Rgba8 DEFAULT_COLOR = Rgba8::transparent ();
 
-  /// Initialize raster with given dimensions.
+  /// Initialize owning raster with given dimensions.
   /// All cells default to space (ASCII 32) with DEFAULT_COLOR.
   Raster (std::size_t width, std::size_t height);
+
+  /// Create a non-owning view from existing mdspan views.
+  /// Used internally for subraster views.
+  Raster (glyph_view_t glyphs, color_view_t fgs, color_view_t bgs);
 
   /// Dimensions
   [[nodiscard]] std::size_t
   width () const noexcept
   {
-    return width_;
+    return glyph_view_.extent (1);
   }
   [[nodiscard]] std::size_t
   height () const noexcept
   {
-    return height_;
+    return glyph_view_.extent (0);
   }
   [[nodiscard]] std::size_t
   size () const noexcept
   {
-    return width_ * height_;
+    return width () * height ();
   }
+
+  /// Create a non-owning subraster view of a rectangular region.
+  /// The subraster behaves just like a full raster but references the parent's
+  /// storage. Coordinates are relative to this raster (works recursively for
+  /// nested views).
+  [[nodiscard]] Raster subraster (std::size_t x, std::size_t y, std::size_t w,
+                                  std::size_t h) noexcept;
 
   /// Set glyph at (x, y). Silently ignores out-of-bounds coordinates.
   void set_glyph (std::size_t x, std::size_t y,
@@ -134,8 +164,7 @@ public:
   /// Returns the ending column position (for chaining writes).
   /// Multi-byte UTF-8 sequences are interned via the glyph table.
   std::size_t write_text (std::size_t x, std::size_t y, std::string_view text,
-                          GlyphTable &glyphs,
-                          Rgba8 fg = DEFAULT_COLOR,
+                          GlyphTable &glyphs, Rgba8 fg = DEFAULT_COLOR,
                           Rgba8 bg = DEFAULT_COLOR) noexcept;
 
   /// Fill a rectangle with a single glyph and foreground color.
@@ -146,21 +175,64 @@ public:
   /// Clear entire raster to spaces with default colors
   void clear ();
 
+  /// 2D mdspan views for natural (row, col) indexing
+  [[nodiscard]] glyph_view_t
+  glyphs_2d () noexcept
+  {
+    return glyph_view_;
+  }
+  [[nodiscard]] const_glyph_view_t
+  glyphs_2d () const noexcept
+  {
+    return const_glyph_view_t{ glyph_view_.data_handle (),
+                               mdspan_extents{ height (), width () } };
+  }
+
+  [[nodiscard]] color_view_t
+  fgs_2d () noexcept
+  {
+    return fg_view_;
+  }
+  [[nodiscard]] const_color_view_t
+  fgs_2d () const noexcept
+  {
+    return const_color_view_t{ fg_view_.data_handle (),
+                               mdspan_extents{ height (), width () } };
+  }
+
+  [[nodiscard]] color_view_t
+  bgs_2d () noexcept
+  {
+    return bg_view_;
+  }
+  [[nodiscard]] const_color_view_t
+  bgs_2d () const noexcept
+  {
+    return const_color_view_t{ bg_view_.data_handle (),
+                               mdspan_extents{ height (), width () } };
+  }
+
   /// Direct access to SOA arrays (for diffing, inspection, etc.)
+  /// Only available for owning rasters (not views).
+  /// Returns empty span for non-owning views.
   [[nodiscard]] std::span<const GlyphTable::GlyphId>
   glyphs () const noexcept
   {
-    return glyphs_;
+    return storage_glyphs_
+               ? std::span<const GlyphTable::GlyphId> (*storage_glyphs_)
+               : std::span<const GlyphTable::GlyphId> ();
   }
   [[nodiscard]] std::span<const Rgba8>
   fgs () const noexcept
   {
-    return fgs_;
+    return storage_fgs_ ? std::span<const Rgba8> (*storage_fgs_)
+                        : std::span<const Rgba8> ();
   }
   [[nodiscard]] std::span<const Rgba8>
   bgs () const noexcept
   {
-    return bgs_;
+    return storage_bgs_ ? std::span<const Rgba8> (*storage_bgs_)
+                        : std::span<const Rgba8> ();
   }
 
   /// Get cell data at (x, y).
@@ -174,15 +246,41 @@ public:
   [[nodiscard]] std::optional<Cell> get_cell (std::size_t x,
                                               std::size_t y) const noexcept;
 
-private:
-  std::size_t width_;
-  std::size_t height_;
+  /// Helper: count cells in a region that match a predicate
+  template <typename Pred>
+  [[nodiscard]] std::size_t
+  count_if (std::size_t x0, std::size_t y0, std::size_t x1, std::size_t y1,
+            Pred &&pred) const
+  {
+    auto view = glyphs_2d ();
+    std::size_t count = 0;
 
-  /// SOA layout: separate vectors for each cell component
-  std::vector<GlyphTable::GlyphId> glyphs_;
-  std::vector<Rgba8> fgs_;
-  std::vector<Rgba8> bgs_;
+    // Clamp to raster bounds
+    x1 = std::min (x1, width ());
+    y1 = std::min (y1, height ());
+
+    for (std::size_t y = y0; y < y1; ++y)
+      {
+        for (std::size_t x = x0; x < x1; ++x)
+          {
+            if (pred (view[y, x]))
+              ++count;
+          }
+      }
+    return count;
+  }
+
+private:
+  /// mdspan views - always present, define the view into the data
+  glyph_view_t glyph_view_;
+  color_view_t fg_view_;
+  color_view_t bg_view_;
+
+  /// Storage - only present for owning rasters
+  /// For non-owning views (subrasters), these are empty
+  std::optional<std::vector<GlyphTable::GlyphId>> storage_glyphs_;
+  std::optional<std::vector<Rgba8>> storage_fgs_;
+  std::optional<std::vector<Rgba8>> storage_bgs_;
 };
 
 } // namespace nxb
-

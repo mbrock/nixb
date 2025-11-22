@@ -1,7 +1,7 @@
 project('nixb', 'cpp',
   version : '0.1.0',
   default_options : [
-    'cpp_std=c++20',
+    'cpp_std=c++23',
     'warning_level=2',
     'werror=false',
     'b_ndebug=if-release',
@@ -18,6 +18,7 @@ nix_flake_dep = dependency('nix-flake')
 nix_cmd_dep = dependency('nix-cmd')
 nix_main_dep = dependency('nix-main')
 boost_dep = dependency('boost')
+mdspan_dep = dependency('mdspan', fallback : ['mdspan', 'mdspan_dep'])
 
 # libcoro for coroutine prototype (git subtree in subprojects/libcoro)
 # It's header-only and always available as a subtree
@@ -28,6 +29,15 @@ else
   warning('libcoro subtree not found - coroutine prototypes will not be built')
   warning('Run: git subtree add --prefix subprojects/libcoro https://github.com/jbaldwin/libcoro main --squash')
   libcoro_dep = disabler()
+endif
+
+# libvterm for terminal emulation in tests
+if fs.is_dir('subprojects/libvterm')
+  libvterm_subproject = subproject('libvterm')
+  libvterm_dep = libvterm_subproject.get_variable('libvterm_dep')
+else
+  warning('libvterm not found - terminal emulation tests will not be available')
+  libvterm_dep = disabler()
 endif
 
 add_project_arguments(

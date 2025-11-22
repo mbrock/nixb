@@ -9,6 +9,7 @@
 #include <csignal>
 #include <cstdint>
 #include <fmt/core.h>
+#include <iostream>
 #include <sys/ioctl.h>
 #include <unistd.h>
 
@@ -171,6 +172,12 @@ TerminalCompositor::glyphs () noexcept
 void
 TerminalCompositor::present_frame ()
 {
+  present_frame (std::cout);
+}
+
+void
+TerminalCompositor::present_frame (std::ostream &out)
+{
   fmt::memory_buffer buf;
   ansi::Writer w (buf);
   w.move_to (1, 1);
@@ -196,13 +203,14 @@ TerminalCompositor::present_frame ()
         }
     }
 
-  fmt::print ("{}", fmt::to_string (buf));
-  std::fflush (stdout);
+  // Emit the accumulated ANSI to the output stream
+  out.write (buf.data (), buf.size ());
+  out.flush ();
 
   fmt::memory_buffer reset_buf;
   ansi::Writer reset_writer (reset_buf);
   reset_writer.reset ();
-  fmt::print ("{}", fmt::to_string (reset_buf));
+  out.write (reset_buf.data (), reset_buf.size ());
 
   std::swap (front_, back_);
 }

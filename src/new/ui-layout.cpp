@@ -1,7 +1,6 @@
 #include "ui-layout.hpp"
 
 #include <algorithm>
-#include <numeric>
 
 namespace nxb::ui
 {

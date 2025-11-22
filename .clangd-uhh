@@ -1,0 +1,5 @@
+CompileFlags:
+  Add:
+    - -I/home/mbrock/nixb/subprojects/libvterm/include
+    - -I/home/mbrock/nixb/build/subprojects/libvterm
+  CompilationDatabase: build

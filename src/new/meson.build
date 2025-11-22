@@ -32,8 +32,10 @@ ui_example = executable(
   ],
   dependencies: [
     fmt_dep,
-    libcoro_dep
+    libcoro_dep,
+    mdspan_dep
   ],
+  cpp_args: ['-DMDSPAN_USE_BRACKET_OPERATOR=1', '-DMDSPAN_USE_PAREN_OPERATOR=0'],
   install: false
 )
 
@@ -47,18 +49,34 @@ mini_raster_demo = executable(
   ],
   dependencies: [
     fmt_dep,
-    libcoro_dep
+    libcoro_dep,
+    mdspan_dep
   ],
+  cpp_args: ['-DMDSPAN_USE_BRACKET_OPERATOR=1', '-DMDSPAN_USE_PAREN_OPERATOR=0'],
   install: false
 )
 
-nxbtest_001 = executable(
-  'nxbtest-001',
+# Modern doctest-based test runner using vterm
+nxb_vterm_tests = executable(
+  'nxb-vterm-tests',
   [
-    'test/nxbtest-001.cpp',
+    'test/vterm-doctest-main.cpp',
+    'ansi.cpp',
+    'glyph-table.cpp',
+    'tty-raster.cpp',
+    'tty-raster-diff.cpp',
+    'ui-app.cpp',
+    'ui-dom.cpp',
+    'ui-layout.cpp',
+    'ui-paint.cpp'
   ],
+  include_directories: include_directories('test'),
   dependencies: [
     fmt_dep,
+    libcoro_dep,
+    libvterm_dep,
+    mdspan_dep
   ],
+  cpp_args: ['-DMDSPAN_USE_BRACKET_OPERATOR=1', '-DMDSPAN_USE_PAREN_OPERATOR=0'],
   install: false
 )
