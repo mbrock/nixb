@@ -48,7 +48,8 @@ LayoutEngine::layout_element (Dom &dom, NodeId node_id, Rect container_rect)
   std::vector<ChildInfo> children;
   for (auto child_id : elem->children)
     {
-      auto [w, h] = measure (dom, child_id, container_rect.w, container_rect.h);
+      auto [w, h]
+          = measure (dom, child_id, container_rect.w, container_rect.h);
 
       // Check child's size specs
       auto &child_node = dom.get (child_id);
@@ -56,8 +57,8 @@ LayoutEngine::layout_element (Dom &dom, NodeId node_id, Rect container_rect)
       if (auto *child_elem = std::get_if<Element> (&child_node.content))
         {
           const bool is_main_axis_row = (style.flex_dir == FlexDir::Row);
-          const auto &child_size
-              = is_main_axis_row ? child_elem->style.width : child_elem->style.height;
+          const auto &child_size = is_main_axis_row ? child_elem->style.width
+                                                    : child_elem->style.height;
 
           if (child_size.is_grow)
             grow = child_size.value;
@@ -88,15 +89,14 @@ LayoutEngine::layout_element (Dom &dom, NodeId node_id, Rect container_rect)
     }
 
   // Available space on main axis
-  const std::size_t main_size
-      = is_row ? container_rect.w : container_rect.h;
-  const std::size_t cross_size
-      = is_row ? container_rect.h : container_rect.w;
+  const std::size_t main_size = is_row ? container_rect.w : container_rect.h;
+  const std::size_t cross_size = is_row ? container_rect.h : container_rect.w;
 
   // Distribute extra space to growing children
   std::size_t extra_space
       = (main_size > total_intrinsic) ? (main_size - total_intrinsic) : 0;
-  std::size_t space_per_grow = (total_grow > 0) ? (extra_space / total_grow) : 0;
+  std::size_t space_per_grow
+      = (total_grow > 0) ? (extra_space / total_grow) : 0;
 
   // Compute spacing for justify-content
   std::size_t spacing = 0;
@@ -165,15 +165,15 @@ LayoutEngine::layout_element (Dom &dom, NodeId node_id, Rect container_rect)
       Rect child_rect;
       if (is_row)
         {
-          child_rect = { container_rect.x + main_pos,
-                         container_rect.y + cross_pos, child_main_size,
-                         child_cross_size };
+          child_rect
+              = { container_rect.x + main_pos, container_rect.y + cross_pos,
+                  child_main_size, child_cross_size };
         }
       else
         {
-          child_rect = { container_rect.x + cross_pos,
-                         container_rect.y + main_pos, child_cross_size,
-                         child_main_size };
+          child_rect
+              = { container_rect.x + cross_pos, container_rect.y + main_pos,
+                  child_cross_size, child_main_size };
         }
 
       // Recursively layout child
@@ -200,9 +200,6 @@ LayoutEngine::measure (Dom &dom, NodeId node_id, std::size_t max_width,
   if (auto *elem = std::get_if<Element> (&node.content))
     {
       // Element: measure children
-      if (elem->children.empty ())
-        return { 0, 0 };
-
       const bool is_row = (elem->style.flex_dir == FlexDir::Row);
 
       std::size_t total_main = 0;
@@ -224,8 +221,15 @@ LayoutEngine::measure (Dom &dom, NodeId node_id, std::size_t max_width,
             }
         }
 
-      return is_row ? std::pair{ total_main, max_cross }
-                    : std::pair{ max_cross, total_main };
+      std::size_t width = is_row ? total_main : max_cross;
+      std::size_t height = is_row ? max_cross : total_main;
+
+      if (elem->style.width.value > 0 && !elem->style.width.is_grow)
+        width = elem->style.width.value;
+      if (elem->style.height.value > 0 && !elem->style.height.is_grow)
+        height = elem->style.height.value;
+
+      return { width, height };
     }
 
   return { 0, 0 };
@@ -261,4 +265,3 @@ LayoutEngine::measure_text_width (const std::string &text)
 }
 
 } // namespace nxb::ui
-

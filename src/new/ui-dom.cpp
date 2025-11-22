@@ -28,12 +28,12 @@ Dom::create_element (Style style)
 }
 
 NodeId
-Dom::create_text (std::string content)
+Dom::create_text (std::string content, fmt::color color)
 {
   NodeId id{ nodes_.size () };
   nodes_.push_back (NodeData{
       .parent = NodeId::null (),
-      .content = Text{ .content = std::move (content) },
+      .content = Text{ .content = std::move (content), .color = color },
       .rect = {},
   });
   dirty_ = true;
@@ -59,7 +59,8 @@ Dom::append_child (NodeId parent, NodeId child)
 }
 
 void
-Dom::update_text (NodeId node, std::string new_text)
+Dom::update_text (NodeId node, std::string new_text,
+                  std::optional<fmt::color> color)
 {
   if (!node.is_valid ())
     return;
@@ -68,6 +69,8 @@ Dom::update_text (NodeId node, std::string new_text)
   if (auto *text = std::get_if<Text> (&data.content))
     {
       text->content = std::move (new_text);
+      if (color)
+        text->color = *color;
       dirty_ = true;
     }
 }

@@ -20,11 +20,12 @@ private:
                    GlyphTable &glyphs);
 
   /// Fill rect with background glyph
-  void fill_background (Raster &raster, const Rect &rect, char bg_glyph);
+  void fill_background (Raster &raster, const Rect &rect, char bg_glyph,
+                        fmt::color fg, fmt::color bg);
 
   /// Draw text within rect
   void draw_text (Raster &raster, GlyphTable &glyphs, const Rect &rect,
-                  const std::string &text);
+                  const std::string &text, fmt::color color);
 };
 
 } // namespace nxb::ui

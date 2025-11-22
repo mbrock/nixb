@@ -1,5 +1,8 @@
 #include "ui-widgets.hpp"
 
+#include <algorithm>
+#include <cmath>
+
 #include <coro/sync_wait.hpp>
 #include <coro/when_all.hpp>
 #include <fmt/core.h>
@@ -8,39 +11,46 @@ namespace nxb::ui
 {
 
 coro::task<void>
-progress_bar_widget (coro::io_scheduler &scheduler, Dom &dom, NodeId my_node,
+progress_bar_widget (coro::io_scheduler &scheduler, Dom &dom,
+                     ProgressBarNodes nodes,
                      coro::queue<ProgressState> &updates)
 {
-  // Schedule on the io_scheduler
   co_await scheduler.schedule ();
 
   float current = 0.0f;
 
   while (true)
     {
-      // Wait for update from queue
       auto update_result = co_await updates.pop ();
       if (!update_result)
-        break; // Queue shutdown
+        break;
 
       auto update = *update_result;
-
-      // Smooth animation toward target
       float target = update.fraction;
+
       while (current < target)
         {
-          current += 0.05f;
-          if (current > target)
-            current = target;
+          current = std::min (current + 0.05f, target);
 
-          // Update my DOM node
-          std::string bar_filled (int (current * 20), '=');
-          std::string bar_empty (int ((1 - current) * 20), ' ');
-          auto bar = fmt::format ("[{}{}] {} {:.0f}%", bar_filled, bar_empty,
-                                  update.label, current * 100);
-          dom.update_text (my_node, bar);
+          dom.update_text (nodes.label, fmt::format ("{:<20}", update.label));
 
-          // Sleep for 16ms (60fps)
+          dom.update_text (
+              nodes.percent,
+              fmt::format ("{:>5.0f}%", std::round (current * 100.0f)));
+
+          const int filled_cells = std::clamp (int (current * nodes.bar_width),
+                                               0, nodes.bar_width);
+
+          const auto &fill_node = dom.get (nodes.bar_fill);
+          if (auto *elem = std::get_if<Element> (&fill_node.content))
+            {
+              Style new_style = elem->style;
+              new_style.width = Size::fixed (filled_cells);
+              new_style.fg_color
+                  = update.finished ? fmt::color::cyan : fmt::color::green;
+              dom.update_style (nodes.bar_fill, new_style);
+            }
+
           co_await scheduler.yield_for (std::chrono::milliseconds (16));
         }
 

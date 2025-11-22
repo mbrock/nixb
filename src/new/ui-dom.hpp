@@ -1,7 +1,9 @@
 #pragma once
 
 #include <cstddef>
-#include <memory>
+#include <cstdint>
+#include <fmt/color.h>
+#include <optional>
 #include <string>
 #include <variant>
 #include <vector>
@@ -77,7 +79,6 @@ struct Size
     return { factor, true };
   }
 };
-
 /// Simple style (no string parsing needed)
 struct Style
 {
@@ -89,6 +90,8 @@ struct Style
   Size height{};
 
   char bg_glyph = ' '; // Background fill character
+  fmt::color fg_color = fmt::color::white;
+  fmt::color bg_color = fmt::color::black;
 
   [[nodiscard]] static Style
   defaults ()
@@ -97,6 +100,11 @@ struct Style
   }
 };
 
+struct Text
+{
+  std::string content;
+  fmt::color color = fmt::color::white;
+};
 /// Rectangle (layout result)
 struct Rect
 {
@@ -109,11 +117,6 @@ struct Element
 {
   Style style;
   std::vector<NodeId> children;
-};
-
-struct Text
-{
-  std::string content;
 };
 
 /// Node data
@@ -135,13 +138,15 @@ public:
   [[nodiscard]] NodeId create_element (Style style = Style::defaults ());
 
   /// Create text node
-  [[nodiscard]] NodeId create_text (std::string content);
+  [[nodiscard]] NodeId create_text (std::string content,
+                                    fmt::color color = fmt::color::white);
 
   /// Add child to parent
   void append_child (NodeId parent, NodeId child);
 
   /// Update text content (triggers dirty flag)
-  void update_text (NodeId node, std::string new_text);
+  void update_text (NodeId node, std::string new_text,
+                    std::optional<fmt::color> color = std::nullopt);
 
   /// Update style (triggers dirty flag)
   void update_style (NodeId node, Style new_style);

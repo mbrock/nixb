@@ -19,6 +19,7 @@ nixbco = executable(
 ui_example = executable(
   'ui-example',
   [
+    'ui-app.cpp',
     'glyph-table.cpp',
     'tty-raster.cpp',
     'tty-raster-diff.cpp',

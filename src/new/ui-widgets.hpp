@@ -18,11 +18,20 @@ struct ProgressState
   bool finished = false;
 };
 
+/// DOM nodes for a progress bar row
+struct ProgressBarNodes
+{
+  NodeId label;
+  NodeId bar_fill;
+  NodeId percent;
+  int bar_width = 0;
+};
+
 /// Widget coroutine: Animated progress bar
 /// Updates its own DOM node, runs until finished
 /// Uses coro::queue for communication
 coro::task<void> progress_bar_widget (coro::io_scheduler &scheduler, Dom &dom,
-                                      NodeId my_node,
+                                      ProgressBarNodes nodes,
                                       coro::queue<ProgressState> &updates);
 
 /// Widget coroutine: Text display
