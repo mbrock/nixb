@@ -97,7 +97,7 @@ UiStateBuilder::build ()
     {
       result_.activity_lines.push_back (UiActivityLine{
           -999999, fmt::format ("... and {} more packages", total_not_shown),
-          std::nullopt, std::nullopt, false, 0.0, 0, 0 });
+          std::nullopt, std::nullopt, 0.0, false, 0.0, 0, 0 });
     }
 
   sort_activity_lines ();
@@ -217,7 +217,7 @@ UiStateBuilder::emit_tree_node (int64_t yearning_id, int visible_depth,
     }
 
   // Stop recursion if we've hit max depth
-  if (max_depth <= 0)
+  if (max_depth < 0)
     {
       return;
     }
@@ -235,7 +235,8 @@ UiStateBuilder::emit_tree_node (int64_t yearning_id, int visible_depth,
   // Determine if we should show this line
   bool show_this_line = activity->type == nix::actBuild
                         || activity->type == nix::actBuildWaiting
-                        || activity->type == nix::actCopyPath;
+                        || activity->type == nix::actCopyPath
+                        || activity->type == nix::actPostBuildHook;
 
   int next_visible_depth = visible_depth;
 
@@ -246,6 +247,7 @@ UiStateBuilder::emit_tree_node (int64_t yearning_id, int visible_depth,
       std::string label;
       std::optional<std::string> url_part;
       std::optional<ActivityProgress> progress;
+      double speed_bps = 0.0;
       bool is_finished = false;
       double fade_factor = 0.0;
       size_t num_input_deps = 0;
@@ -268,28 +270,24 @@ UiStateBuilder::emit_tree_node (int64_t yearning_id, int visible_depth,
         {
           tag = tag_for_type (activity->type);
 
-          // Use current phase if available
-          if (!activity->current_phase.empty ())
+          // For build activities, show current phase timing
+          if ((activity->type == nix::actBuild
+               || activity->type == nix::actPostBuildHook)
+              && !activity->current_phase.empty ())
             {
-              std::string phase = activity->current_phase;
-              constexpr std::string_view suffix = "Phase";
-              if (phase.size () > suffix.size ()
-                  && phase.compare (phase.size () - suffix.size (),
-                                    suffix.size (), suffix)
-                         == 0)
+              std::string phase_timing
+                  = activity->get_current_phase_timing_string ();
+              if (!phase_timing.empty ())
                 {
-                  phase.erase (phase.size () - suffix.size (), suffix.size ());
+                  label = label + "    " + phase_timing;
                 }
-              std::transform (phase.begin (), phase.end (), phase.begin (),
-                              [] (unsigned char c) {
-                                return static_cast<char> (std::tolower (c));
-                              });
-              tag = fmt::format ("[{}]", phase);
             }
 
           // Get progress from activity
           if (activity->has_progress)
             progress = activity->progress;
+
+          speed_bps = activity->current_speed_bps;
 
           is_finished = activity->is_finished;
 
@@ -339,8 +337,8 @@ UiStateBuilder::emit_tree_node (int64_t yearning_id, int visible_depth,
       display += label;
 
       result_.activity_lines.push_back (UiActivityLine{
-          yearning_id, std::move (display), url_part, progress, is_finished,
-          fade_factor, num_input_deps, num_dependents });
+          yearning_id, std::move (display), url_part, progress, speed_bps,
+          is_finished, fade_factor, num_input_deps, num_dependents });
 
       next_visible_depth = visible_depth + 1;
     }

@@ -16,7 +16,9 @@
 namespace nix
 {
 class Store;
-}
+class EvalState;
+template <typename T> class ref;
+} // namespace nix
 
 namespace nixb
 {
@@ -39,7 +41,7 @@ public:
   ~NixLogWatcher ();
 
   // Evaluate an installable and return derivation JSON strings.
-  static std::vector<std::string>
+  std::vector<std::string>
   show_derivation (const std::string &installable);
 
   void process_input ();
@@ -68,6 +70,9 @@ private:
     return stop_flag_ && stop_flag_->load (std::memory_order_relaxed);
   }
 
+  // Lazily initialize and return the eval state
+  nix::ref<nix::EvalState> get_eval_state ();
+
   bool quiet_;
   NixLogParser parser_;
   std::shared_ptr<nix::Store> store_;
@@ -78,6 +83,9 @@ private:
   double emit_delay_ms_{ 0.0 };
   std::atomic<bool> *stop_flag_ = nullptr;
   std::optional<int> pending_derivation_count_;
+
+  // Eval state (lazily initialized)
+  std::shared_ptr<nix::EvalState> eval_state_;
 
   // Render thread for continuous UI updates
   std::unique_ptr<std::thread> render_thread_;

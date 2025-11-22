@@ -124,7 +124,7 @@ main (int argc, char **argv)
                              nlohmann::json::error_handler_t::replace);
           watcher.process_log_line (log_line);
 
-          auto drv_json = nixb::NixLogWatcher::show_derivation (installable);
+          auto drv_json = watcher.show_derivation (installable);
           watcher.finish ();
           for (const auto &doc : drv_json)
             {

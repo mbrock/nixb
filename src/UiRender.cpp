@@ -45,6 +45,70 @@ namespace
 {
 std::string ellipsize_middle (std::string_view text, int max_width);
 
+// Convert a digit (0-9) to a segmented digit character (🯰-🯹)
+std::string
+digit_to_segmented (int digit)
+{
+  // Unicode Segmented Digit characters: 🯰 (U+1FBF0) to 🯹 (U+1FBF9)
+  static constexpr std::array<std::string_view, 10> segmented_digits
+      = { "🯰", "🯱", "🯲", "🯳", "🯴", "🯵", "🯶", "🯷", "🯸", "🯹" };
+  if (digit >= 0 && digit < 10)
+    return std::string (segmented_digits[digit]);
+  return " ";
+}
+
+// Format a number using segmented digits
+std::string
+format_segmented_number (int64_t num)
+{
+  if (num < 0)
+    num = 0;
+
+  std::string result;
+  std::string digits = std::to_string (num);
+
+  for (char c : digits)
+    {
+      if (c >= '0' && c <= '9')
+        result += digit_to_segmented (c - '0');
+    }
+
+  return result;
+}
+
+// Format speed with segmented digits and unit suffix
+std::string
+format_speed_segmented (double speed_bps)
+{
+  if (speed_bps < 1.0)
+    return "";
+
+  constexpr int64_t KiB = 1024;
+  constexpr int64_t MiB = 1024 * KiB;
+
+  std::string result;
+  int64_t speed_int;
+  std::string unit;
+
+  // if (speed_bps >= MiB)
+  //   {
+  //     speed_int = static_cast<int64_t> (speed_bps / MiB);
+  //     unit = " MB/s";
+  //   }
+  if (speed_bps >= KiB)
+    {
+      speed_int = static_cast<int64_t> (speed_bps / KiB);
+      unit = " KB/s";
+    }
+  else
+    {
+      speed_int = static_cast<int64_t> (speed_bps);
+      unit = " B/s";
+    }
+
+  return format_segmented_number (speed_int) + unit;
+}
+
 // Terminal colors as RGB
 inline fmt::rgb
 terminal_green ()
@@ -123,7 +187,7 @@ render_counter_line (HudRaster &raster, int row, std::string_view label,
 void
 render_bar_line (HudRaster &raster, int row, std::string_view label,
                  const ActivityProgress &p, int64_t total, int cols,
-                 bool is_finished, double fade_factor,
+                 bool is_finished, double fade_factor, double speed_bps,
                  const std::optional<std::string> &url = {})
 {
   double frac = total > 0
@@ -151,10 +215,12 @@ render_bar_line (HudRaster &raster, int row, std::string_view label,
                                                  / static_cast<double> (total))
                                                 * 100.0)
                             : 0;
-
+  // Format speed for display inside the bar
+  std::string speed_text = format_speed_segmented (speed_bps);
   std::string stats
-      = fmt::format ("{:3}% of {}", percent, format_bytes (total));
-  constexpr int stats_width = 14; // Fixed width for "100% of 9999M"
+      //= fmt::format ("{:3}% {}", percent, format_bytes (total));
+      = fmt::format ("{:>6} {:>10}", format_bytes (total), speed_text);
+  constexpr int stats_width = 18; // Fixed width for "100% of 9999M"
 
   // Calculate available space for name, bar, and separators
   int available = cols - left_margin - right_margin - stats_width;
@@ -235,8 +301,43 @@ render_bar_line (HudRaster &raster, int row, std::string_view label,
   fmt::rgb bar_bg_color = DEFAULT_HUD_BG_COLOR;
 
   // Filled blocks foreground color
-  fmt::rgb bar_color
-      = (is_finished && total > 0) ? terminal_green () : terminal_white ();
+  fmt::rgb bar_color = (is_finished && total > 0) ? fmt::rgb (128, 162, 162)
+                                                  : fmt::rgb (128, 162, 162);
+
+  int speed_text_width = 0;
+  // Count display width of speed text (each segmented digit is 1 cell wide)
+  for (size_t i = 0; i < speed_text.size ();)
+    {
+      unsigned char byte = static_cast<unsigned char> (speed_text[i]);
+      if ((byte & 0x80) == 0)
+        {
+          i += 1;
+          speed_text_width++;
+        }
+      else if ((byte & 0xE0) == 0xC0)
+        {
+          i += 2;
+          speed_text_width++;
+        }
+      else if ((byte & 0xF0) == 0xE0)
+        {
+          i += 3;
+          speed_text_width++;
+        }
+      else if ((byte & 0xF8) == 0xF0)
+        {
+          i += 4;
+          speed_text_width++;
+        }
+      else
+        {
+          i++;
+        }
+    }
+
+  int bar_start_col = col;
+  int speed_start_col = bar_start_col + 2;
+  //+ (bar_width - speed_text_width) / 2; // Center the speed in the bar
 
   // Full blocks with background
   for (int i = 0; i < full_blocks && i < bar_width; ++i)
@@ -261,6 +362,15 @@ render_bar_line (HudRaster &raster, int row, std::string_view label,
       ++col;
     }
 
+  // // Overlay speed text in the middle of the bar
+  // if (!speed_text.empty () && speed_text_width <= bar_width)
+  //   {
+  //     // Use a contrasting color for the speed text
+  //     fmt::rgb speed_color (0, 0, 0);
+  //     raster.write_text (row, speed_start_col, speed_text, speed_color,
+  //                        bar_bg_color, alpha);
+  //   }
+
   // Right box separator
   raster.set_cell (row, col, " ", std::nullopt, std::nullopt, alpha);
   ++col;
@@ -276,13 +386,14 @@ render_bar_line (HudRaster &raster, int row, std::string_view label,
     }
 
   // Write stats (right-aligned with margin)
-  raster.write_text (row, col, stats, std::nullopt, std::nullopt, alpha);
+  raster.write_text (row, col, stats, fmt::rgb (200, 200, 255), std::nullopt,
+                     alpha);
 }
 
 void
 render_progress_line (HudRaster &raster, int row, std::string_view label,
                       const ActivityProgress &p, int cols, bool is_finished,
-                      double fade_factor,
+                      double fade_factor, double speed_bps,
                       const std::optional<std::string> &url = {})
 {
   // Calculate total, adjusting for edge cases
@@ -294,7 +405,7 @@ render_progress_line (HudRaster &raster, int row, std::string_view label,
     render_counter_line (raster, row, label, p, total, cols);
   else
     render_bar_line (raster, row, label, p, total, cols, is_finished,
-                     fade_factor, url);
+                     fade_factor, speed_bps, url);
 }
 
 std::string
@@ -325,10 +436,11 @@ render_activity_line (HudRaster &raster, int row, const UiActivityLine &line,
 {
   std::string label = line.label;
 
-  if (line.progress)
+  if (line.progress && line.url)
     {
       render_progress_line (raster, row, label, *line.progress, cols,
-                            line.is_finished, line.fade_factor, line.url);
+                            line.is_finished, line.fade_factor, line.speed_bps,
+                            line.url);
       return;
     }
 

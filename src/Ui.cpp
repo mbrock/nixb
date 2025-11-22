@@ -212,7 +212,6 @@ private:
         fmt::format_to (std::back_inserter (output), "\x1b[{};{}H", row, 1);
 
         // Clear line
-        fmt::format_to (std::back_inserter (output), "\x1b[K");
         fmt::format_to (std::back_inserter (output), "\x1b[48;2;{};{};{}m",
                         bg_color.r, bg_color.g, bg_color.b);
 
@@ -227,7 +226,7 @@ private:
                             std::string (cols_, ' '));
           }
 
-        // Reset at end of line
+        fmt::format_to (std::back_inserter (output), "\x1b[K");
         fmt::format_to (std::back_inserter (output), "{}", reset);
 
         ++row;
@@ -311,7 +310,7 @@ ActivityHud::present (const UiState &state)
   // Rate limit: only render if enough time has passed
   if (elapsed < min_frame_interval_)
     {
-      return; // Skip this frame, state is cached in last_state_
+      //      return; // Skip this frame, state is cached in last_state_
     }
 
   last_render_time_ = now;

@@ -34,6 +34,7 @@ struct UiActivityLine
   std::optional<std::string>
       url; // Optional URL for display (e.g., cache.nixos.org)
   std::optional<ActivityProgress> progress;
+  double speed_bps = 0.0; // Bytes per second for download speed
   bool is_finished = false;
   double fade_factor = 0.0;  // 0.0 = just finished (bright green), 1.0 = about
                              // to vanish (faded out)

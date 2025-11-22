@@ -119,7 +119,37 @@ NixBuildState::build_activity_tree ()
     const auto *yearning_a = get_yearning (a);
     const auto *yearning_b = get_yearning (b);
     if (!yearning_a || !yearning_b)
-      return a < b;
+      {
+        const auto *activity_a = get_activity (a);
+        const auto *activity_b = get_activity (b);
+
+        if (!activity_a || !activity_b)
+          return a < b;
+
+        if (activity_a->type == nix::actBuild
+            && activity_b->type != nix::actBuild)
+          return true;
+        if (activity_a->type != nix::actBuild
+            && activity_b->type == nix::actBuild)
+          return false;
+
+        if (activity_a->is_finished && !activity_b->is_finished)
+          return true;
+        if (!activity_a->is_finished && activity_b->is_finished)
+          return false;
+
+        if (activity_a->has_progress && !activity_b->has_progress)
+          return true;
+        if (!activity_a->has_progress && activity_b->has_progress)
+          return false;
+
+        if (activity_a->progress.expected > activity_b->progress.expected)
+          return true;
+        if (activity_a->progress.expected < activity_b->progress.expected)
+          return false;
+
+        return a > b;
+      }
 
     // Compute sort order based on linked activity (if any)
     auto sort_order = [this] (const Yearning &yearning) -> int {
@@ -242,6 +272,11 @@ NixBuildState::start_activity (const StartEvent &e)
   info.parent = e.parent;
   info.start_order = next_activity_order_++;
 
+  // Initialize timing
+  auto now = std::chrono::steady_clock::now ();
+  info.start_time = now;
+  info.last_update_time = now;
+
   process_store_ref (e, info);
   process_text_fallback (e, inferred_type, info);
 
@@ -283,7 +318,7 @@ NixBuildState::infer_activity_type (const StartEvent &e) const
   if (e.text.rfind ("hashing '", 0) == 0)
     return nix::actFileTransfer;
   if (e.text.rfind ("copying '", 0) == 0)
-    return nix::actCopyPath;
+    return nix::actFileTransfer;
 
   return e.type;
 }
@@ -350,11 +385,22 @@ NixBuildState::stop_activity (int64_t id)
   if (it == activities_.end ())
     return;
 
+  auto now = std::chrono::steady_clock::now ();
+  it->second.end_time = now;
+  it->second.last_update_time = now;
+
+  // End timing for current phase if any
+  if (!it->second.current_phase.empty ())
+    {
+      auto &timer = it->second.phase_timings[it->second.current_phase];
+      timer.end_time = now;
+    }
+
   if (it->second.type == nix::actFileTransfer
       || it->second.type == nix::actCopyPath)
     {
       it->second.is_finished = true;
-      it->second.finish_time = std::chrono::steady_clock::now ();
+      it->second.finish_time = now;
     }
   else
     {
@@ -395,7 +441,26 @@ NixBuildState::update_progress (const ResultEvent &e)
         {
           auto it = activities_.find (e.id);
           if (it != activities_.end ())
-            it->second.current_phase = std::string{ *phase };
+            {
+              auto now = std::chrono::steady_clock::now ();
+              it->second.last_update_time = now;
+
+              // End timing for previous phase if there was one
+              if (!it->second.current_phase.empty ())
+                {
+                  auto &prev_timer
+                      = it->second.phase_timings[it->second.current_phase];
+                  prev_timer.end_time = now;
+                }
+
+              // Start timing for new phase
+              std::string phase_str{ *phase };
+              it->second.current_phase = phase_str;
+
+              PhaseTimer timer;
+              timer.start_time = now;
+              it->second.phase_timings[phase_str] = timer;
+            }
         }
 
       return;
@@ -424,6 +489,37 @@ NixBuildState::update_progress (const ResultEvent &e)
     progress.unit = ProgressUnit::Bytes;
   if (it->second.type == nix::actCopyPaths)
     progress.unit = ProgressUnit::Count;
+
+  // Calculate download speed for byte-based progress
+  if (progress.unit == ProgressUnit::Bytes)
+    {
+      auto now = std::chrono::steady_clock::now ();
+      if (it->second.has_progress)
+        {
+          auto elapsed
+              = std::chrono::duration_cast<std::chrono::milliseconds> (
+                    now - it->second.last_progress_time)
+                    .count ();
+          if (elapsed > 0)
+            {
+              int64_t bytes_delta
+                  = progress.done - it->second.last_progress_bytes;
+              double speed = static_cast<double> (bytes_delta)
+                             / (static_cast<double> (elapsed) / 1000.0);
+              // Smooth the speed using exponential moving average
+              constexpr double alpha = 0.01;
+              it->second.current_speed_bps
+                  = alpha * speed
+                    + (1.0 - alpha) * it->second.current_speed_bps;
+            }
+        }
+      else
+        {
+          it->second.current_speed_bps = 0.0;
+        }
+      it->second.last_progress_time = now;
+      it->second.last_progress_bytes = progress.done;
+    }
 
   it->second.progress = progress;
   it->second.has_progress = true;
@@ -474,6 +570,120 @@ ActivityInfo::to_json () const
     { "store_base_url", store_base_url },
     { "label", label }
   }.dump ();
+}
+
+std::string
+ActivityInfo::get_phase_timing_string () const
+{
+  if (phase_timings.empty ())
+    return "";
+
+  std::vector<std::string> parts;
+
+  // Common build phases in order
+  const std::vector<std::string> phase_order
+      = { "unpackPhase", "patchPhase",     "configurePhase", "buildPhase",
+          "checkPhase",  "installPhase",   "fixupPhase",     "installCheckPhase",
+          "distPhase",   "postInstallPhase" };
+
+  // Add phases in canonical order if they exist
+  for (const auto &phase_name : phase_order)
+    {
+      auto it = phase_timings.find (phase_name);
+      if (it != phase_timings.end ())
+        {
+          auto elapsed_ms = it->second.elapsed ().count ();
+          double elapsed_s = elapsed_ms / 1000.0;
+
+          // Strip "Phase" suffix for display
+          std::string display_name = phase_name;
+          constexpr std::string_view suffix = "Phase";
+          if (display_name.size () > suffix.size ()
+              && display_name.compare (display_name.size () - suffix.size (),
+                                       suffix.size (), suffix)
+                     == 0)
+            {
+              display_name.erase (display_name.size () - suffix.size (),
+                                  suffix.size ());
+            }
+
+          // Format seconds with 1 decimal place if < 10s, otherwise integer
+          std::string time_str;
+          if (elapsed_s < 10.0)
+            time_str = fmt::format ("{:.1f}s", elapsed_s);
+          else
+            time_str = fmt::format ("{}s", static_cast<int> (elapsed_s));
+
+          parts.push_back (fmt::format ("{} {}", time_str, display_name));
+        }
+    }
+
+  // Add any other phases not in the canonical order
+  for (const auto &[phase_name, timer] : phase_timings)
+    {
+      if (std::find (phase_order.begin (), phase_order.end (), phase_name)
+          == phase_order.end ())
+        {
+          auto elapsed_ms = timer.elapsed ().count ();
+          double elapsed_s = elapsed_ms / 1000.0;
+
+          std::string time_str;
+          if (elapsed_s < 10.0)
+            time_str = fmt::format ("{:.1f}s", elapsed_s);
+          else
+            time_str = fmt::format ("{}s", static_cast<int> (elapsed_s));
+
+          parts.push_back (fmt::format ("{} {}", time_str, phase_name));
+        }
+    }
+
+  if (parts.empty ())
+    return "";
+
+  std::string result;
+  for (size_t i = 0; i < parts.size (); ++i)
+    {
+      if (i > 0)
+        result += " + ";
+      result += parts[i];
+    }
+
+  return result;
+}
+
+std::string
+ActivityInfo::get_current_phase_timing_string () const
+{
+  if (current_phase.empty () || phase_timings.empty ())
+    return "";
+
+  auto it = phase_timings.find (current_phase);
+  if (it == phase_timings.end ())
+    return "";
+
+  auto elapsed_ms = it->second.elapsed ().count ();
+  double elapsed_s = elapsed_ms / 1000.0;
+
+  // Strip "Phase" suffix for display
+  std::string display_name = current_phase;
+  constexpr std::string_view suffix = "Phase";
+  if (display_name.size () > suffix.size ()
+      && display_name.compare (display_name.size () - suffix.size (),
+                               suffix.size (), suffix)
+             == 0)
+    {
+      display_name.erase (display_name.size () - suffix.size (),
+                          suffix.size ());
+    }
+
+  // Format seconds with 1 decimal place if < 10s, otherwise integer
+  std::string time_str;
+  if (elapsed_s < 10.0)
+    time_str = fmt::format ("{:.1f}s", elapsed_s);
+  else
+    time_str = fmt::format ("{}s", static_cast<int> (elapsed_s));
+
+  return fmt::format ("{} {}", time_str, display_name);
 }
 
 } // namespace nixb

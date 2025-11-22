@@ -33,6 +33,21 @@ struct Yearning
   std::optional<int64_t> live_activity_id; // Linked real activity, if started
 };
 
+// Phase timing information
+struct PhaseTimer
+{
+  std::chrono::steady_clock::time_point start_time;
+  std::optional<std::chrono::steady_clock::time_point> end_time;
+
+  std::chrono::milliseconds
+  elapsed () const
+  {
+    auto end = end_time.value_or (std::chrono::steady_clock::now ());
+    return std::chrono::duration_cast<std::chrono::milliseconds> (end
+                                                                   - start_time);
+  }
+};
+
 // ActivityInfo: Live events from Nix's @nix JSON stream
 // Dynamic state: phases, progress, current status
 struct ActivityInfo
@@ -50,10 +65,40 @@ struct ActivityInfo
   size_t start_order = 0;
   std::string current_phase;
   bool is_finished = false;
+
+  // Timing tracking
+  std::chrono::steady_clock::time_point start_time;
+  std::optional<std::chrono::steady_clock::time_point> end_time;
+  std::chrono::steady_clock::time_point last_update_time;
   std::optional<std::chrono::steady_clock::time_point> finish_time;
+
+  // Phase timing tracking (for build activities)
+  std::map<std::string, PhaseTimer> phase_timings;
+
   std::vector<nix::StorePath> input_drv_paths; // Build dependencies
 
+  // Download speed tracking
+  std::chrono::steady_clock::time_point last_progress_time;
+  int64_t last_progress_bytes = 0;
+  double current_speed_bps = 0.0; // Bytes per second
+
   std::string to_json () const;
+
+  // Get formatted phase timing string (e.g., "12s configure + 5s build + 3s
+  // install")
+  std::string get_phase_timing_string () const;
+
+  // Get formatted current phase timing string (e.g., "3s install")
+  std::string get_current_phase_timing_string () const;
+
+  // Get total elapsed time for this activity
+  std::chrono::milliseconds
+  elapsed () const
+  {
+    auto end = end_time.value_or (std::chrono::steady_clock::now ());
+    return std::chrono::duration_cast<std::chrono::milliseconds> (end
+                                                                   - start_time);
+  }
 };
 
 class NixBuildState
