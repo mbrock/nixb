@@ -6,6 +6,7 @@
 
 #include <chrono>
 #include <cmath>
+#include <coro/generator.hpp>
 #include <coro/io_scheduler.hpp>
 #include <coro/queue.hpp>
 #include <coro/sync_wait.hpp>
@@ -13,10 +14,16 @@
 #include <fmt/color.h>
 #include <fmt/core.h>
 #include <string>
+#include <variant>
 #include <vector>
 
 namespace nxb::ui
 {
+
+namespace
+{
+
+using namespace std::chrono_literals;
 
 coro::task<void>
 shutdown_watcher_task (coro::queue<ProgressState> &bar1_updates,
@@ -59,6 +66,105 @@ simulation_task (coro::io_scheduler &scheduler,
     {
       co_await bar1_updates.shutdown ();
       co_await bar2_updates.shutdown ();
+    }
+
+  co_return;
+}
+
+coro::generator<std::monostate>
+dom_view_generator (Dom &dom, LayoutEngine &layout, Painter &painter,
+                    TerminalCompositor &compositor, NodeId container,
+                    TermSize &size_state)
+{
+  while (true)
+    {
+      const auto desired = size_state;
+
+      auto &container_node = dom.get_mut (container);
+      if (auto *elem = std::get_if<Element> (&container_node.content))
+        {
+          const bool width_changed
+              = (!elem->style.width.is_grow
+                 && elem->style.width.value
+                        != static_cast<std::size_t> (desired.width));
+          const bool height_changed
+              = (!elem->style.height.is_grow
+                 && elem->style.height.value
+                        != static_cast<std::size_t> (desired.height));
+          if (width_changed || height_changed)
+            {
+              Style updated = elem->style;
+              updated.width = Size::fixed (desired.width);
+              updated.height = Size::fixed (desired.height);
+              dom.update_style (container, updated);
+            }
+        }
+
+      if (dom.is_dirty ())
+        {
+          layout.compute (dom, desired.width, desired.height);
+        }
+
+      auto &back_buffer = compositor.back_buffer ();
+      back_buffer.clear ();
+      painter.paint (dom, back_buffer, compositor.glyphs ());
+      dom.mark_clean ();
+
+      co_yield std::monostate{};
+    }
+}
+
+coro::task<void>
+view_driver_task (coro::io_scheduler &scheduler, Dom &dom,
+                  LayoutEngine &layout, Painter &painter,
+                  TerminalCompositor &compositor, NodeId container)
+{
+  co_await scheduler.schedule ();
+
+  TermSize size_state = terminal_size ();
+  auto generator = dom_view_generator (dom, layout, painter, compositor,
+                                       container, size_state);
+  auto iter = generator.begin ();
+  auto end = generator.end ();
+
+  auto check_resize_queue = [&] () -> bool {
+    bool resized = false;
+    while (true)
+      {
+        auto value = resize_channel ().try_pop ();
+        if (value.has_value ())
+          {
+            size_state = *value;
+            resized = true;
+            continue;
+          }
+
+        const auto err = value.error ();
+        if (err == coro::queue_consume_result::empty
+            || err == coro::queue_consume_result::try_lock_failure
+            || err == coro::queue_consume_result::stopped)
+          break;
+      }
+    return resized;
+  };
+
+  while (!shutdown_requested ())
+    {
+      bool resized = check_resize_queue ();
+      bool dirty = dom.is_dirty () || resized;
+
+      if (!dirty)
+        {
+          co_await scheduler.yield_for (16ms);
+          continue;
+        }
+
+      if (iter == end)
+        break;
+
+      (void)*iter;
+      ++iter;
+      signal_damage ();
     }
 
   co_return;
@@ -147,9 +253,13 @@ run_progress_hud ()
   widgets.push_back (
       progress_bar_widget (*scheduler, dom, bar2_nodes, bar2_updates));
 
+  TerminalCompositor compositor (terminal_width (), terminal_height (),
+                                 glyphs);
+
   std::vector<coro::task<void>> all_tasks;
-  all_tasks.push_back (
-      render_loop_task (*scheduler, dom, glyphs, layout, painter, container));
+  all_tasks.push_back (compositor.present_loop (*scheduler));
+  all_tasks.push_back (view_driver_task (*scheduler, dom, layout, painter,
+                                         compositor, container));
   all_tasks.push_back (
       simulation_task (*scheduler, bar1_updates, bar2_updates));
   all_tasks.push_back (shutdown_watcher_task (bar1_updates, bar2_updates));
@@ -175,6 +285,8 @@ run_progress_hud ()
 
   return 0;
 }
+
+} // namespace
 
 } // namespace nxb::ui
 
