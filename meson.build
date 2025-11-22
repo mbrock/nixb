@@ -7,6 +7,8 @@ project('nixb', 'cpp',
     'b_ndebug=if-release',
   ])
 
+fs = import('fs')
+
 fmt_dep = dependency('fmt', fallback : ['fmt', 'fmt_dep'])
 simdjson_dep = dependency('simdjson', fallback : ['simdjson', 'simdjson_dep'])
 cli11_dep = dependency('cli11', fallback : ['cli11', 'CLI11_dep'])
@@ -14,7 +16,14 @@ nix_store_dep = dependency('nix-store')
 nix_expr_dep = dependency('nix-expr')
 nix_flake_dep = dependency('nix-flake')
 nix_cmd_dep = dependency('nix-cmd')
+nix_main_dep = dependency('nix-main')
 boost_dep = dependency('boost')
+
+# libcoro for coroutine prototype (header-only)
+libcoro_dep = dependency('libcoro',
+  required : false,
+  fallback : ['libcoro', 'libcoro_dep']
+)
 
 add_project_arguments(
   '-Wno-missing-field-initializers',
@@ -38,3 +47,6 @@ executable('nixb', [
   ],
   dependencies : [fmt_dep, simdjson_dep, cli11_dep, nix_store_dep, nix_expr_dep, nix_flake_dep, nix_cmd_dep, boost_dep],
   install : true)
+
+# Experimental coroutine prototype
+subdir('src/new')
