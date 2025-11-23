@@ -12,10 +12,7 @@ export CLICOLOR=1
 all: build
 build: build/Makefile; make -C build -j`nproc`
 build/Makefile: setup
-
-setup: CMakeLists.txt
-	$(CMAKE) -B build -DCMAKE_BUILD_TYPE=$(BUILD_TYPE)
-
+setup: CMakeLists.txt; $(CMAKE) --preset default
 clean:; rm -rf build
 docs:; doxygen docs/Doxyfile.nix-api
 test: build; $(MAKE) -C build test
