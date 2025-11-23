@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <bit>
 #include <cerrno>
-#include <exec/any_sender_of.hpp>
+// #include <exec/sender
 #include <cstdio>
 #include <exec/linux/io_uring_context.hpp>
 #include <exec/linux/safe_file_descriptor.hpp>
@@ -11,7 +11,7 @@
 #include <filesystem>
 #include <fmt/base.h>
 #include <fmt/color.h>
-#include <fmt/std.h>
+//#include <fmt/std.h>
 #include <fstream>
 #include <map>
 #include <mp-units/format.h>
@@ -41,9 +41,10 @@ using namespace mp_units::iec::unit_symbols;
 using namespace mp_units::si::unit_symbols;
 
 // Define custom page unit (standard 4 KiB page)
-inline constexpr struct page final : named_unit<"page", mag<4096> * iec::byte>
-{
-} page;
+inline constexpr struct page final : named_unit<"page", mag<4096> * iec::bit> {} page;
+//inline constexpr struct page final : named_unit<"page", mag<4096> * iec::byte>
+//{
+//} page;
 
 // Variant to hold different quantity types
 using stat_value = std::variant<decltype (1.0 * B), decltype (1.0 * page),
@@ -257,18 +258,18 @@ format_value (const stat_value &value)
           }
         else if constexpr (requires { val.in (h); })
           {
-            // Time quantities - smart formatting using mp-units
-            auto val_numeric = val.numerical_value_ref_in (us);
+            // // Time quantities - smart formatting using mp-units
+            // auto val_numeric = val.numerical_value_ref_in (us);
 
-            if (val_numeric >= 3600000000UL) // 1 hour in microseconds
-              return fmt::format ("{::N[.2f]}", val.in (h));
-            else if (val_numeric >= 60000000UL) // 1 minute in microseconds
-              return fmt::format ("{::N[.2f]}", val.in (min));
-            else if (val_numeric >= 1000000UL) // 1 second in microseconds
-              return fmt::format ("{::N[.2f]}", val.in (s));
-            else if (val_numeric >= 1000UL) // 1 ms in microseconds
-              return fmt::format ("{::N[.2f]}", val.in (ms));
-            else
+            // if (val_numeric >= 3600000000UL) // 1 hour in microseconds
+            //   return fmt::format ("{::N[.2f]}", val.in (h));
+            // else if (val_numeric >= 60000000UL) // 1 minute in microseconds
+            //   return fmt::format ("{::N[.2f]}", val.in (min));
+            // else if (val_numeric >= 1000000UL) // 1 second in microseconds
+            //   return fmt::format ("{::N[.2f]}", val.in (s));
+            // else if (val_numeric >= 1000UL) // 1 ms in microseconds
+            //   return fmt::format ("{::N[.2f]}", val.in (ms));
+            // else
               return fmt::format ("{}", val);
           }
         else

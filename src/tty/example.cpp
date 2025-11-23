@@ -5,6 +5,7 @@
 #include "widgets.hpp"
 
 #include <chrono>
+#include <coro/coro.hpp>
 #include <coro/generator.hpp>
 #include <coro/io_scheduler.hpp>
 #include <coro/queue.hpp>
@@ -212,7 +213,7 @@ make_progress_row (Dom &dom, const NodeId container, std::string label_text,
 int
 run_progress_hud ()
 {
-  auto scheduler = coro::io_scheduler::make_unique ();
+  auto scheduler = coro::io_scheduler::make_shared (coro::io_scheduler::options{});
   init_ui_runtime (*scheduler);
   TerminalGuard guard;
 

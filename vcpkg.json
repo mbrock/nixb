@@ -1,7 +1,0 @@
-{
-  "dependencies": [
-    "range-v3",
-    "stdexec",
-    "mp-units"
-  ]
-}

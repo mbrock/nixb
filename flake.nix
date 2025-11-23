@@ -99,6 +99,7 @@
               pcre2.dev
               lowdown.dev
               editline.dev
+              c-ares.dev
             ];
             packages = with pkgs; [
               nix.dev
@@ -120,9 +121,10 @@
               expr_include=$(pkg-config --variable=includedir nix-expr 2>/dev/null)
               cmd_include=$(pkg-config --variable=includedir nix-cmd 2>/dev/null)
               main_include=$(pkg-config --variable=includedir nix-main 2>/dev/null)
+              cares_include=$(pkg-config --variable=includedir c-ares 2>/dev/null)
 
-              export NIX_API_INPUTS="''${store_include}/nix/store ''${util_include}/nix/util ''${flake_include}/nix/flake ''${expr_include}/nix/expr ''${cmd_include}/nix/cmd ''${main_include}/nix/main"
-              export NIX_API_INCLUDE_PATH="''${store_include} ''${util_include} ''${flake_include} ''${expr_include} ''${cmd_include} ''${main_include}"
+              export NIX_API_INPUTS="''${store_include}/nix/store ''${util_include}/nix/util ''${flake_include}/nix/flake ''${expr_include}/nix/expr ''${cmd_include}/nix/cmd ''${main_include}/nix/main ''${cares_include}"
+              export NIX_API_INCLUDE_PATH="''${store_include} ''${util_include} ''${flake_include} ''${expr_include} ''${cmd_include} ''${main_include} ''${cares_include}"
             '';
           };
         }

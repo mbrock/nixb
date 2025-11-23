@@ -1,7 +1,10 @@
-#include "nix-log-adapter.hpp"
 
 #include <fmt/core.h>
+#include <coro/coro.hpp>
+#include <coro/queue.hpp>
 #include <nix/util/error.hh>
+
+#include "nix-log-adapter.hpp"
 
 namespace nixb::coro_adapter
 {
