@@ -15,6 +15,7 @@ endif()
 cmake_policy(SET CMP0167 NEW)
 find_package(Boost REQUIRED)
 find_package(PkgConfig REQUIRED)
+find_package(range-v3 CONFIG REQUIRED)
 
 foreach(nixpkg IN ITEMS NIX_STORE NIX_EXPR NIX_FLAKE NIX_CMD)
     string(TOLOWER ${nixpkg} nixpkg_lower)
@@ -32,19 +33,19 @@ foreach(target IN ITEMS fmt simdjson CLI11)
     if(TARGET ${target})
         get_target_property(inc_dirs ${target} INTERFACE_INCLUDE_DIRECTORIES)
         if(inc_dirs)
-            set_target_properties(${target} PROPERTIES INTERFACE_SYSTEM_INCLUDE_DIRECTORIES "${inc_dirs}")
+            set_target_properties(
+                ${target} PROPERTIES
+                INTERFACE_SYSTEM_INCLUDE_DIRECTORIES "${inc_dirs}"
+                INTERFACE_COMPILE_FEATURES "cxx_std_26"
+            )
         endif()
     endif()
 endforeach()
 
-# Common dependencies for Nix targets
 set(NIX_LIBS PkgConfig::NIX_STORE PkgConfig::NIX_EXPR PkgConfig::NIX_FLAKE PkgConfig::NIX_CMD)
-
-# Common dependencies and compile definitions for UI targets
 set(UI_LIBS fmt::fmt libcoro mdspan)
 set(UI_DEFS MDSPAN_USE_BRACKET_OPERATOR=1 MDSPAN_USE_PAREN_OPERATOR=0)
 
-# Shared UI library (used by ui-example and tests)
 add_library(nixb_ui STATIC
     src/tty/app.cpp
     src/tty/dom.cpp
@@ -60,7 +61,6 @@ target_include_directories(nixb_ui PUBLIC src ${Boost_INCLUDE_DIRS})
 target_link_libraries(nixb_ui PUBLIC ${UI_LIBS})
 target_compile_definitions(nixb_ui PUBLIC ${UI_DEFS})
 
-# Main nixb executable (old implementation)
 add_executable(nixb
     src/old/main.cpp
     src/old/NixBuildState.cpp
@@ -77,30 +77,27 @@ add_executable(nixb
 target_include_directories(nixb PRIVATE ${Boost_INCLUDE_DIRS})
 target_link_libraries(nixb PRIVATE fmt::fmt simdjson::simdjson CLI11::CLI11 ${NIX_LIBS})
 
-# UI example executable
 add_executable(ui-example src/tty/example.cpp)
 target_link_libraries(ui-example PRIVATE nixb_ui)
 
-# nixbco executable
 add_executable(nixbco src/nixbco.cpp src/nix-log-adapter.cpp)
-target_include_directories(nixbco PRIVATE ${Boost_INCLUDE_DIRS} ${UI_LIBS})
-target_link_libraries(nixbco PRIVATE fmt::fmt simdjson::simdjson CLI11::CLI11 ${UI_LIBS} ${NIX_LIBS})
+target_include_directories(
+    nixbco PRIVATE ${Boost_INCLUDE_DIRS} ${UI_LIBS} range-v3::range-v3)
+target_link_libraries(
+    nixbco PRIVATE
+    fmt::fmt simdjson::simdjson CLI11::CLI11 ${UI_LIBS} ${NIX_LIBS} range-v3::range-v3)
 
-# Test runner using vterm
 add_executable(nxb-vterm-tests src/test/vterm-ut-main.cpp)
 target_include_directories(nxb-vterm-tests PRIVATE src/test)
 target_link_libraries(nxb-vterm-tests PRIVATE nixb_ui libvterm)
 
-# Enable testing and register tests
 enable_testing()
 add_test(NAME vterm-tests COMMAND nxb-vterm-tests)
 
-# Auto-run tests after successful build
 add_custom_command(TARGET nxb-vterm-tests POST_BUILD
     COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure -R vterm-tests
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
     COMMENT "Running vterm tests..."
 )
 
-# Install
 install(TARGETS nixb ui-example nxb-vterm-tests RUNTIME DESTINATION bin)

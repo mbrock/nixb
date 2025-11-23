@@ -3,4 +3,5 @@ CompileFlags:
     - -I/home/mbrock/nixb/src
     - -I/home/mbrock/nixb/subprojects/libvterm/include
     - -I/home/mbrock/nixb/subprojects/fmt-12.0.0/include
+
   CompilationDatabase: build

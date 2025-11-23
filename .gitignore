@@ -14,3 +14,6 @@ result*
 build.log
 /docs/nix-api/
 repomix-output.xml
+vcpkg_installed/
+CMakeUserPresets.json
+
