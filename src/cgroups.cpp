@@ -12,9 +12,13 @@
 #include <mp-units/ostream.h>
 #include <mp-units/systems/iec.h>
 #include <mp-units/systems/si.h>
+#include <optional>
 #include <sstream>
+#include <stdexec/execution.hpp>
 #include <string_view>
 #include <tuple>
+#include <type_traits>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -373,6 +377,31 @@ parse_io_stat (const std::filesystem::path &path)
   return devices;
 }
 
+template <class Parser, class Printer>
+auto
+make_stat_sender (std::filesystem::path path, Parser parser, Printer printer)
+{
+  using parsed_t
+      = std::decay_t<std::invoke_result_t<Parser, const std::filesystem::path &>>;
+
+  return stdexec::just (std::move (path))
+         | stdexec::then ([parser = std::move (parser)] (
+                              const std::filesystem::path &p)
+                              -> std::optional<parsed_t> {
+             if (!std::filesystem::exists (p))
+               return std::nullopt;
+             return parser (p);
+           })
+         | stdexec::then ([printer = std::move (printer)] (
+                              std::optional<parsed_t> payload)
+                              -> std::monostate {
+             if (!payload)
+               return std::monostate{};
+             printer (*payload);
+             return std::monostate{};
+           });
+}
+
 void
 scan ()
 {
@@ -380,138 +409,131 @@ scan ()
       = "/sys/fs/cgroup/system.slice/nix-daemon.service";
 
   // Parse and display memory.stat
-  auto memory_stat_path = cgroup_path / "memory.stat";
-  if (std::filesystem::exists (memory_stat_path))
-    {
-      print ("{}\n",
-             fmt::styled ("memory.stat", fmt::fg (fmt::color::light_steel_blue)
-                                             | fmt::emphasis::bold));
+  stdexec::sync_wait (make_stat_sender (
+      cgroup_path / "memory.stat",
+      parse_memory_stat,
+      [&] (const auto &stats) {
+        print ("{}\n",
+               fmt::styled ("memory.stat",
+                            fmt::fg (fmt::color::light_steel_blue)
+                                | fmt::emphasis::bold));
 
-      auto stats = parse_memory_stat (memory_stat_path);
+        std::vector<std::tuple<std::string_view, std::string>> rows;
+        for (const auto &field : memory_stat_fields)
+          {
+            if (auto it = stats.find (std::string (field.name));
+                it != stats.end ())
+              {
+                rows.emplace_back (field.label, format_value (it->second));
+              }
+          }
 
-      // Collect fields with their values and labels
-      std::vector<std::tuple<std::string_view, std::string>> rows;
-      for (const auto &field : memory_stat_fields)
-        {
-          if (auto it = stats.find (std::string (field.name));
-              it != stats.end ())
-            {
-              rows.emplace_back (field.label, format_value (it->second));
-            }
-        }
+        std::sort (rows.begin (), rows.end (),
+                   [] (const auto &a, const auto &b) {
+                     return std::get<0> (a) < std::get<0> (b);
+                   });
 
-      // Sort by label
-      std::sort (rows.begin (), rows.end (),
-                 [] (const auto &a, const auto &b) {
-                   return std::get<0> (a) < std::get<0> (b);
-                 });
+        size_t max_label = 0;
+        for (const auto &[label, value] : rows)
+          max_label = std::max (max_label, label.size ());
 
-      // Find max label width for alignment
-      size_t max_label = 0;
-      for (const auto &[label, value] : rows)
-        max_label = std::max (max_label, label.size ());
+        for (const auto &[label, value] : rows)
+          {
+            print ("  {:<{}}  {}\n",
+                   fmt::styled (label, fmt::fg (fmt::color::lawn_green)),
+                   max_label,
+                   fmt::styled (value, fmt::fg (fmt::color::golden_rod)
+                                           | fmt::emphasis::bold));
+          }
+        print ("\n");
+      }));
 
-      // Display sorted and aligned
-      for (const auto &[label, value] : rows)
-        {
-          print ("  {:<{}}  {}\n",
-                 fmt::styled (label, fmt::fg (fmt::color::lawn_green)),
-                 max_label,
-                 fmt::styled (value, fmt::fg (fmt::color::golden_rod)
-                                         | fmt::emphasis::bold));
-        }
-      print ("\n");
-    }
+  stdexec::sync_wait (make_stat_sender (
+      cgroup_path / "cpu.stat",
+      parse_cpu_stat,
+      [&] (const auto &stats) {
+        print ("{}\n",
+               fmt::styled ("cpu.stat",
+                            fmt::fg (fmt::color::light_steel_blue)
+                                | fmt::emphasis::bold));
 
-  // Parse and display cpu.stat
-  auto cpu_stat_path = cgroup_path / "cpu.stat";
-  if (std::filesystem::exists (cpu_stat_path))
-    {
-      print ("{}\n",
-             fmt::styled ("cpu.stat", fmt::fg (fmt::color::light_steel_blue)
-                                          | fmt::emphasis::bold));
+        std::vector<std::tuple<std::string_view, std::string>> rows;
+        for (const auto &field : cpu_stat_fields)
+          {
+            if (auto it = stats.find (std::string (field.name));
+                it != stats.end ())
+              {
+                rows.emplace_back (field.label, format_value (it->second));
+              }
+          }
 
-      auto stats = parse_cpu_stat (cpu_stat_path);
+        std::sort (rows.begin (), rows.end (),
+                   [] (const auto &a, const auto &b) {
+                     return std::get<0> (a) < std::get<0> (b);
+                   });
 
-      // Collect and sort
-      std::vector<std::tuple<std::string_view, std::string>> rows;
-      for (const auto &field : cpu_stat_fields)
-        {
-          if (auto it = stats.find (std::string (field.name));
-              it != stats.end ())
-            {
-              rows.emplace_back (field.label, format_value (it->second));
-            }
-        }
+        size_t max_label = 0;
+        for (const auto &[label, value] : rows)
+          max_label = std::max (max_label, label.size ());
 
-      std::sort (rows.begin (), rows.end (),
-                 [] (const auto &a, const auto &b) {
-                   return std::get<0> (a) < std::get<0> (b);
-                 });
+        for (const auto &[label, value] : rows)
+          {
+            print ("  {:<{}}  {}\n",
+                   fmt::styled (label, fmt::fg (fmt::color::lawn_green)),
+                   max_label,
+                   fmt::styled (value, fmt::fg (fmt::color::golden_rod)
+                                           | fmt::emphasis::bold));
+          }
+        print ("\n");
+      }));
 
-      size_t max_label = 0;
-      for (const auto &[label, value] : rows)
-        max_label = std::max (max_label, label.size ());
+  stdexec::sync_wait (make_stat_sender (
+      cgroup_path / "io.stat",
+      parse_io_stat,
+      [&] (const auto &devices) {
+        print ("{}\n",
+               fmt::styled ("io.stat",
+                            fmt::fg (fmt::color::light_steel_blue)
+                                | fmt::emphasis::bold));
 
-      for (const auto &[label, value] : rows)
-        {
-          print ("  {:<{}}  {}\n",
-                 fmt::styled (label, fmt::fg (fmt::color::lawn_green)),
-                 max_label,
-                 fmt::styled (value, fmt::fg (fmt::color::golden_rod)
-                                         | fmt::emphasis::bold));
-        }
-      print ("\n");
-    }
+        for (const auto &device : devices)
+          {
+            print ("  {} {}\n",
+                   fmt::styled ("device", fmt::fg (fmt::color::orchid)),
+                   fmt::styled (device.device_id,
+                                fmt::fg (fmt::color::sky_blue)
+                                    | fmt::emphasis::bold));
 
-  // Parse and display io.stat
-  auto io_stat_path = cgroup_path / "io.stat";
-  if (std::filesystem::exists (io_stat_path))
-    {
-      print ("{}\n",
-             fmt::styled ("io.stat", fmt::fg (fmt::color::light_steel_blue)
-                                         | fmt::emphasis::bold));
+            std::vector<std::tuple<std::string_view, std::string>> rows;
+            for (const auto &field : io_stat_fields)
+              {
+                if (auto it = device.stats.find (std::string (field.name));
+                    it != device.stats.end ())
+                  {
+                    rows.emplace_back (field.label, format_value (it->second));
+                  }
+              }
 
-      auto devices = parse_io_stat (io_stat_path);
+            std::sort (rows.begin (), rows.end (),
+                       [] (const auto &a, const auto &b) {
+                         return std::get<0> (a) < std::get<0> (b);
+                       });
 
-      for (const auto &device : devices)
-        {
-          print ("  {} {}\n",
-                 fmt::styled ("device", fmt::fg (fmt::color::orchid)),
-                 fmt::styled (device.device_id, fmt::fg (fmt::color::sky_blue)
-                                                    | fmt::emphasis::bold));
+            size_t max_label = 0;
+            for (const auto &[label, value] : rows)
+              max_label = std::max (max_label, label.size ());
 
-          // Collect and sort
-          std::vector<std::tuple<std::string_view, std::string>> rows;
-          for (const auto &field : io_stat_fields)
-            {
-              if (auto it = device.stats.find (std::string (field.name));
-                  it != device.stats.end ())
-                {
-                  rows.emplace_back (field.label, format_value (it->second));
-                }
-            }
-
-          std::sort (rows.begin (), rows.end (),
-                     [] (const auto &a, const auto &b) {
-                       return std::get<0> (a) < std::get<0> (b);
-                     });
-
-          size_t max_label = 0;
-          for (const auto &[label, value] : rows)
-            max_label = std::max (max_label, label.size ());
-
-          for (const auto &[label, value] : rows)
-            {
-              print ("    {:<{}}  {}\n",
-                     fmt::styled (label, fmt::fg (fmt::color::lawn_green)),
-                     max_label,
-                     fmt::styled (value, fmt::fg (fmt::color::golden_rod)
-                                             | fmt::emphasis::bold));
-            }
-          print ("\n");
-        }
-    }
+            for (const auto &[label, value] : rows)
+              {
+                print ("    {:<{}}  {}\n",
+                       fmt::styled (label, fmt::fg (fmt::color::lawn_green)),
+                       max_label,
+                       fmt::styled (value, fmt::fg (fmt::color::golden_rod)
+                                               | fmt::emphasis::bold));
+              }
+            print ("\n");
+          }
+      }));
 
   // Display other files without parsing
   constexpr std::array other_files = {
