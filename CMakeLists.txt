@@ -16,6 +16,8 @@ cmake_policy(SET CMP0167 NEW)
 find_package(Boost REQUIRED)
 find_package(PkgConfig REQUIRED)
 find_package(range-v3 CONFIG REQUIRED)
+find_package(stdexec CONFIG REQUIRED)
+find_package(mp-units CONFIG REQUIRED)
 
 foreach(nixpkg IN ITEMS NIX_STORE NIX_EXPR NIX_FLAKE NIX_CMD)
     string(TOLOWER ${nixpkg} nixpkg_lower)
@@ -24,12 +26,15 @@ foreach(nixpkg IN ITEMS NIX_STORE NIX_EXPR NIX_FLAKE NIX_CMD)
 endforeach()
 
 # Subprojects (suppress warnings from third-party code)
-foreach(subproj IN ITEMS fmt-12.0.0 simdjson-3.10.1 CLI11-2.4.2 libcoro libvterm mdspan)
+foreach(subproj IN ITEMS simdjson-3.10.1 CLI11-2.4.2 libcoro libvterm mdspan)
     add_subdirectory(subprojects/${subproj} EXCLUDE_FROM_ALL)
 endforeach()
 
+# Find fmt from vcpkg instead of subproject
+find_package(fmt CONFIG REQUIRED)
+
 # Mark third-party libraries as system includes to suppress warnings
-foreach(target IN ITEMS fmt simdjson CLI11)
+foreach(target IN ITEMS simdjson CLI11)
     if(TARGET ${target})
         get_target_property(inc_dirs ${target} INTERFACE_INCLUDE_DIRECTORIES)
         if(inc_dirs)
@@ -82,10 +87,16 @@ target_link_libraries(ui-example PRIVATE nixb_ui)
 
 add_executable(nixbco src/nixbco.cpp src/nix-log-adapter.cpp)
 target_include_directories(
-    nixbco PRIVATE ${Boost_INCLUDE_DIRS} ${UI_LIBS} range-v3::range-v3)
+    nixbco PRIVATE ${Boost_INCLUDE_DIRS} ${UI_LIBS}
+    range-v3::range-v3 STDEXEC::stdexec)
 target_link_libraries(
     nixbco PRIVATE
-    fmt::fmt simdjson::simdjson CLI11::CLI11 ${UI_LIBS} ${NIX_LIBS} range-v3::range-v3)
+    fmt::fmt simdjson::simdjson CLI11::CLI11 ${UI_LIBS} ${NIX_LIBS}
+    range-v3::range-v3 STDEXEC::stdexec)
+
+add_executable(nxbcg src/cgroups.cpp)
+target_include_directories(nxbcg PRIVATE fmt::fmt)
+target_link_libraries(nxbcg PRIVATE fmt::fmt mp-units::mp-units)
 
 add_executable(nxb-vterm-tests src/test/vterm-ut-main.cpp)
 target_include_directories(nxb-vterm-tests PRIVATE src/test)
@@ -100,4 +111,4 @@ add_custom_command(TARGET nxb-vterm-tests POST_BUILD
     COMMENT "Running vterm tests..."
 )
 
-install(TARGETS nixb ui-example nxb-vterm-tests RUNTIME DESTINATION bin)
+install(TARGETS nixb nxbcg ui-example nxb-vterm-tests RUNTIME DESTINATION bin)
