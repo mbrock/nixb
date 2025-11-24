@@ -259,17 +259,17 @@ format_value (const stat_value &value)
         else if constexpr (requires { val.in (h); })
           {
             // // Time quantities - smart formatting using mp-units
-            // auto val_numeric = val.numerical_value_ref_in (us);
+            auto val_numeric = val.numerical_value_ref_in (us);
 
-            // if (val_numeric >= 3600000000UL) // 1 hour in microseconds
-            //   return fmt::format ("{::N[.2f]}", val.in (h));
-            // else if (val_numeric >= 60000000UL) // 1 minute in microseconds
-            //   return fmt::format ("{::N[.2f]}", val.in (min));
-            // else if (val_numeric >= 1000000UL) // 1 second in microseconds
-            //   return fmt::format ("{::N[.2f]}", val.in (s));
-            // else if (val_numeric >= 1000UL) // 1 ms in microseconds
-            //   return fmt::format ("{::N[.2f]}", val.in (ms));
-            // else
+            if (val_numeric >= 3600000000UL) // 1 hour in microseconds
+              return fmt::format ("{::N[.2f]}", val.in (h));
+            else if (val_numeric >= 60000000UL) // 1 minute in microseconds
+              return fmt::format ("{::N[.2f]}", val.in (min));
+            else if (val_numeric >= 1000000UL) // 1 second in microseconds
+              return fmt::format ("{::N[.2f]}", val.in (s));
+            else if (val_numeric >= 1000UL) // 1 ms in microseconds
+              return fmt::format ("{::N[.2f]}", val.in (ms));
+            else
               return fmt::format ("{}", val);
           }
         else
