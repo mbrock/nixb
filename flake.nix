@@ -14,79 +14,14 @@
       forAllSystems = f: nixpkgs.lib.genAttrs systems (system: f system);
     in
     {
-      packages = forAllSystems (
-        system:
-        let
-          pkgs = import nixpkgs { inherit system; };
-          emacsWithPkgs = (pkgs.emacsPackagesFor pkgs.emacs).emacsWithPackages (
-            epkgs: with epkgs; [
-              eat
-              yaml
-            ]
-          );
-        in
-        rec {
-          inherit (pkgs) hello;
-          emacs = emacsWithPkgs;
-          nxb-ttytest = pkgs.writeShellApplication {
-            name = "nxb-ttytest";
-            runtimeInputs = [
-              pkgs.nix.dev
-              pkgs.git
-              pkgs.pkg-config
-              pkgs.cmake
-              pkgs.python3
-              emacsWithPkgs
-            ];
-            text = ''
-              set -euo pipefail
-
-              usage() {
-                cat <<'EOF' >&2
-              Usage: nxb-ttytest [YAML_FILE...]
-
-              Build and run terminal tests described in YAML using Emacs/EAT.
-              If no files are provided, defaults to src/new/test/tests.yaml.
-              EOF
-                exit 1
-              }
-
-              if [ "$#" -eq 0 ]; then
-                set -- src/new/test/tests.yaml
-              fi
-
-              files=("$@")
-              list=""
-              for f in "''${files[@]}"; do
-                list+="$f"$'\n'
-              done
-
-              export NXB_TTYTEST_FILES="''${list}"
-
-              root=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
-              cd "$root"
-
-              : "''${EMACS:=emacs}"
-              "$EMACS" -Q -batch -l ert \
-                -l "$root/src/new/test/nxb-term-tests.el" \
-                --eval "(nxb-run-yaml-tests nil)"
-            '';
-          };
-        }
-      );
-
       devShells = forAllSystems (
         system:
         let
           pkgs = import nixpkgs { inherit system; };
         in
         {
-          default = pkgs.mkShellNoCC {
-            propagatedBuildInputs = with pkgs; [
-            ];
-            nativeBuildInputs = with pkgs; [
-            ];
-            buildInputs = with pkgs; [
+          default = (pkgs.mkShell.override { stdenv = pkgs.clangStdenv; }) {
+            packages = with pkgs; [
               nix.dev
               libblake3.dev
               libsodium.dev
@@ -100,8 +35,6 @@
               lowdown.dev
               editline.dev
               c-ares.dev
-            ];
-            packages = with pkgs; [
               nix.dev
               boost
               pkg-config
