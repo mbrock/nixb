@@ -1,12 +1,12 @@
 #pragma once
 
+#include "glyph-table.hpp"
+#include "raster.hpp"
 #include <coro/coro.hpp>
 #include <coro/event.hpp>
 #include <coro/queue.hpp>
 #include <coro/task.hpp>
 #include <iosfwd>
-#include "glyph-table.hpp"
-#include "raster.hpp"
 
 namespace coro
 {

@@ -183,7 +183,10 @@ target_link_libraries(nixb
 )
 
 # nxbcg: cgroups utility executable
-add_executable(nxbcg src/cgroups.cpp)
+add_executable(nxbcg
+    src/cgroups.cpp
+    src/uring.cpp
+)
 target_link_libraries(nxbcg
     PRIVATE
         fmt::fmt

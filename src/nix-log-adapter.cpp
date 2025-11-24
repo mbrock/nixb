@@ -1,7 +1,7 @@
 
-#include <fmt/core.h>
 #include <coro/coro.hpp>
 #include <coro/queue.hpp>
+#include <fmt/core.h>
 #include <nix/util/error.hh>
 
 #include "nix-log-adapter.hpp"

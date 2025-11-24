@@ -1,7 +1,7 @@
 #pragma once
 
-#include <coro/coro.hpp>
 #include "coro/queue.hpp"
+#include <coro/coro.hpp>
 #include <coro/io_scheduler.hpp>
 #include <string>
 
