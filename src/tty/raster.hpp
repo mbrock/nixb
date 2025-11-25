@@ -82,6 +82,9 @@ struct Rgba8
     return fmt::rgb (r (), g (), b ());
   }
 
+  /// Format
+  friend std::ostream &operator<< (std::ostream &os, const Rgba8 &c);
+
   constexpr auto operator<=> (const Rgba8 &) const = default;
 };
 
@@ -176,6 +179,7 @@ public:
   [[nodiscard]] Raster subraster (std::size_t x, std::size_t y, std::size_t w,
                                   std::size_t h) const noexcept;
   [[nodiscard]] Raster subraster (Pos origin, Size size) const noexcept;
+  [[nodiscard]] Raster subraster (Size size) const noexcept;
 
   /// Set glyph at (x, y). Silently ignores out-of-bounds coordinates.
   void set_glyph (std::size_t x, std::size_t y,
@@ -193,7 +197,7 @@ public:
   /// Convenience: set ASCII character at (x, y)
   void
   set_char (const std::size_t x, const std::size_t y,
-            const char glyph) noexcept
+            const char glyph) const noexcept
   {
     set_glyph (x, y, static_cast<GlyphTable::GlyphId> (glyph));
   }
@@ -207,19 +211,14 @@ public:
   /// Returns the ending column position (for chaining writes).
   /// Multi-byte UTF-8 sequences are interned via the glyph table.
   std::size_t write_text (std::size_t x, std::size_t y, std::string_view text,
-                          GlyphTable &glyphs, Rgba8 fg = DEFAULT_COLOR,
-                          Rgba8 bg = DEFAULT_COLOR) noexcept;
-  col_t write_text (Pos pos, std::string_view text, GlyphTable &glyphs,
-                    Rgba8 fg = DEFAULT_COLOR,
-                    Rgba8 bg = DEFAULT_COLOR) noexcept;
+                          GlyphTable &glyphs) noexcept;
+  col_t write_text (Pos pos, std::string_view text,
+                    GlyphTable &glyphs) noexcept;
 
   /// Write UTF-8 text using the raster's glyph table
-  std::size_t write_text (std::size_t x, std::size_t y, std::string_view text,
-                          Rgba8 fg = DEFAULT_COLOR,
-                          Rgba8 bg = DEFAULT_COLOR) noexcept;
-  col_t write_text (Pos pos, std::string_view text,
-                    Rgba8 fg = DEFAULT_COLOR,
-                    Rgba8 bg = DEFAULT_COLOR) noexcept;
+  std::size_t write_text (std::size_t x, std::size_t y,
+                          std::string_view text) noexcept;
+  col_t write_text (Pos pos, std::string_view text) noexcept;
 
   /// Fill a rectangle with a single glyph and foreground color.
   /// The background color is left unchanged.

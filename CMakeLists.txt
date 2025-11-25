@@ -103,10 +103,6 @@ endforeach()
 
 add_library(nixb_ui
     src/tty/app.cpp
-    src/tty/dom.cpp
-    src/tty/layout.cpp
-    src/tty/paint.cpp
-    src/tty/widgets.cpp
     src/tty/ansi.cpp
     src/tty/glyph-table.cpp
     src/tty/raster.cpp
@@ -128,29 +124,6 @@ target_compile_definitions(nixb_ui PUBLIC
     MDSPAN_USE_PAREN_OPERATOR=0
 )
 
-add_executable(nixb
-    src/old/main.cpp
-    src/old/NixBuildState.cpp
-    src/old/NixLogParser.cpp
-    src/old/NixLogPlayer.cpp
-    src/old/NixLogRecorder.cpp
-    src/old/NixLogForwardingLogger.cpp
-    src/old/NixLogWatcher.cpp
-    src/old/Ui.cpp
-    src/old/Ansi.cpp
-    src/old/UiRender.cpp
-    src/old/UiStateBuilder.cpp
-)
-
-target_link_libraries(nixb
-    PRIVATE
-        fmt::fmt
-        simdjson::simdjson
-        CLI11::CLI11
-        Boost::headers
-        PkgConfig::NIX
-)
-
 add_executable(nxbcg
     src/cgroups.cpp
     src/uring.cpp
@@ -162,48 +135,24 @@ target_link_libraries(nxbcg
         STDEXEC::stdexec
 )
 
-add_executable(nxb-vterm-tests src/test/vterm-ut-main.cpp)
-target_include_directories(nxb-vterm-tests PRIVATE src/test)
-target_link_libraries(nxb-vterm-tests
+add_executable(nxb-tui-tests src/test/tui-ut-main.cpp)
+target_include_directories(nxb-tui-tests PRIVATE src/test)
+target_link_libraries(nxb-tui-tests
     PRIVATE
         nixb_ui
-        libvterm
         Boost::ut
 )
 
 enable_testing()
-add_test(NAME vterm-tests COMMAND nxb-vterm-tests)
+add_test(NAME tui-tests COMMAND nxb-tui-tests)
 
-add_custom_command(TARGET nxb-vterm-tests POST_BUILD
-    COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure -R vterm-tests
+add_custom_command(TARGET nxb-tui-tests POST_BUILD
+    COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure -R tui-tests
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-    COMMENT "Running vterm tests..."
+    COMMENT "Running tui tests..."
 )
 
-install(TARGETS nixb nxbcg RUNTIME DESTINATION bin)
-
-# add_executable(ui-example src/tty/example.cpp)
-# target_link_libraries(ui-example PRIVATE nixb_ui)
-
-# add_executable(ui2-example src/tty/ui_example.cpp)
-# target_link_libraries(ui2-example PRIVATE nixb_ui)
-
-add_executable(ui3-example src/tty/ui3_example.cpp)
-target_link_libraries(ui3-example PRIVATE nixb_ui)
+install(TARGETS nxbcg RUNTIME DESTINATION bin)
 
 add_executable(tui-example src/tty/tui_example.cpp)
 target_link_libraries(tui-example PRIVATE nixb_ui)
-
-# add_executable(nixbco src/nixbco.cpp src/nix-log-adapter.cpp)
-# target_link_libraries(nixbco
-#     PRIVATE
-#         nixb_ui                  # Includes libcoro, fmt, mdspan transitively
-#         simdjson::simdjson
-#         CLI11::CLI11
-#         range-v3
-#         STDEXEC::stdexec
-#         PkgConfig::NIX_STORE
-#         PkgConfig::NIX_EXPR
-#         PkgConfig::NIX_FLAKE
-#         PkgConfig::NIX_CMD
-# )

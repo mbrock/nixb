@@ -100,6 +100,8 @@ struct Size
 {
   width_t w{ 0 * ch };
   height_t h{ 0 * ln };
+
+  constexpr Size (width_t w, height_t h) : w{ w }, h{ h } {}
 };
 
 /// 2D point in terminal space (column, row)
@@ -151,6 +153,29 @@ struct Pos
     auto dy = (a.y - b.y).numerical_value_in (ln);
     return { static_cast<std::size_t> (dx) * ch,
              static_cast<std::size_t> (dy) * ln };
+  }
+
+  /// +=
+  constexpr Pos &
+  operator+= (Size delta)
+  {
+    x += delta.w;
+    y += delta.h;
+    return *this;
+  }
+
+  constexpr Pos &
+  operator+= (width_t dx)
+  {
+    x += dx;
+    return *this;
+  }
+
+  constexpr Pos &
+  operator+= (height_t dy)
+  {
+    y += dy;
+    return *this;
   }
 
   /// Get displacement from terminal origin

@@ -110,12 +110,6 @@ Writer::clear_line_to_cursor ()
 }
 
 Writer &
-Writer::set_scroll_region (const RowSpan rows)
-{
-  return set_scroll_region (rows.first, rows.last);
-}
-
-Writer &
 Writer::set_scroll_region (std::size_t top, std::size_t bottom)
 {
   csi (fmt::format ("{};{}", top, bottom), 'r');
@@ -355,12 +349,6 @@ void
 show_cursor ()
 {
   fmt::print ("{}?25h", CSI);
-}
-
-void
-set_scroll_region (const RowSpan rows)
-{
-  set_scroll_region (rows.first, rows.last);
 }
 
 void

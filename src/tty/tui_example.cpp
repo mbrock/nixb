@@ -1,7 +1,7 @@
 #include "app.hpp"
 #include "tui.hpp"
+#include "units.hpp"
 
-#include <chrono>
 #include <coro/coro.hpp>
 #include <fmt/core.h>
 #include <vector>
@@ -36,28 +36,19 @@ struct AppState
 auto
 activity_row (const Activity &act)
 {
-  // Label (fixed width)
   auto label = text (fmt::format ("{:<20}", act.label));
 
-  // Bar colors
-  Rgba8 bar_fg = act.finished ? Rgba8 (100, 255, 180) : Rgba8 (100, 180, 255);
-  Rgba8 bar_bg = Rgba8 (50, 50, 50);
+  auto pct_text = text (
+      fmt::format ("{:>4.0f}%", act.progress.numerical_value_in (percent)));
 
-  // Percentage text
-  auto pct_text = text (fmt::format ("{:>4.0f}%", act.progress.numerical_value_in (percent)),
-                        act.finished ? Rgba8 (100, 255, 100) : Rgba8 (200, 200, 255));
-
-  return row (label, progress_bar (act.progress, bar_fg, bar_bg), pct_text);
+  return row (label, progress_bar (act.progress), pct_text);
 }
 
 auto
 build_ui (const AppState &state)
 {
-  return column (
-      text ("Build Progress", Rgba8 (120, 200, 255)),
-      hrule (Rgba8 (60, 80, 100)),
-      list (state.activities, activity_row),
-      text (""));
+  return column (text ("Build Progress"), hrule (),
+                 list (state.activities, activity_row), text (""));
 }
 
 // ============================================================================
@@ -85,23 +76,28 @@ run ()
   state.activities.push_back ({ "llvm-17.src.tar.xz", 0.0 * percent, false });
 
   // Animation task - updates state
-  auto animate = [&] () -> coro::task<>
-  {
+  auto animate = [&] () -> coro::task<> {
     co_await scheduler->schedule ();
 
     for (int frame = 0; frame <= 100; ++frame)
       {
         // Update activities at different speeds
-        state.activities[0].progress = std::min (100.0, frame / 80.0 * 100) * percent;
-        state.activities[1].progress = std::min (100.0, frame / 60.0 * 100) * percent;
-        state.activities[2].progress = std::min (100.0, frame / 100.0 * 100) * percent;
+        state.activities[0].progress
+            = std::min (100.0, frame / 80.0 * 100) * percent;
+        state.activities[1].progress
+            = std::min (100.0, frame / 60.0 * 100) * percent;
+        state.activities[2].progress
+            = std::min (100.0, frame / 100.0 * 100) * percent;
 
         state.activities[0].finished
-            = state.activities[0].progress.numerical_value_in (percent) >= 100.0;
+            = state.activities[0].progress.numerical_value_in (percent)
+              >= 100.0;
         state.activities[1].finished
-            = state.activities[1].progress.numerical_value_in (percent) >= 100.0;
+            = state.activities[1].progress.numerical_value_in (percent)
+              >= 100.0;
         state.activities[2].finished
-            = state.activities[2].progress.numerical_value_in (percent) >= 100.0;
+            = state.activities[2].progress.numerical_value_in (percent)
+              >= 100.0;
 
         co_await scheduler->yield_for (30ms);
       }
@@ -112,8 +108,7 @@ run ()
   };
 
   // Render loop - reads state, builds layout, renders
-  auto render_loop = [&] () -> coro::task<>
-  {
+  auto render_loop = [&] () -> coro::task<> {
     co_await scheduler->schedule ();
 
     while (!runtime.shutdown_requested ())
@@ -132,8 +127,7 @@ run ()
         // Render to back buffer
         auto &buffer = compositor.back_buffer ();
         buffer.clear ();
-        layout.render (
-            buffer, nxb::tui::Size{ width * nxb::tui::ch, height * nxb::tui::ln });
+        layout.render (buffer, nxb::Size{ width * nxb::ch, height * nxb::ln });
         compositor.present_frame ();
 
         co_await scheduler->yield_for (16ms); // ~60fps

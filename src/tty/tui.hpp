@@ -2,6 +2,7 @@
 
 #include "raster.hpp"
 
+#include <algorithm>
 #include <concepts>
 #include <mp-units/framework.h>
 #include <span>
@@ -12,158 +13,13 @@ namespace nxb::tui
 {
 
 // ============================================================================
-// Terminal Grid Units (mp-units)
-// ============================================================================
-
-using namespace mp_units;
-
-// Base dimensions for terminal 2D layout
-inline constexpr struct dim_horizontal final : base_dimension<"X">
-{
-} dim_horizontal;
-
-inline constexpr struct dim_vertical final : base_dimension<"Y">
-{
-} dim_vertical;
-
-// Quantity specifications
-QUANTITY_SPEC (horizontal_extent, dim_horizontal);
-QUANTITY_SPEC (vertical_extent, dim_vertical);
-
-// Units: ch (character width) and ln (line height)
-inline constexpr struct ch final : named_unit<"ch", kind_of<horizontal_extent>>
-{
-} ch;
-
-inline constexpr struct ln final : named_unit<"ln", kind_of<vertical_extent>>
-{
-} ln;
-
-// Convenient type aliases
-using width_t = quantity<ch, std::size_t>;
-using height_t = quantity<ln, std::size_t>;
-
-// Dimensionless quantities
-using ratio_t = quantity<one, double>;       // 0.0 to 1.0 ratio
-using percent_t = quantity<percent, double>; // 0% to 100%
-
-// ============================================================================
-// Affine Space for Terminal Coordinates
-// ============================================================================
-
-// Absolute origin for terminal coordinate space (top-left corner)
-inline constexpr struct terminal_origin final
-    : absolute_point_origin<horizontal_extent>
-{
-} terminal_origin;
-
-inline constexpr struct terminal_origin_v final
-    : absolute_point_origin<vertical_extent>
-{
-} terminal_origin_v;
-
-// Point types: absolute positions in terminal space
-using col_t = quantity_point<ch, terminal_origin>;   // column position (x)
-using row_t = quantity_point<ln, terminal_origin_v>; // row position (y)
-
-// Displacement types (already defined as width_t/height_t)
-// width_t  = quantity<ch, ...> - horizontal displacement
-// height_t = quantity<ln, ...> - vertical displacement
-
-// ============================================================================
 // Core Types
 // ============================================================================
 
-// Size: a 2D displacement/extent (not a position!)
-struct Size
-{
-  width_t w{ 0 * ch };
-  height_t h{ 0 * ln };
-};
-
-// Position: a point in 2D terminal space
-struct Pos
-{
-  col_t x = terminal_origin + 0 * ch;
-  row_t y = terminal_origin_v + 0 * ln;
-
-  // Create position at the origin
-  static constexpr Pos
-  origin ()
-  {
-    return {};
-  }
-
-  // Create position from origin + offsets
-  static constexpr Pos
-  at (width_t dx, height_t dy)
-  {
-    return { terminal_origin + dx, terminal_origin_v + dy };
-  }
-
-  // Offset by displacements (point + vector = point)
-  constexpr Pos
-  operator+ (width_t dx) const
-  {
-    return { x + dx, y };
-  }
-
-  constexpr Pos
-  operator+ (height_t dy) const
-  {
-    return { x, y + dy };
-  }
-
-  // Offset by Size (point + vector = point)
-  constexpr Pos
-  operator+ (Size delta) const
-  {
-    return { x + delta.w, y + delta.h };
-  }
-
-  // Difference of positions gives displacement (point - point = vector)
-  friend constexpr Size
-  operator- (Pos a, Pos b)
-  {
-    // quantity_point subtraction returns double rep, convert to size_t
-    auto dx = (a.x - b.x).numerical_value_in (ch);
-    auto dy = (a.y - b.y).numerical_value_in (ln);
-    return { static_cast<std::size_t> (dx) * ch, static_cast<std::size_t> (dy) * ln };
-  }
-
-  // Get displacement from terminal origin
-  constexpr Size
-  from_origin () const
-  {
-    return *this - Pos::origin ();
-  }
-
-  // Raw coordinate extraction (for Raster interop)
-  [[nodiscard]] constexpr std::size_t
-  col () const
-  {
-    return static_cast<std::size_t> ((x - terminal_origin).numerical_value_in (ch));
-  }
-
-  [[nodiscard]] constexpr std::size_t
-  row () const
-  {
-    return static_cast<std::size_t> ((y - terminal_origin_v).numerical_value_in (ln));
-  }
-
-  // Equality
-  friend constexpr bool
-  operator== (Pos a, Pos b)
-  {
-    return a.x == b.x && a.y == b.y;
-  }
-};
-
-template <auto Unit>
-struct SizeHint
+template <auto Unit> struct SizeHint
 {
   quantity<Unit, std::size_t> min{ 0 * Unit }; // Minimum size needed
-  ratio_t flex{ 0.0 * one };                   // Flex grow factor (0 = don't grow)
+  ratio_t flex{ 0.0 * one }; // Flex grow factor (0 = don't grow)
 
   static constexpr SizeHint
   fixed (quantity<Unit, std::size_t> n)
@@ -196,8 +52,7 @@ concept Layout = requires (const L &layout, Raster &raster, Size size) {
 // Leaf: generic single-row layout from a render function
 // ============================================================================
 
-template <typename RenderFn>
-struct Leaf
+template <typename RenderFn> struct Leaf
 {
   WidthHint w_hint;
   HeightHint h_hint;
@@ -235,10 +90,9 @@ leaf (WidthHint w, HeightHint h, F &&f)
 
 // Write text at a typed position
 inline std::size_t
-write_text (Raster &r, Pos pos, std::string_view text,
-            Rgba8 fg = Rgba8::white (), Rgba8 bg = Rgba8::transparent ())
+write_text (Raster &r, Pos pos, std::string_view text)
 {
-  return r.write_text (pos.col (), pos.row (), text, fg, bg);
+  return r.write_text (pos.col (), pos.row (), text);
 }
 
 // Set foreground color at a typed position
@@ -259,8 +113,7 @@ set_bg (Raster &r, Pos pos, Rgba8 color)
 inline Raster
 subraster (const Raster &r, Pos pos, Size size)
 {
-  return r.subraster (pos.col (), pos.row (),
-                      size.w.numerical_value_in (ch),
+  return r.subraster (pos.col (), pos.row (), size.w.numerical_value_in (ch),
                       size.h.numerical_value_in (ln));
 }
 
@@ -295,7 +148,9 @@ struct Span
 inline void
 render_span (Raster &r, const Span &s)
 {
-  write_text (r, Pos::origin (), s.text, s.fg, s.bg);
+  write_text (r, Pos::origin (), s.text);
+  auto subraster
+      = r.subraster (Pos::origin (), Size (s.text.size () * ch, 1 * ln));
 }
 
 // ============================================================================
@@ -341,11 +196,11 @@ utf8_width (std::string_view s)
 
 // Text: fixed-width string
 inline auto
-text (std::string s, Rgba8 fg = Rgba8::white (), Rgba8 bg = Rgba8::transparent ())
+text (std::string s)
 {
   auto w = utf8_width (s);
   return leaf (WidthHint::fixed (w), HeightHint::fixed (1 * ln),
-               [=] (Raster &r, Size) { write_text (r, Pos::origin (), s, fg, bg); });
+               [=] (Raster &r, Size) { write_text (r, Pos::origin (), s); });
 }
 
 // Fill: solid color rectangle (grows in both dimensions)
@@ -353,17 +208,20 @@ inline auto
 fill (Rgba8 color = Rgba8 (60, 60, 60))
 {
   return leaf (WidthHint::grow (), HeightHint::grow (),
-               [=] (Raster &r, Size size)
-               { for_each_cell (Pos::origin (), size, [&] (Pos p) { set_bg (r, p, color); }); });
+               [=] (Raster &r, Size size) {
+                 for_each_cell (Pos::origin (), size,
+                                [&] (Pos p) { set_bg (r, p, color); });
+               });
 }
 
 // Horizontal rule: box drawing character repeated
 inline auto
-hrule (Rgba8 color = Rgba8 (80, 80, 100))
+hrule ()
 {
   return leaf (WidthHint::grow (), HeightHint::fixed (1 * ln),
-               [=] (Raster &r, Size size)
-               { write_text (r, Pos::origin (), repeat ("─", size.w), color); });
+               [=] (Raster &r, Size size) {
+                 write_text (r, Pos::origin (), repeat ("─", size.w));
+               });
 }
 
 // Bar string: pure function (percent, width) → string of filled blocks
@@ -374,7 +232,8 @@ bar_string (percent_t pct, width_t width)
       = { "", "▏", "▎", "▍", "▌", "▋", "▊", "▉", "█" };
 
   auto w = width.numerical_value_ref_in (ch);
-  auto fraction = std::clamp (pct.numerical_value_in (percent), 0.0, 100.0) / 100.0;
+  auto fraction
+      = std::clamp (pct.numerical_value_in (percent), 0.0, 100.0) / 100.0;
   double fill = fraction * w;
   std::size_t full = static_cast<std::size_t> (fill);
   std::size_t partial = static_cast<std::size_t> ((fill - full) * 8 + 0.5);
@@ -385,7 +244,8 @@ bar_string (percent_t pct, width_t width)
       partial = 0;
     }
 
-  return repeat ("█", std::min (full, w) * ch) + std::string (partials[partial]);
+  return repeat ("█", std::min (full, w) * ch)
+         + std::string (partials[partial]);
 }
 
 // Progress bar: bg color + fg bar string
@@ -394,13 +254,13 @@ progress_bar (percent_t pct, Rgba8 fg = Rgba8 (100, 180, 255),
               Rgba8 bg = Rgba8 (50, 50, 50))
 {
   return leaf (WidthHint::grow (), HeightHint::fixed (1 * ln),
-               [=] (Raster &r, Size size)
-               {
-                 // Fill background across the row
+               [=] (Raster &r, Size size) {
                  for_each_cell (Pos::origin (), Size{ size.w, 1 * ln },
-                                [&] (Pos p) { set_bg (r, p, bg); });
-                 // Draw progress bar
-                 write_text (r, Pos::origin (), bar_string (pct, size.w), fg);
+                                [&] (Pos p) {
+                                  set_bg (r, p, bg);
+                                  set_fg (r, p, fg);
+                                });
+                 write_text (r, Pos::origin (), bar_string (pct, size.w));
                });
 }
 
@@ -408,8 +268,7 @@ progress_bar (percent_t pct, Rgba8 fg = Rgba8 (100, 180, 255),
 // Row (horizontal flex layout)
 // ============================================================================
 
-template <Layout... Children>
-struct Row
+template <Layout... Children> struct Row
 {
   std::tuple<Children...> children;
 
@@ -419,9 +278,9 @@ struct Row
     width_t total_min = 0 * ch;
     ratio_t total_flex = 0.0 * one;
     std::apply (
-        [&] (const auto &...c)
-        {
-          ((total_min += c.width_hint ().min, total_flex += c.width_hint ().flex),
+        [&] (const auto &...c) {
+          ((total_min += c.width_hint ().min,
+            total_flex += c.width_hint ().flex),
            ...);
         },
         children);
@@ -433,10 +292,12 @@ struct Row
   {
     height_t max_min = 0 * ln;
     std::apply (
-        [&] (const auto &...c)
-        { ((max_min = std::max (max_min, c.height_hint ().min)), ...); },
+        [&] (const auto &...c) {
+          ((max_min = std::max (max_min, c.height_hint ().min)), ...);
+        },
         children);
-    return HeightHint::fixed (max_min.numerical_value_in (ln) > 0 ? max_min : height_t{ 1 * ln });
+    return HeightHint::fixed (
+        max_min.numerical_value_in (ln) > 0 ? max_min : height_t{ 1 * ln });
   }
 
   void
@@ -449,8 +310,9 @@ struct Row
     // Collect hints
     std::array<WidthHint, N> hints;
     std::size_t i = 0;
-    std::apply ([&] (const auto &...c) { ((hints[i++] = c.width_hint ()), ...); },
-                children);
+    std::apply (
+        [&] (const auto &...c) { ((hints[i++] = c.width_hint ()), ...); },
+        children);
 
     // Calculate widths
     auto widths = flex_distribute (size.w, hints);
@@ -459,17 +321,15 @@ struct Row
     Pos cursor = Pos::origin ();
     i = 0;
     std::apply (
-        [&] (const auto &...c)
-        {
+        [&] (const auto &...c) {
           (
-              [&]
-              {
+              [&] {
                 auto child_size = Size{ widths[i], size.h };
                 if (widths[i].numerical_value_in (ch) > 0)
                   {
                     auto sub = subraster (raster, cursor, child_size);
                     c.render (sub, child_size);
-                    cursor = cursor + widths[i]; // point + vector = point
+                    cursor += widths[i];
                   }
                 ++i;
               }(),
@@ -502,7 +362,9 @@ private:
             auto flex_val = hints[i].flex.numerical_value_in (one);
             auto total_flex_val = total_flex.numerical_value_in (one);
             if (flex_val > 0)
-              result[i] += static_cast<std::size_t> (remaining * flex_val / total_flex_val) * ch;
+              result[i] += static_cast<std::size_t> (remaining * flex_val
+                                                     / total_flex_val)
+                           * ch;
           }
       }
 
@@ -521,8 +383,7 @@ row (Children &&...children)
 // Column (vertical flex layout)
 // ============================================================================
 
-template <Layout... Children>
-struct Column
+template <Layout... Children> struct Column
 {
   std::tuple<Children...> children;
 
@@ -531,8 +392,9 @@ struct Column
   {
     width_t max_min = 0 * ch;
     std::apply (
-        [&] (const auto &...c)
-        { ((max_min = std::max (max_min, c.width_hint ().min)), ...); },
+        [&] (const auto &...c) {
+          ((max_min = std::max (max_min, c.width_hint ().min)), ...);
+        },
         children);
     return { max_min, 1.0 * one };
   }
@@ -543,9 +405,9 @@ struct Column
     height_t total_min = 0 * ln;
     ratio_t total_flex = 0.0 * one;
     std::apply (
-        [&] (const auto &...c)
-        {
-          ((total_min += c.height_hint ().min, total_flex += c.height_hint ().flex),
+        [&] (const auto &...c) {
+          ((total_min += c.height_hint ().min,
+            total_flex += c.height_hint ().flex),
            ...);
         },
         children);
@@ -561,8 +423,9 @@ struct Column
 
     std::array<HeightHint, N> hints;
     std::size_t i = 0;
-    std::apply ([&] (const auto &...c) { ((hints[i++] = c.height_hint ()), ...); },
-                children);
+    std::apply (
+        [&] (const auto &...c) { ((hints[i++] = c.height_hint ()), ...); },
+        children);
 
     auto heights = flex_distribute (size.h, hints);
 
@@ -570,11 +433,9 @@ struct Column
     Pos cursor = Pos::origin ();
     i = 0;
     std::apply (
-        [&] (const auto &...c)
-        {
+        [&] (const auto &...c) {
           (
-              [&]
-              {
+              [&] {
                 auto child_size = Size{ size.w, heights[i] };
                 if (heights[i].numerical_value_in (ln) > 0)
                   {
@@ -613,7 +474,9 @@ private:
             auto flex_val = hints[i].flex.numerical_value_in (one);
             auto total_flex_val = total_flex.numerical_value_in (one);
             if (flex_val > 0)
-              result[i] += static_cast<std::size_t> (remaining * flex_val / total_flex_val) * ln;
+              result[i] += static_cast<std::size_t> (remaining * flex_val
+                                                     / total_flex_val)
+                           * ln;
           }
       }
 
@@ -632,8 +495,7 @@ column (Children &&...children)
 // List (dynamic collection of uniform items)
 // ============================================================================
 
-template <typename T, typename ViewFn>
-struct List
+template <typename T, typename ViewFn> struct List
 {
   std::span<const T> items;
   ViewFn view;
@@ -653,21 +515,20 @@ struct List
   void
   render (Raster &raster, Size size) const
   {
-    const auto max_rows = size.h.numerical_value_in (ln);
     const auto row_size = Size{ size.w, 1 * ln };
 
     Pos cursor = Pos::origin ();
-    height_t row_idx = 0 * ln;
 
     for (const auto &item : items)
       {
-        if (row_idx.numerical_value_in (ln) >= max_rows)
+        if (cursor.y - Pos::origin ().y >= size.h)
           break;
+
         auto child = view (item);
         auto sub = subraster (raster, cursor, row_size);
+
         child.render (sub, row_size);
-        cursor = cursor + 1 * ln; // point + vector = point
-        row_idx += 1 * ln;
+        cursor += 1 * ln;
       }
   }
 };

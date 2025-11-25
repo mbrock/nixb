@@ -1,7 +1,5 @@
 #pragma once
 
-#include "terminal-layout.hpp"
-
 #include <fmt/color.h>
 #include <fmt/format.h>
 #include <string_view>
@@ -42,7 +40,6 @@ public:
   Writer &clear_line_to_cursor ();
 
   /// Scroll region (INCLUSIVE bounds [top, bottom])
-  Writer &set_scroll_region (RowSpan rows);
   Writer &set_scroll_region (std::size_t top, std::size_t bottom);
   Writer &reset_scroll_region ();
   Writer &scroll_up (std::size_t n = 1);
@@ -118,7 +115,6 @@ void clear_screen ();
 void clear_line ();
 void hide_cursor ();
 void show_cursor ();
-void set_scroll_region (RowSpan rows);
 void set_scroll_region (std::size_t top, std::size_t bottom);
 void reset_scroll_region ();
 void scroll_up (std::size_t n = 1);

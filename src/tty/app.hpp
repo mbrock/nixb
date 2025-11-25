@@ -19,11 +19,6 @@ class io_scheduler;
 namespace nxb::ui
 {
 
-class Dom;
-struct NodeId;
-class LayoutEngine;
-class Painter;
-
 struct TermSize
 {
   int width;

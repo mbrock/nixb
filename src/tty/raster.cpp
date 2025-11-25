@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <cstring>
 #include <experimental/mdspan>
+#include <fmt/core.h>
+#include <fmt/ostream.h>
 
 namespace nxb
 {
@@ -24,6 +26,15 @@ rows_from (height_t h)
 
 } // namespace
 
+// rgba8 output formatting
+std::ostream &
+operator<< (std::ostream &os, const Rgba8 &c)
+{
+  fmt::print (os, "rgba8({:02x},{:02x},{:02x},{:02x})", c.r (), c.g (), c.b (),
+              c.a ());
+  return os;
+}
+
 // Owning constructor
 Raster::Raster (const std::size_t width, const std::size_t height,
                 GlyphTable &glyphs)
@@ -31,8 +42,7 @@ Raster::Raster (const std::size_t width, const std::size_t height,
 {
 }
 
-Raster::Raster (const width_t width, const height_t height,
-                GlyphTable &glyphs)
+Raster::Raster (const width_t width, const height_t height, GlyphTable &glyphs)
     : glyph_view_ (nullptr,
                    mdspan_extents{ rows_from (height), cols_from (width) }),
       fg_view_ (nullptr,
@@ -41,20 +51,22 @@ Raster::Raster (const width_t width, const height_t height,
                 mdspan_extents{ rows_from (height), cols_from (width) }),
       storage_glyphs_ (std::vector<GlyphTable::GlyphId> (
           cols_from (width) * rows_from (height), 32)),
-      storage_fgs_ (std::vector (cols_from (width) * rows_from (height),
-                                 DEFAULT_COLOR)),
-      storage_bgs_ (std::vector (cols_from (width) * rows_from (height),
-                                 DEFAULT_COLOR)),
+      storage_fgs_ (
+          std::vector (cols_from (width) * rows_from (height), DEFAULT_COLOR)),
+      storage_bgs_ (
+          std::vector (cols_from (width) * rows_from (height), DEFAULT_COLOR)),
       glyphs_ (&glyphs)
 {
   // Update views to point to the allocated storage
   const auto rows = rows_from (height);
   const auto cols = cols_from (width);
 
-  glyph_view_ = glyph_view_t (storage_glyphs_->data (),
-                              mdspan_extents{ rows, cols });
-  fg_view_ = color_view_t (storage_fgs_->data (), mdspan_extents{ rows, cols });
-  bg_view_ = color_view_t (storage_bgs_->data (), mdspan_extents{ rows, cols });
+  glyph_view_
+      = glyph_view_t (storage_glyphs_->data (), mdspan_extents{ rows, cols });
+  fg_view_
+      = color_view_t (storage_fgs_->data (), mdspan_extents{ rows, cols });
+  bg_view_
+      = color_view_t (storage_bgs_->data (), mdspan_extents{ rows, cols });
 }
 
 Raster::Raster (const Size size, GlyphTable &glyphs)
@@ -90,12 +102,10 @@ Raster::operator= (const Raster &other)
     {
       const auto h = other.rows ();
       const auto w = other.cols ();
-      glyph_view_ = glyph_view_t (storage_glyphs_->data (),
-                                  mdspan_extents{ h, w });
-      fg_view_
-          = color_view_t (storage_fgs_->data (), mdspan_extents{ h, w });
-      bg_view_
-          = color_view_t (storage_bgs_->data (), mdspan_extents{ h, w });
+      glyph_view_
+          = glyph_view_t (storage_glyphs_->data (), mdspan_extents{ h, w });
+      fg_view_ = color_view_t (storage_fgs_->data (), mdspan_extents{ h, w });
+      bg_view_ = color_view_t (storage_bgs_->data (), mdspan_extents{ h, w });
     }
   else
     {
@@ -158,15 +168,12 @@ Raster::set_bg (const Pos pos, const Rgba8 color) const noexcept
 
 std::size_t
 Raster::write_text (const std::size_t x, const std::size_t y,
-                    const std::string_view text, GlyphTable &glyphs,
-                    const Rgba8 fg, const Rgba8 bg) noexcept
+                    const std::string_view text, GlyphTable &glyphs) noexcept
 {
   if (y >= rows ())
     return x;
 
   const auto glyph_view = glyphs_2d ();
-  const auto fg_view = fgs_2d ();
-  const auto bg_view = bgs_2d ();
 
   std::size_t col = x;
   std::size_t i = 0;
@@ -208,8 +215,6 @@ Raster::write_text (const std::size_t x, const std::size_t y,
 
       // Write to raster using mdspan 2D indexing
       glyph_view[y, col] = gid;
-      fg_view[y, col] = fg;
-      bg_view[y, col] = bg;
 
       i += char_len;
       ++col;
@@ -220,32 +225,29 @@ Raster::write_text (const std::size_t x, const std::size_t y,
 
 std::size_t
 Raster::write_text (const std::size_t x, const std::size_t y,
-                    const std::string_view text, const Rgba8 fg,
-                    const Rgba8 bg) noexcept
+                    const std::string_view text) noexcept
 {
   if (!glyphs_)
     return x; // No glyph table, can't render
 
-  return write_text (x, y, text, *glyphs_, fg, bg);
+  return write_text (x, y, text, *glyphs_);
 }
 
 col_t
 Raster::write_text (const Pos pos, const std::string_view text,
-                    GlyphTable &glyphs, const Rgba8 fg,
-                    const Rgba8 bg) noexcept
+                    GlyphTable &glyphs) noexcept
 {
-  auto next_col = write_text (pos.col (), pos.row (), text, glyphs, fg, bg);
+  auto next_col = write_text (pos.col (), pos.row (), text, glyphs);
   return terminal_origin + next_col * ch;
 }
 
 col_t
-Raster::write_text (const Pos pos, const std::string_view text,
-                    const Rgba8 fg, const Rgba8 bg) noexcept
+Raster::write_text (const Pos pos, const std::string_view text) noexcept
 {
   if (!glyphs_)
     return pos.x;
 
-  return write_text (pos, text, *glyphs_, fg, bg);
+  return write_text (pos, text, *glyphs_);
 }
 
 void
@@ -284,8 +286,7 @@ void
 Raster::fill_rect (const Pos origin, const Size size,
                    const GlyphTable::GlyphId gid, const Rgba8 fg_color)
 {
-  fill_rect (origin.col (), origin.row (),
-             size.w.numerical_value_in (ch),
+  fill_rect (origin.col (), origin.row (), size.w.numerical_value_in (ch),
              size.h.numerical_value_in (ln), gid, fg_color);
 }
 
@@ -353,6 +354,12 @@ Raster::subraster (const Pos origin, const Size size) const noexcept
   return subraster (origin.col (), origin.row (),
                     size.w.numerical_value_in (ch),
                     size.h.numerical_value_in (ln));
+}
+
+Raster
+Raster::subraster (const Size size) const noexcept
+{
+  return subraster (Pos::origin (), size);
 }
 
 } // namespace nxb
