@@ -39,7 +39,7 @@ struct ResponsiveBarLayout
   }
 
   void
-  render_with_layout (Raster &raster, Size allocated) const
+  render (Raster &raster, Size allocated) const
   {
     // Unicode block characters for smooth sub-character progress
     static constexpr std::array<std::string_view, 9> blocks
@@ -204,7 +204,7 @@ run ()
     {
       auto &buffer = compositor.back_buffer ();
       buffer.clear ();
-      root_layout.render_with_layout (buffer, Size{ width, height });
+      root_layout.render (buffer, Size{ width, height });
       compositor.present_frame ();
     }
 
@@ -224,7 +224,7 @@ run ()
           {
             auto &buffer = compositor.back_buffer ();
             buffer.clear ();
-            root_layout.render_with_layout (buffer, Size{ width, height });
+            root_layout.render (buffer, Size{ width, height });
             compositor.present_frame ();
           }
 

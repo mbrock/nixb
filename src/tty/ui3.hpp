@@ -62,18 +62,31 @@ struct SizeHint
 // Core Concepts
 // ============================================================================
 
-/// A LayoutSender describes spatial arrangement (analogous to P2300 Sender)
-/// It's a lightweight, composable description of a widget tree
+/// A Layout describes spatial arrangement and how to render
+/// Layouts are copyable and composable into trees (Row, Column)
+/// May be pure values (TextLayout, BoxLayout) or copyable handles to
+/// shared reactive state (Widget) - like P2300's split sender
 template <typename L>
-concept LayoutSender = requires (const L &layout) {
+concept Layout = requires (const std::remove_cvref_t<L> &layout, Raster &raster, Size size) {
   { layout.preferred_size () } -> std::same_as<Size>;
-  // TODO: connect() method that creates MountedWidget
+  { layout.render (raster, size) } -> std::same_as<void>;
+  requires std::copyable<std::remove_cvref_t<L>>;
 };
 
-/// A View transforms state into a LayoutSender (state → layout)
+/// A Reactive layout can be subscribed to - it updates over time
+/// Calling run() creates a coroutine (operation state) that must be kept alive
+/// The coroutine subscribes to state changes and updates the layout
+template <typename L>
+concept Reactive = Layout<L> && requires (const L &layout,
+                                          coro::io_scheduler &sched,
+                                          std::function<void ()> on_change) {
+  { layout.run (sched, on_change) } -> std::same_as<coro::task<>>;
+};
+
+/// A View transforms state into a Layout (state → layout)
 template <typename V, typename State>
 concept View = requires (V view, State state) {
-  { view (state) } -> LayoutSender;
+  { view (state) } -> Layout;
 };
 
 /// A Compositor manages rasters and handles rendering output
@@ -85,7 +98,7 @@ concept Compositor = requires (C &comp) {
 };
 
 // ============================================================================
-// Layout Senders (Spatial Descriptions)
+// Pure Layouts (Structural Descriptions)
 // ============================================================================
 
 /// Leaf: Text widget
@@ -128,9 +141,8 @@ struct TextLayout
     return { utf8_display_width (content), 1 };
   }
 
-  // Render directly - this is called by the mounted operation state
   void
-  render (Raster &raster) const
+  render (Raster &raster, Size) const
   {
     // Use write_text for proper UTF-8 handling
     raster.write_text (0, 0, content, color, bg_color);
@@ -152,7 +164,7 @@ struct BoxLayout
   }
 
   void
-  render (Raster &raster) const
+  render (Raster &raster, Size) const
   {
     for (std::size_t y = 0; y < raster.height (); ++y)
       {
@@ -237,11 +249,11 @@ struct FlexRowLayout
 };
 
 // ============================================================================
-// Composite Layout Senders
+// Composite Layouts
 // ============================================================================
 
 /// Row - horizontal composition using FlexRowLayout
-template <LayoutSender... Children> struct RowLayout
+template <Layout... Children> struct RowLayout
 {
   hana::tuple<Children...> children;
   Rgba8 bg_color = Rgba8::transparent ();
@@ -265,9 +277,8 @@ template <LayoutSender... Children> struct RowLayout
     return total;
   }
 
-  // This will be called by MountedRow operation state
   void
-  render_with_layout (Raster &raster, Size allocated) const
+  render (Raster &raster, Size allocated) const
   {
     // Fill background
     if (bg_color != Rgba8::transparent ())
@@ -287,28 +298,14 @@ template <LayoutSender... Children> struct RowLayout
                       {
                         auto &p = placements[idx];
                         auto child_raster = raster.subraster (p.x, p.y, p.w, p.h);
-
-                        // Recursively render
-                        if constexpr (requires {
-                                        child.render_with_layout (child_raster,
-                                                                  Size{ p.w, p.h });
-                                      })
-                          {
-                            child.render_with_layout (child_raster,
-                                                      Size{ p.w, p.h });
-                          }
-                        else
-                          {
-                            child.render (child_raster);
-                          }
-
+                        child.render (child_raster, Size{ p.w, p.h });
                         idx++;
                       });
   }
 };
 
 /// Column - vertical composition
-template <LayoutSender... Children> struct ColumnLayout
+template <Layout... Children> struct ColumnLayout
 {
   hana::tuple<Children...> children;
   Rgba8 bg_color = Rgba8::transparent ();
@@ -333,7 +330,7 @@ template <LayoutSender... Children> struct ColumnLayout
   }
 
   void
-  render_with_layout (Raster &raster, Size allocated) const
+  render (Raster &raster, Size allocated) const
   {
     // Fill background
     if (bg_color != Rgba8::transparent ())
@@ -355,20 +352,7 @@ template <LayoutSender... Children> struct ColumnLayout
                         std::size_t h = std::min (pref.h, allocated.h - y);
 
                         auto child_raster = raster.subraster (0, y, allocated.w, h);
-
-                        // Recursively render
-                        if constexpr (requires {
-                                        child.render_with_layout (child_raster,
-                                                                  Size{ allocated.w, h });
-                                      })
-                          {
-                            child.render_with_layout (child_raster,
-                                                      Size{ allocated.w, h });
-                          }
-                        else
-                          {
-                            child.render (child_raster);
-                          }
+                        child.render (child_raster, Size{ allocated.w, h });
 
                         y += h;
                       });
@@ -379,14 +363,14 @@ template <LayoutSender... Children> struct ColumnLayout
 // Convenience Constructors
 // ============================================================================
 
-template <LayoutSender... Children>
+template <Layout... Children>
 RowLayout<std::decay_t<Children>...>
 row (Children &&...children)
 {
   return { hana::make_tuple (std::forward<Children> (children)...) };
 }
 
-template <LayoutSender... Children>
+template <Layout... Children>
 ColumnLayout<std::decay_t<Children>...>
 column (Children &&...children)
 {
@@ -437,12 +421,14 @@ private:
 };
 
 // ============================================================================
-// Widgets (Dynamic Layouts driven by Signals)
+// Reactive Layouts (Dynamic Layouts driven by Signals)
 // ============================================================================
 
-/// Widget: A LayoutSender that updates based on a signal
-/// Can be composed into layout trees like any other LayoutSender
-/// Internally uses shared state so it's copyable
+/// Widget: A reactive Layout that updates based on a signal
+/// Can be composed into layout trees like any other Layout
+/// Uses shared state (like P2300's split) to be copyable while maintaining
+/// subscription state. Calling run() creates a coroutine that subscribes
+/// to state updates - this coroutine is the operation state and must be kept alive
 template <typename State, typename ViewFn> class Widget
 {
 private:
@@ -482,15 +468,24 @@ public:
   }
 
   void
-  render_with_layout (Raster &raster, Size allocated) const
+  render (Raster &raster, Size allocated) const
   {
     std::lock_guard<std::mutex> lock (state_->mutex);
     if (state_->current_layout)
-      state_->current_layout->render_with_layout (raster, allocated);
+      state_->current_layout->render (raster, allocated);
   }
 
-  /// Background task that updates current_layout when state changes
-  /// Must be called to start the widget
+  /// Subscribe to state updates (creates the operation state coroutine)
+  /// This coroutine must be kept alive for the widget to update
+  ///
+  /// The coroutine:
+  /// 1. Subscribes to the state queue
+  /// 2. On each state update, computes new layout via view_fn
+  /// 3. Updates shared current_layout
+  /// 4. Calls on_change() callback to notify that re-render is needed
+  ///
+  /// The on_change callback is application-specific - typically sets a dirty flag
+  /// The application's render loop then calls render_with_layout() as needed
   coro::task<>
   run (coro::io_scheduler &sched, std::function<void ()> on_change) const
   {
@@ -504,13 +499,13 @@ public:
 
         const auto &state = *result;
 
-        // Update current layout
+        // Update current layout (operation state)
         {
           std::lock_guard<std::mutex> lock (state_->mutex);
           state_->current_layout = state_->view_fn (state);
         }
 
-        // Notify that we need a re-render
+        // Notify application to re-render
         on_change ();
 
         co_await sched.yield ();
@@ -535,12 +530,12 @@ public:
   };
 
   /// Concrete render job that owns a layout
-  template <LayoutSender Layout> struct TypedRenderJob : RenderJob
+  template <Layout L> struct TypedRenderJob : RenderJob
   {
     Placement placement;
-    Layout layout;
+    L layout;
 
-    TypedRenderJob (Placement p, Layout l)
+    TypedRenderJob (Placement p, L l)
         : placement (p), layout (std::move (l))
     {
     }
@@ -550,18 +545,18 @@ public:
     {
       auto sub_raster = buffer.subraster (placement.x, placement.y,
                                           placement.w, placement.h);
-      layout.render_with_layout (sub_raster, Size{ placement.w, placement.h });
+      layout.render (sub_raster, Size{ placement.w, placement.h });
     }
   };
 
   /// Request to render in the next frame (thread-safe)
-  template <LayoutSender Layout>
+  template <Layout L>
   void
-  request_animation_frame (Placement placement, Layout layout)
+  request_animation_frame (Placement placement, L layout)
   {
     std::lock_guard<std::mutex> lock (mutex_);
     pending_jobs_.push_back (
-        std::make_unique<TypedRenderJob<Layout>> (placement, std::move (layout)));
+        std::make_unique<TypedRenderJob<L>> (placement, std::move (layout)));
     dirty_ = true;
   }
 
@@ -599,11 +594,13 @@ private:
 };
 
 // ============================================================================
-// Widget State Loop (Free Function)
+// Alternative Pattern: Direct FrameScheduler Subscription
 // ============================================================================
 
-/// Widget state loop: subscribes to state updates and submits render requests
-/// This is a simple coroutine function - no complex object lifetime management
+/// Alternative to Widget::run() - directly submits layouts to FrameScheduler
+/// Instead of calling on_change() callback, this pushes layouts directly
+/// Use this pattern when you want centralized frame scheduling rather than
+/// application-managed render loops
 template <typename T, typename ViewFn>
 coro::task<>
 widget_loop (coro::io_scheduler &sched,
