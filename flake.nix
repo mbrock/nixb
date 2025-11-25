@@ -5,7 +5,7 @@
   inputs.detnix.url = "github:DeterminateSystems/nix-src";
 
   outputs =
-    { self, nixpkgs, detnix }:
+    { nixpkgs, detnix, ... }:
     let
       systems = [
         "x86_64-linux"
