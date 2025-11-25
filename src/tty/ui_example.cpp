@@ -25,7 +25,6 @@ struct ProgressBar
             .color = Rgba8 (255, 255, 255),
             .width_hint = SizeHint::fixed_size (5) });
 
-  Rect rect{};
   int bar_width = 40;
 
   // Accessors for the children
@@ -68,9 +67,8 @@ struct ProgressBar
   }
 
   void
-  layout (Rect container)
+  layout (Size container)
   {
-    rect = container;
     ui.layout (container); // Row handles it!
   }
 
@@ -123,7 +121,7 @@ struct AppUI
   void
   do_layout (std::size_t width, std::size_t height)
   {
-    ui.layout ({ 0, 0, width, height }); // Column handles it!
+    ui.layout (Size{ width, height }); // Column handles it!
   }
 
   void

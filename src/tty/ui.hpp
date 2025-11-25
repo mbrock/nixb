@@ -66,12 +66,6 @@ concept Renderable = requires (const W &w, Raster &r) {
   { w.render (r) } -> std::same_as<void>;
 };
 
-/// A widget has a computed rect (set by layout)
-template <typename W>
-concept HasRect = requires (W &w) {
-  { w.rect } -> std::convertible_to<Rect &>;
-};
-
 /// A widget has width hint for flex layout
 template <typename W>
 concept HasWidthHint = requires (const W &w) {
@@ -84,15 +78,15 @@ concept HasHeightHint = requires (const W &w) {
   { w.height_hint } -> std::convertible_to<SizeHint>;
 };
 
-/// A widget can be laid out (has a layout method)
+/// A widget can be laid out (has a layout method that takes a size)
 template <typename W>
-concept Layoutable = requires (W &w, Rect r) {
-  { w.layout (r) } -> std::same_as<void>;
+concept Layoutable = requires (W &w, Size s) {
+  { w.layout (s) } -> std::same_as<void>;
 };
 
-/// Full Widget concept - can be measured, laid out, and rendered
+/// Full Widget concept - can be measured and rendered with hints
 template <typename W>
-concept Widget = Measurable<W> && Renderable<W> && HasRect<W> && HasWidthHint<W>;
+concept Widget = Measurable<W> && Renderable<W> && HasWidthHint<W>;
 
 // ============================================================================
 // Leaf widgets
@@ -103,9 +97,9 @@ struct Text
 {
   std::string content;
   Rgba8 color = Rgba8 (255, 255, 255);
-  Rect rect{}; // Computed by layout
 
   SizeHint width_hint = SizeHint::content ();
+  SizeHint height_hint = SizeHint::content ();
 
   Size
   preferred_size () const
@@ -116,13 +110,12 @@ struct Text
   void
   render (Raster &raster) const
   {
-    for (std::size_t i = 0; i < content.length () && i < rect.w; ++i)
+    // Raster is already translated to our local coordinate space
+    // Just render at (0, 0) within the available raster bounds
+    for (std::size_t i = 0; i < content.length () && i < raster.width (); ++i)
       {
-        if (rect.x + i < raster.width () && rect.y < raster.height ())
-          {
-            raster.set_char (rect.x + i, rect.y, content[i]);
-            raster.set_fg (rect.x + i, rect.y, color);
-          }
+        raster.set_char (i, 0, content[i]);
+        raster.set_fg (i, 0, color);
       }
   }
 };
@@ -131,7 +124,6 @@ struct Text
 struct Box
 {
   Rgba8 color = Rgba8 (100, 100, 100);
-  Rect rect{};
 
   SizeHint width_hint = SizeHint::flex ();
   SizeHint height_hint = SizeHint::content ();
@@ -145,11 +137,11 @@ struct Box
   void
   render (Raster &raster) const
   {
-    for (std::size_t y = rect.y; y < rect.y + rect.h && y < raster.height ();
-         ++y)
+    // Raster is already translated to our local coordinate space
+    // Fill the entire available raster area
+    for (std::size_t y = 0; y < raster.height (); ++y)
       {
-        for (std::size_t x = rect.x;
-             x < rect.x + rect.w && x < raster.width (); ++x)
+        for (std::size_t x = 0; x < raster.width (); ++x)
           {
             raster.set_bg (x, y, color);
           }
@@ -165,8 +157,16 @@ struct Box
 template <Widget... Children> struct Row
 {
   hana::tuple<Children...> children;
-  Rect rect{};
   Rgba8 bg_color = Rgba8::transparent ();
+
+  // Layout state: child positions and sizes (computed during layout)
+  struct ChildLayout
+  {
+    std::size_t x = 0; // Relative x position within row
+    std::size_t w = 0; // Allocated width
+  };
+  std::array<ChildLayout, sizeof...(Children)> child_layouts{};
+  std::size_t allocated_height = 0; // Height allocated by parent
 
   static constexpr std::size_t child_count = sizeof...(Children);
 
@@ -199,9 +199,9 @@ template <Widget... Children> struct Row
   }
 
   void
-  layout (Rect container)
+  layout (Size container)
   {
-    rect = container;
+    allocated_height = container.h;
 
     // First pass: calculate fixed sizes and total grow
     std::array<std::size_t, child_count> sizes{};
@@ -249,18 +249,20 @@ template <Widget... Children> struct Row
                           });
       }
 
-    // Third pass: position children
-    std::size_t x = container.x;
+    // Third pass: store child layouts and recurse
+    std::size_t x = 0;
     idx = 0;
     hana::for_each (children,
                     [&] (auto &child)
                       {
-                        child.rect
-                            = { x, container.y, sizes[idx], container.h };
+                        child_layouts[idx] = { x, sizes[idx] };
 
-                        if constexpr (requires { child.layout (child.rect); })
+                        if constexpr (requires {
+                                        child.layout (Size{ sizes[idx],
+                                                            container.h });
+                                      })
                           {
-                            child.layout (child.rect);
+                            child.layout (Size{ sizes[idx], container.h });
                           }
 
                         x += sizes[idx];
@@ -274,29 +276,46 @@ template <Widget... Children> struct Row
     // Fill background if not transparent
     if (bg_color != Rgba8::transparent ())
       {
-        for (std::size_t y = rect.y;
-             y < rect.y + rect.h && y < raster.height (); ++y)
+        for (std::size_t y = 0; y < raster.height (); ++y)
           {
-            for (std::size_t x = rect.x;
-                 x < rect.x + rect.w && x < raster.width (); ++x)
+            for (std::size_t x = 0; x < raster.width (); ++x)
               {
                 raster.set_bg (x, y, bg_color);
               }
           }
       }
 
-    // Render children
+    // Render children with translated subrasters
+    std::size_t idx = 0;
     hana::for_each (children,
-                    [&] (const auto &child) { child.render (raster); });
+                    [&] (const auto &child)
+                      {
+                        const auto &layout = child_layouts[idx];
+                        auto child_raster = raster.subraster (
+                            layout.x, 0, layout.w, allocated_height);
+                        child.render (child_raster);
+                        idx++;
+                      });
   }
+
+  SizeHint width_hint = SizeHint::content ();
+  SizeHint height_hint = SizeHint::content ();
 };
 
 /// Column - vertical flex layout
 template <Widget... Children> struct Column
 {
   hana::tuple<Children...> children;
-  Rect rect{};
   Rgba8 bg_color = Rgba8::transparent ();
+
+  // Layout state: child positions and sizes (computed during layout)
+  struct ChildLayout
+  {
+    std::size_t y = 0; // Relative y position within column
+    std::size_t h = 0; // Allocated height
+  };
+  std::array<ChildLayout, sizeof...(Children)> child_layouts{};
+  std::size_t allocated_width = 0; // Width allocated by parent
 
   static constexpr std::size_t child_count = sizeof...(Children);
 
@@ -329,9 +348,9 @@ template <Widget... Children> struct Column
   }
 
   void
-  layout (Rect container)
+  layout (Size container)
   {
-    rect = container;
+    allocated_width = container.w;
 
     // First pass: calculate fixed sizes and total grow
     std::array<std::size_t, child_count> sizes{};
@@ -390,18 +409,20 @@ template <Widget... Children> struct Column
                           });
       }
 
-    // Third pass: position children
-    std::size_t y = container.y;
+    // Third pass: store child layouts and recurse
+    std::size_t y = 0;
     idx = 0;
     hana::for_each (children,
                     [&] (auto &child)
                       {
-                        child.rect
-                            = { container.x, y, container.w, sizes[idx] };
+                        child_layouts[idx] = { y, sizes[idx] };
 
-                        if constexpr (requires { child.layout (child.rect); })
+                        if constexpr (requires {
+                                        child.layout (Size{ container.w,
+                                                            sizes[idx] });
+                                      })
                           {
-                            child.layout (child.rect);
+                            child.layout (Size{ container.w, sizes[idx] });
                           }
 
                         y += sizes[idx];
@@ -415,21 +436,30 @@ template <Widget... Children> struct Column
     // Fill background if not transparent
     if (bg_color != Rgba8::transparent ())
       {
-        for (std::size_t y = rect.y;
-             y < rect.y + rect.h && y < raster.height (); ++y)
+        for (std::size_t y = 0; y < raster.height (); ++y)
           {
-            for (std::size_t x = rect.x;
-                 x < rect.x + rect.w && x < raster.width (); ++x)
+            for (std::size_t x = 0; x < raster.width (); ++x)
               {
                 raster.set_bg (x, y, bg_color);
               }
           }
       }
 
-    // Render children
+    // Render children with translated subrasters
+    std::size_t idx = 0;
     hana::for_each (children,
-                    [&] (const auto &child) { child.render (raster); });
+                    [&] (const auto &child)
+                      {
+                        const auto &layout = child_layouts[idx];
+                        auto child_raster = raster.subraster (
+                            0, layout.y, allocated_width, layout.h);
+                        child.render (child_raster);
+                        idx++;
+                      });
   }
+
+  SizeHint width_hint = SizeHint::content ();
+  SizeHint height_hint = SizeHint::content ();
 };
 
 // ============================================================================
