@@ -19,7 +19,7 @@ using namespace nxb::tui;
 struct Activity
 {
   std::string label;
-  float progress = 0.0f;
+  percent_t progress{ 0.0 * percent };
   bool finished = false;
 };
 
@@ -43,11 +43,11 @@ activity_row (const Activity &act)
   Rgba8 bar_fg = act.finished ? Rgba8 (100, 255, 180) : Rgba8 (100, 180, 255);
   Rgba8 bar_bg = Rgba8 (50, 50, 50);
 
-  // Percentage
-  auto pct = text (fmt::format ("{:>4.0f}%", act.progress * 100),
-                   act.finished ? Rgba8 (100, 255, 100) : Rgba8 (200, 200, 255));
+  // Percentage text
+  auto pct_text = text (fmt::format ("{:>4.0f}%", act.progress.numerical_value_in (percent)),
+                        act.finished ? Rgba8 (100, 255, 100) : Rgba8 (200, 200, 255));
 
-  return row (label, progress_bar (act.progress, bar_fg, bar_bg), pct);
+  return row (label, progress_bar (act.progress, bar_fg, bar_bg), pct_text);
 }
 
 auto
@@ -80,9 +80,9 @@ run ()
 
   // Application state
   AppState state;
-  state.activities.push_back ({ "nixpkgs.tar.gz", 0.0f, false });
-  state.activities.push_back ({ "rustc.tar.xz", 0.0f, false });
-  state.activities.push_back ({ "llvm-17.src.tar.xz", 0.0f, false });
+  state.activities.push_back ({ "nixpkgs.tar.gz", 0.0 * percent, false });
+  state.activities.push_back ({ "rustc.tar.xz", 0.0 * percent, false });
+  state.activities.push_back ({ "llvm-17.src.tar.xz", 0.0 * percent, false });
 
   // Animation task - updates state
   auto animate = [&] () -> coro::task<>
@@ -92,13 +92,16 @@ run ()
     for (int frame = 0; frame <= 100; ++frame)
       {
         // Update activities at different speeds
-        state.activities[0].progress = std::min (1.0f, frame / 80.0f);
-        state.activities[1].progress = std::min (1.0f, frame / 60.0f);
-        state.activities[2].progress = std::min (1.0f, frame / 100.0f);
+        state.activities[0].progress = std::min (100.0, frame / 80.0 * 100) * percent;
+        state.activities[1].progress = std::min (100.0, frame / 60.0 * 100) * percent;
+        state.activities[2].progress = std::min (100.0, frame / 100.0 * 100) * percent;
 
-        state.activities[0].finished = state.activities[0].progress >= 1.0f;
-        state.activities[1].finished = state.activities[1].progress >= 1.0f;
-        state.activities[2].finished = state.activities[2].progress >= 1.0f;
+        state.activities[0].finished
+            = state.activities[0].progress.numerical_value_in (percent) >= 100.0;
+        state.activities[1].finished
+            = state.activities[1].progress.numerical_value_in (percent) >= 100.0;
+        state.activities[2].finished
+            = state.activities[2].progress.numerical_value_in (percent) >= 100.0;
 
         co_await scheduler->yield_for (30ms);
       }
@@ -129,7 +132,7 @@ run ()
         // Render to back buffer
         auto &buffer = compositor.back_buffer ();
         buffer.clear ();
-        layout.render (buffer, Size{ width, height });
+        layout.render (buffer, Size{ width * ch, height * ln });
         compositor.present_frame ();
 
         co_await scheduler->yield_for (16ms); // ~60fps

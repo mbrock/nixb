@@ -3,6 +3,7 @@
 #include "raster.hpp"
 
 #include <concepts>
+#include <mp-units/framework.h>
 #include <span>
 #include <string>
 #include <string_view>
@@ -11,32 +12,174 @@ namespace nxb::tui
 {
 
 // ============================================================================
+// Terminal Grid Units (mp-units)
+// ============================================================================
+
+using namespace mp_units;
+
+// Base dimensions for terminal 2D layout
+inline constexpr struct dim_horizontal final : base_dimension<"X">
+{
+} dim_horizontal;
+
+inline constexpr struct dim_vertical final : base_dimension<"Y">
+{
+} dim_vertical;
+
+// Quantity specifications
+QUANTITY_SPEC (horizontal_extent, dim_horizontal);
+QUANTITY_SPEC (vertical_extent, dim_vertical);
+
+// Units: ch (character width) and ln (line height)
+inline constexpr struct ch final : named_unit<"ch", kind_of<horizontal_extent>>
+{
+} ch;
+
+inline constexpr struct ln final : named_unit<"ln", kind_of<vertical_extent>>
+{
+} ln;
+
+// Convenient type aliases
+using width_t = quantity<ch, std::size_t>;
+using height_t = quantity<ln, std::size_t>;
+
+// Dimensionless quantities
+using ratio_t = quantity<one, double>;       // 0.0 to 1.0 ratio
+using percent_t = quantity<percent, double>; // 0% to 100%
+
+// ============================================================================
+// Affine Space for Terminal Coordinates
+// ============================================================================
+
+// Absolute origin for terminal coordinate space (top-left corner)
+inline constexpr struct terminal_origin final
+    : absolute_point_origin<horizontal_extent>
+{
+} terminal_origin;
+
+inline constexpr struct terminal_origin_v final
+    : absolute_point_origin<vertical_extent>
+{
+} terminal_origin_v;
+
+// Point types: absolute positions in terminal space
+using col_t = quantity_point<ch, terminal_origin>;   // column position (x)
+using row_t = quantity_point<ln, terminal_origin_v>; // row position (y)
+
+// Displacement types (already defined as width_t/height_t)
+// width_t  = quantity<ch, ...> - horizontal displacement
+// height_t = quantity<ln, ...> - vertical displacement
+
+// ============================================================================
 // Core Types
 // ============================================================================
 
+// Size: a 2D displacement/extent (not a position!)
 struct Size
 {
-  std::size_t w = 0;
-  std::size_t h = 0;
+  width_t w{ 0 * ch };
+  height_t h{ 0 * ln };
 };
 
+// Position: a point in 2D terminal space
+struct Pos
+{
+  col_t x = terminal_origin + 0 * ch;
+  row_t y = terminal_origin_v + 0 * ln;
+
+  // Create position at the origin
+  static constexpr Pos
+  origin ()
+  {
+    return {};
+  }
+
+  // Create position from origin + offsets
+  static constexpr Pos
+  at (width_t dx, height_t dy)
+  {
+    return { terminal_origin + dx, terminal_origin_v + dy };
+  }
+
+  // Offset by displacements (point + vector = point)
+  constexpr Pos
+  operator+ (width_t dx) const
+  {
+    return { x + dx, y };
+  }
+
+  constexpr Pos
+  operator+ (height_t dy) const
+  {
+    return { x, y + dy };
+  }
+
+  // Offset by Size (point + vector = point)
+  constexpr Pos
+  operator+ (Size delta) const
+  {
+    return { x + delta.w, y + delta.h };
+  }
+
+  // Difference of positions gives displacement (point - point = vector)
+  friend constexpr Size
+  operator- (Pos a, Pos b)
+  {
+    // quantity_point subtraction returns double rep, convert to size_t
+    auto dx = (a.x - b.x).numerical_value_in (ch);
+    auto dy = (a.y - b.y).numerical_value_in (ln);
+    return { static_cast<std::size_t> (dx) * ch, static_cast<std::size_t> (dy) * ln };
+  }
+
+  // Get displacement from terminal origin
+  constexpr Size
+  from_origin () const
+  {
+    return *this - Pos::origin ();
+  }
+
+  // Raw coordinate extraction (for Raster interop)
+  [[nodiscard]] constexpr std::size_t
+  col () const
+  {
+    return static_cast<std::size_t> ((x - terminal_origin).numerical_value_in (ch));
+  }
+
+  [[nodiscard]] constexpr std::size_t
+  row () const
+  {
+    return static_cast<std::size_t> ((y - terminal_origin_v).numerical_value_in (ln));
+  }
+
+  // Equality
+  friend constexpr bool
+  operator== (Pos a, Pos b)
+  {
+    return a.x == b.x && a.y == b.y;
+  }
+};
+
+template <auto Unit>
 struct SizeHint
 {
-  std::size_t min = 0;  // Minimum size needed
-  std::size_t flex = 0; // Flex grow factor (0 = don't grow)
+  quantity<Unit, std::size_t> min{ 0 * Unit }; // Minimum size needed
+  ratio_t flex{ 0.0 * one };                   // Flex grow factor (0 = don't grow)
 
   static constexpr SizeHint
-  fixed (std::size_t n)
+  fixed (quantity<Unit, std::size_t> n)
   {
-    return { n, 0 };
+    return { n, 0.0 * one };
   }
 
   static constexpr SizeHint
-  grow (std::size_t factor = 1)
+  grow (ratio_t factor = 1.0 * one)
   {
-    return { 0, factor };
+    return { 0 * Unit, factor };
   }
 };
+
+using WidthHint = SizeHint<ch>;
+using HeightHint = SizeHint<ln>;
 
 // ============================================================================
 // Layout Concept
@@ -44,8 +187,8 @@ struct SizeHint
 
 template <typename L>
 concept Layout = requires (const L &layout, Raster &raster, Size size) {
-  { layout.width_hint () } -> std::convertible_to<SizeHint>;
-  { layout.height_hint () } -> std::convertible_to<SizeHint>;
+  { layout.width_hint () } -> std::convertible_to<WidthHint>;
+  { layout.height_hint () } -> std::convertible_to<HeightHint>;
   { layout.render (raster, size) } -> std::same_as<void>;
 };
 
@@ -56,17 +199,17 @@ concept Layout = requires (const L &layout, Raster &raster, Size size) {
 template <typename RenderFn>
 struct Leaf
 {
-  SizeHint w_hint;
-  SizeHint h_hint;
+  WidthHint w_hint;
+  HeightHint h_hint;
   RenderFn render_fn;
 
-  constexpr SizeHint
+  constexpr WidthHint
   width_hint () const
   {
     return w_hint;
   }
 
-  constexpr SizeHint
+  constexpr HeightHint
   height_hint () const
   {
     return h_hint;
@@ -81,9 +224,60 @@ struct Leaf
 
 template <typename F>
 auto
-leaf (SizeHint w, SizeHint h, F &&f)
+leaf (WidthHint w, HeightHint h, F &&f)
 {
   return Leaf<std::decay_t<F>>{ w, h, std::forward<F> (f) };
+}
+
+// ============================================================================
+// Typed Raster Operations (Pos/Size → raw coordinates)
+// ============================================================================
+
+// Write text at a typed position
+inline std::size_t
+write_text (Raster &r, Pos pos, std::string_view text,
+            Rgba8 fg = Rgba8::white (), Rgba8 bg = Rgba8::transparent ())
+{
+  return r.write_text (pos.col (), pos.row (), text, fg, bg);
+}
+
+// Set foreground color at a typed position
+inline void
+set_fg (Raster &r, Pos pos, Rgba8 color)
+{
+  r.set_fg (pos.col (), pos.row (), color);
+}
+
+// Set background color at a typed position
+inline void
+set_bg (Raster &r, Pos pos, Rgba8 color)
+{
+  r.set_bg (pos.col (), pos.row (), color);
+}
+
+// Create subraster from position and size
+inline Raster
+subraster (const Raster &r, Pos pos, Size size)
+{
+  return r.subraster (pos.col (), pos.row (),
+                      size.w.numerical_value_in (ch),
+                      size.h.numerical_value_in (ln));
+}
+
+// Iterate over all positions in a region
+template <typename Fn>
+void
+for_each_cell (Pos origin, Size extent, Fn &&fn)
+{
+  const auto w = extent.w.numerical_value_in (ch);
+  const auto h = extent.h.numerical_value_in (ln);
+  for (std::size_t dy = 0; dy < h; ++dy)
+    {
+      for (std::size_t dx = 0; dx < w; ++dx)
+        {
+          fn (origin + dx * ch + dy * ln);
+        }
+    }
 }
 
 // ============================================================================
@@ -101,29 +295,30 @@ struct Span
 inline void
 render_span (Raster &r, const Span &s)
 {
-  r.write_text (0, 0, s.text, s.fg, s.bg);
+  write_text (r, Pos::origin (), s.text, s.fg, s.bg);
 }
 
 // ============================================================================
 // String utilities
 // ============================================================================
 
-// Repeat a single-char string n times
+// Repeat a single-char string to fill a width
 inline std::string
-repeat (std::string_view ch, std::size_t n)
+repeat (std::string_view glyph, width_t w)
 {
+  auto n = w.numerical_value_ref_in (ch);
   std::string result;
-  result.reserve (ch.size () * n);
+  result.reserve (glyph.size () * n);
   for (std::size_t i = 0; i < n; ++i)
-    result += ch;
+    result += glyph;
   return result;
 }
 
 // Count UTF-8 code points (approximate display width)
-inline std::size_t
+inline width_t
 utf8_width (std::string_view s)
 {
-  std::size_t width = 0;
+  std::size_t count = 0;
   for (std::size_t i = 0; i < s.size ();)
     {
       unsigned char c = static_cast<unsigned char> (s[i]);
@@ -135,9 +330,9 @@ utf8_width (std::string_view s)
         i += 3;
       else
         i += 4;
-      ++width;
+      ++count;
     }
-  return width;
+  return count * ch;
 }
 
 // ============================================================================
@@ -149,40 +344,38 @@ inline auto
 text (std::string s, Rgba8 fg = Rgba8::white (), Rgba8 bg = Rgba8::transparent ())
 {
   auto w = utf8_width (s);
-  return leaf (SizeHint::fixed (w), SizeHint::fixed (1),
-               [=] (Raster &r, Size) { r.write_text (0, 0, s, fg, bg); });
+  return leaf (WidthHint::fixed (w), HeightHint::fixed (1 * ln),
+               [=] (Raster &r, Size) { write_text (r, Pos::origin (), s, fg, bg); });
 }
 
 // Fill: solid color rectangle (grows in both dimensions)
 inline auto
 fill (Rgba8 color = Rgba8 (60, 60, 60))
 {
-  return leaf (SizeHint::grow (), SizeHint::grow (),
+  return leaf (WidthHint::grow (), HeightHint::grow (),
                [=] (Raster &r, Size size)
-               {
-                 for (std::size_t y = 0; y < size.h; ++y)
-                   for (std::size_t x = 0; x < size.w; ++x)
-                     r.set_bg (x, y, color);
-               });
+               { for_each_cell (Pos::origin (), size, [&] (Pos p) { set_bg (r, p, color); }); });
 }
 
 // Horizontal rule: box drawing character repeated
 inline auto
 hrule (Rgba8 color = Rgba8 (80, 80, 100))
 {
-  return leaf (SizeHint::grow (), SizeHint::fixed (1),
+  return leaf (WidthHint::grow (), HeightHint::fixed (1 * ln),
                [=] (Raster &r, Size size)
-               { r.write_text (0, 0, repeat ("─", size.w), color); });
+               { write_text (r, Pos::origin (), repeat ("─", size.w), color); });
 }
 
-// Bar string: pure function (fraction, width) → string of filled blocks
+// Bar string: pure function (percent, width) → string of filled blocks
 inline std::string
-bar_string (float fraction, std::size_t width)
+bar_string (percent_t pct, width_t width)
 {
   static constexpr std::array<std::string_view, 9> partials
       = { "", "▏", "▎", "▍", "▌", "▋", "▊", "▉", "█" };
 
-  double fill = std::clamp (fraction, 0.0f, 1.0f) * width;
+  auto w = width.numerical_value_ref_in (ch);
+  auto fraction = std::clamp (pct.numerical_value_in (percent), 0.0, 100.0) / 100.0;
+  double fill = fraction * w;
   std::size_t full = static_cast<std::size_t> (fill);
   std::size_t partial = static_cast<std::size_t> ((fill - full) * 8 + 0.5);
 
@@ -192,20 +385,22 @@ bar_string (float fraction, std::size_t width)
       partial = 0;
     }
 
-  return repeat ("█", std::min (full, width)) + std::string (partials[partial]);
+  return repeat ("█", std::min (full, w) * ch) + std::string (partials[partial]);
 }
 
 // Progress bar: bg color + fg bar string
 inline auto
-progress_bar (float fraction, Rgba8 fg = Rgba8 (100, 180, 255),
+progress_bar (percent_t pct, Rgba8 fg = Rgba8 (100, 180, 255),
               Rgba8 bg = Rgba8 (50, 50, 50))
 {
-  return leaf (SizeHint::grow (), SizeHint::fixed (1),
+  return leaf (WidthHint::grow (), HeightHint::fixed (1 * ln),
                [=] (Raster &r, Size size)
                {
-                 for (std::size_t x = 0; x < size.w; ++x)
-                   r.set_bg (x, 0, bg);
-                 r.write_text (0, 0, bar_string (fraction, size.w), fg);
+                 // Fill background across the row
+                 for_each_cell (Pos::origin (), Size{ size.w, 1 * ln },
+                                [&] (Pos p) { set_bg (r, p, bg); });
+                 // Draw progress bar
+                 write_text (r, Pos::origin (), bar_string (pct, size.w), fg);
                });
 }
 
@@ -218,11 +413,11 @@ struct Row
 {
   std::tuple<Children...> children;
 
-  constexpr SizeHint
+  constexpr WidthHint
   width_hint () const
   {
-    std::size_t total_min = 0;
-    std::size_t total_flex = 0;
+    width_t total_min = 0 * ch;
+    ratio_t total_flex = 0.0 * one;
     std::apply (
         [&] (const auto &...c)
         {
@@ -233,15 +428,15 @@ struct Row
     return { total_min, total_flex };
   }
 
-  constexpr SizeHint
+  constexpr HeightHint
   height_hint () const
   {
-    std::size_t max_min = 0;
+    height_t max_min = 0 * ln;
     std::apply (
         [&] (const auto &...c)
         { ((max_min = std::max (max_min, c.height_hint ().min)), ...); },
         children);
-    return SizeHint::fixed (max_min > 0 ? max_min : 1);
+    return HeightHint::fixed (max_min.numerical_value_in (ln) > 0 ? max_min : height_t{ 1 * ln });
   }
 
   void
@@ -252,7 +447,7 @@ struct Row
       return;
 
     // Collect hints
-    std::array<SizeHint, N> hints;
+    std::array<WidthHint, N> hints;
     std::size_t i = 0;
     std::apply ([&] (const auto &...c) { ((hints[i++] = c.width_hint ()), ...); },
                 children);
@@ -260,8 +455,8 @@ struct Row
     // Calculate widths
     auto widths = flex_distribute (size.w, hints);
 
-    // Render children
-    std::size_t x = 0;
+    // Render children at successive positions
+    Pos cursor = Pos::origin ();
     i = 0;
     std::apply (
         [&] (const auto &...c)
@@ -269,11 +464,12 @@ struct Row
           (
               [&]
               {
-                if (widths[i] > 0)
+                auto child_size = Size{ widths[i], size.h };
+                if (widths[i].numerical_value_in (ch) > 0)
                   {
-                    auto sub = raster.subraster (x, 0, widths[i], size.h);
-                    c.render (sub, Size{ widths[i], size.h });
-                    x += widths[i];
+                    auto sub = subraster (raster, cursor, child_size);
+                    c.render (sub, child_size);
+                    cursor = cursor + widths[i]; // point + vector = point
                   }
                 ++i;
               }(),
@@ -284,13 +480,13 @@ struct Row
 
 private:
   template <std::size_t N>
-  static std::array<std::size_t, N>
-  flex_distribute (std::size_t total, const std::array<SizeHint, N> &hints)
+  static std::array<width_t, N>
+  flex_distribute (width_t total, const std::array<WidthHint, N> &hints)
   {
-    std::array<std::size_t, N> result{};
+    std::array<width_t, N> result{};
 
-    std::size_t used = 0;
-    std::size_t total_flex = 0;
+    width_t used = 0 * ch;
+    ratio_t total_flex = 0.0 * one;
     for (std::size_t i = 0; i < N; ++i)
       {
         result[i] = hints[i].min;
@@ -298,13 +494,15 @@ private:
         total_flex += hints[i].flex;
       }
 
-    if (total_flex > 0 && total > used)
+    if (total_flex.numerical_value_in (one) > 0 && total > used)
       {
-        std::size_t remaining = total - used;
+        auto remaining = (total - used).numerical_value_in (ch);
         for (std::size_t i = 0; i < N; ++i)
           {
-            if (hints[i].flex > 0)
-              result[i] += (remaining * hints[i].flex) / total_flex;
+            auto flex_val = hints[i].flex.numerical_value_in (one);
+            auto total_flex_val = total_flex.numerical_value_in (one);
+            if (flex_val > 0)
+              result[i] += static_cast<std::size_t> (remaining * flex_val / total_flex_val) * ch;
           }
       }
 
@@ -328,22 +526,22 @@ struct Column
 {
   std::tuple<Children...> children;
 
-  constexpr SizeHint
+  constexpr WidthHint
   width_hint () const
   {
-    std::size_t max_min = 0;
+    width_t max_min = 0 * ch;
     std::apply (
         [&] (const auto &...c)
         { ((max_min = std::max (max_min, c.width_hint ().min)), ...); },
         children);
-    return { max_min, 1 };
+    return { max_min, 1.0 * one };
   }
 
-  constexpr SizeHint
+  constexpr HeightHint
   height_hint () const
   {
-    std::size_t total_min = 0;
-    std::size_t total_flex = 0;
+    height_t total_min = 0 * ln;
+    ratio_t total_flex = 0.0 * one;
     std::apply (
         [&] (const auto &...c)
         {
@@ -361,14 +559,15 @@ struct Column
     if constexpr (N == 0)
       return;
 
-    std::array<SizeHint, N> hints;
+    std::array<HeightHint, N> hints;
     std::size_t i = 0;
     std::apply ([&] (const auto &...c) { ((hints[i++] = c.height_hint ()), ...); },
                 children);
 
     auto heights = flex_distribute (size.h, hints);
 
-    std::size_t y = 0;
+    // Render children at successive positions
+    Pos cursor = Pos::origin ();
     i = 0;
     std::apply (
         [&] (const auto &...c)
@@ -376,11 +575,12 @@ struct Column
           (
               [&]
               {
-                if (heights[i] > 0)
+                auto child_size = Size{ size.w, heights[i] };
+                if (heights[i].numerical_value_in (ln) > 0)
                   {
-                    auto sub = raster.subraster (0, y, size.w, heights[i]);
-                    c.render (sub, Size{ size.w, heights[i] });
-                    y += heights[i];
+                    auto sub = subraster (raster, cursor, child_size);
+                    c.render (sub, child_size);
+                    cursor = cursor + heights[i]; // point + vector = point
                   }
                 ++i;
               }(),
@@ -391,13 +591,13 @@ struct Column
 
 private:
   template <std::size_t N>
-  static std::array<std::size_t, N>
-  flex_distribute (std::size_t total, const std::array<SizeHint, N> &hints)
+  static std::array<height_t, N>
+  flex_distribute (height_t total, const std::array<HeightHint, N> &hints)
   {
-    std::array<std::size_t, N> result{};
+    std::array<height_t, N> result{};
 
-    std::size_t used = 0;
-    std::size_t total_flex = 0;
+    height_t used = 0 * ln;
+    ratio_t total_flex = 0.0 * one;
     for (std::size_t i = 0; i < N; ++i)
       {
         result[i] = hints[i].min;
@@ -405,13 +605,15 @@ private:
         total_flex += hints[i].flex;
       }
 
-    if (total_flex > 0 && total > used)
+    if (total_flex.numerical_value_in (one) > 0 && total > used)
       {
-        std::size_t remaining = total - used;
+        auto remaining = (total - used).numerical_value_in (ln);
         for (std::size_t i = 0; i < N; ++i)
           {
-            if (hints[i].flex > 0)
-              result[i] += (remaining * hints[i].flex) / total_flex;
+            auto flex_val = hints[i].flex.numerical_value_in (one);
+            auto total_flex_val = total_flex.numerical_value_in (one);
+            if (flex_val > 0)
+              result[i] += static_cast<std::size_t> (remaining * flex_val / total_flex_val) * ln;
           }
       }
 
@@ -436,30 +638,36 @@ struct List
   std::span<const T> items;
   ViewFn view;
 
-  constexpr SizeHint
+  constexpr WidthHint
   width_hint () const
   {
-    return SizeHint::grow ();
+    return WidthHint::grow ();
   }
 
-  constexpr SizeHint
+  constexpr HeightHint
   height_hint () const
   {
-    return SizeHint::fixed (items.size ());
+    return HeightHint::fixed (items.size () * ln);
   }
 
   void
   render (Raster &raster, Size size) const
   {
-    std::size_t y = 0;
+    const auto max_rows = size.h.numerical_value_in (ln);
+    const auto row_size = Size{ size.w, 1 * ln };
+
+    Pos cursor = Pos::origin ();
+    height_t row_idx = 0 * ln;
+
     for (const auto &item : items)
       {
-        if (y >= size.h)
+        if (row_idx.numerical_value_in (ln) >= max_rows)
           break;
         auto child = view (item);
-        auto sub = raster.subraster (0, y, size.w, 1);
-        child.render (sub, Size{ size.w, 1 });
-        ++y;
+        auto sub = subraster (raster, cursor, row_size);
+        child.render (sub, row_size);
+        cursor = cursor + 1 * ln; // point + vector = point
+        row_idx += 1 * ln;
       }
   }
 };

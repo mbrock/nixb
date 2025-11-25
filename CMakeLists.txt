@@ -120,6 +120,7 @@ target_link_libraries(nixb_ui
         libcoro          # Coroutine functionality exposed in headers
         fmt::fmt         # Formatting used in public interface
         mdspan           # Multidimensional spans in public interface
+        mp-units::mp-units # Units library for tui.hpp
         Boost::headers   # Boost headers used in public interface (header-only)
 )
 target_compile_definitions(nixb_ui PUBLIC
