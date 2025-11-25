@@ -1,5 +1,6 @@
 #include "dom.hpp"
 
+#include <algorithm>
 #include <stdexcept>
 
 namespace nxb::ui
@@ -87,6 +88,41 @@ Dom::update_style (const NodeId node, const Style &new_style)
       elem->style = new_style;
       dirty_ = true;
     }
+}
+
+void
+Dom::remove_subtree (const NodeId node)
+{
+  if (!node.is_valid () || node.value >= nodes_.size ())
+    return;
+
+  auto &data = nodes_[node.value];
+  if (!data.alive)
+    return;
+
+  // Recursively remove children first
+  if (auto *elem = std::get_if<Element> (&data.content))
+    {
+      for (const auto child : elem->children)
+        remove_subtree (child);
+    }
+
+  // Remove from parent's children list
+  if (data.parent.is_valid ())
+    {
+      auto &parent_data = nodes_[data.parent.value];
+      if (auto *parent_elem = std::get_if<Element> (&parent_data.content))
+        {
+          auto &children = parent_elem->children;
+          children.erase (
+              std::remove (children.begin (), children.end (), node),
+              children.end ());
+        }
+    }
+
+  // Mark as dead (tombstone)
+  data.alive = false;
+  dirty_ = true;
 }
 
 const NodeData &

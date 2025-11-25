@@ -26,14 +26,14 @@ namespace
 using namespace std::chrono_literals;
 
 coro::task<>
-simulation_task (UIRuntime &runtime, coro::queue<ProgressState> &bar1_updates,
-                 coro::queue<ProgressState> &bar2_updates)
+simulation_task (UIRuntime &runtime, coro::queue<ProgressUpdate> &bar1_updates,
+                 coro::queue<ProgressUpdate> &bar2_updates)
 {
   co_await runtime.scheduler ().schedule ();
 
   for (int i = 0; i <= 100; i += 10)
     {
-      co_await bar1_updates.push (ProgressState{
+      co_await bar1_updates.push (ProgressUpdate{
           .fraction = i / 100.0f,
           .label = "nixpkgs.tar.gz",
           .finished = (i == 100),
@@ -44,7 +44,7 @@ simulation_task (UIRuntime &runtime, coro::queue<ProgressState> &bar1_updates,
 
   for (int i = 0; i <= 100; i += 5)
     {
-      co_await bar2_updates.push (ProgressState{
+      co_await bar2_updates.push (ProgressUpdate{
           .fraction = i / 100.0f,
           .label = "rustc.tar.xz",
           .finished = (i == 100),
@@ -162,46 +162,6 @@ view_driver_task (UIRuntime &runtime, Dom &dom, LayoutEngine &layout,
   co_return;
 }
 
-ProgressBarNodes
-make_progress_row (Dom &dom, const NodeId container, std::string label_text,
-                   const fmt::color color, const int bar_width)
-{
-  Style row_style = Style::defaults ();
-  row_style.flex_dir = FlexDir::Row;
-  row_style.align = Align::Center;
-  row_style.justify = Justify::Start;
-  const NodeId row = dom.create_element (row_style);
-  dom.append_child (container, row);
-
-  const NodeId label
-      = dom.create_text (fmt::format ("{:<20}", label_text), color);
-  dom.append_child (row, label);
-
-  Style bar_container_style = Style::defaults ();
-  bar_container_style.flex_dir = FlexDir::Row;
-  bar_container_style.width = Size::fixed (bar_width);
-  bar_container_style.height = Size::fixed (1);
-  bar_container_style.bg_color = Rgba8 (fmt::color::cyan, 100);
-  const NodeId bar_container = dom.create_element (bar_container_style);
-  dom.append_child (row, bar_container);
-
-  Style fill_style = Style::defaults ();
-  fill_style.flex_dir = FlexDir::Row;
-  fill_style.width = Size::fixed (0);
-  fill_style.height = Size::fixed (1);
-  fill_style.bg_color = Rgba8 (fmt::color::green, 100);
-  const NodeId bar_fill = dom.create_element (fill_style);
-  dom.append_child (bar_container, bar_fill);
-
-  const NodeId percent = dom.create_text ("  0%", fmt::color::white);
-  dom.append_child (row, percent);
-
-  return ProgressBarNodes{ .label = label,
-                           .bar_fill = bar_fill,
-                           .percent = percent,
-                           .bar_width = bar_width };
-}
-
 int
 run_progress_hud ()
 {
@@ -227,26 +187,25 @@ run_progress_hud ()
   auto header = dom.create_text ("Progress:", fmt::color::white);
   dom.append_child (container, header);
 
-  constexpr int bar_width = 40;
-  auto bar1_nodes = make_progress_row (dom, container, "nixpkgs.tar.gz",
-                                       fmt::color::white, bar_width);
-  auto bar2_nodes = make_progress_row (dom, container, "rustc.tar.xz",
-                                       fmt::color::white, bar_width);
-
-  auto status = dom.create_text ("Building packages...", fmt::color::yellow);
-  dom.append_child (container, status);
-
-  coro::queue<ProgressState> bar1_updates;
-  coro::queue<ProgressState> bar2_updates;
-
-  std::vector<coro::task<>> widgets;
-  widgets.push_back (
-      progress_bar_widget (*scheduler, dom, bar1_nodes, bar1_updates));
-  widgets.push_back (
-      progress_bar_widget (*scheduler, dom, bar2_nodes, bar2_updates));
+  // Queues for sending updates to the progress bars
+  coro::queue<ProgressUpdate> bar1_updates;
+  coro::queue<ProgressUpdate> bar2_updates;
 
   TerminalCompositor compositor (runtime.terminal_width (),
                                  runtime.terminal_height (), glyphs);
+
+  constexpr int bar_width = 40;
+
+  // Progress bar coroutines create their nodes immediately (before first
+  // co_await) so we create these tasks first to get the right DOM order
+  auto bar1_task = progress_bar (*scheduler, dom, container, "nixpkgs.tar.gz",
+                                 bar_width, bar1_updates);
+  auto bar2_task = progress_bar (*scheduler, dom, container, "rustc.tar.xz",
+                                 bar_width, bar2_updates);
+
+  // Now add status after the progress bars
+  auto status = dom.create_text ("Building packages...", fmt::color::yellow);
+  dom.append_child (container, status);
 
   std::vector<coro::task<>> all_tasks;
   all_tasks.push_back (runtime.signal_loop ());
@@ -254,10 +213,8 @@ run_progress_hud ()
   all_tasks.push_back (
       view_driver_task (runtime, dom, layout, painter, compositor, container));
   all_tasks.push_back (simulation_task (runtime, bar1_updates, bar2_updates));
-  for (auto &widget : widgets)
-    {
-      all_tasks.push_back (std::move (widget));
-    }
+  all_tasks.push_back (std::move (bar1_task));
+  all_tasks.push_back (std::move (bar2_task));
 
   try
     {

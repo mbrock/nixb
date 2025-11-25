@@ -20,6 +20,9 @@ LayoutEngine::layout_element (Dom &dom, const NodeId node_id,
                               const Rect &container_rect)
 {
   auto &node = dom.get_mut (node_id);
+  if (!node.alive)
+    return;
+
   const auto *elem = std::get_if<Element> (&node.content);
   if (!elem)
     {

@@ -15,7 +15,7 @@ using nxb::Rgba8;
 
 /// Forward declarations
 class Dom;
-struct Node;
+class Node;
 
 /// Handle to a node in the DOM (stable across updates)
 struct NodeId
@@ -124,7 +124,8 @@ struct NodeData
 {
   NodeId parent = NodeId::null ();
   std::variant<Element, Text> content;
-  Rect rect; // Computed by layout
+  Rect rect;         // Computed by layout
+  bool alive = true; // For tombstoning removed nodes
 };
 
 class Dom
@@ -144,6 +145,10 @@ public:
                     std::optional<fmt::color> color = std::nullopt);
 
   void update_style (NodeId node, const Style &new_style);
+
+  /// Remove a node and all its descendants (marks as dead, doesn't reclaim
+  /// memory)
+  void remove_subtree (NodeId node);
 
   [[nodiscard]] const NodeData &get (NodeId node) const;
 
@@ -179,6 +184,72 @@ private:
   bool dirty_ = true;
 
   friend class LayoutEngine;
+};
+
+/// RAII node that removes itself from the DOM when destroyed
+class Node
+{
+public:
+  Node () = default;
+
+  Node (Dom &dom, NodeId id) : dom_ (&dom), id_ (id) {}
+
+  ~Node ()
+  {
+    if (dom_ && id_.is_valid ())
+      dom_->remove_subtree (id_);
+  }
+
+  // Move-only
+  Node (const Node &) = delete;
+  Node &operator= (const Node &) = delete;
+
+  Node (Node &&other) noexcept : dom_ (other.dom_), id_ (other.id_)
+  {
+    other.dom_ = nullptr;
+    other.id_ = NodeId::null ();
+  }
+
+  Node &
+  operator= (Node &&other) noexcept
+  {
+    if (this != &other)
+      {
+        if (dom_ && id_.is_valid ())
+          dom_->remove_subtree (id_);
+        dom_ = other.dom_;
+        id_ = other.id_;
+        other.dom_ = nullptr;
+        other.id_ = NodeId::null ();
+      }
+    return *this;
+  }
+
+  [[nodiscard]] NodeId
+  id () const
+  {
+    return id_;
+  }
+
+  [[nodiscard]] explicit
+  operator bool () const
+  {
+    return dom_ && id_.is_valid ();
+  }
+
+  /// Release ownership without destroying
+  NodeId
+  release ()
+  {
+    NodeId result = id_;
+    dom_ = nullptr;
+    id_ = NodeId::null ();
+    return result;
+  }
+
+private:
+  Dom *dom_ = nullptr;
+  NodeId id_ = NodeId::null ();
 };
 
 } // namespace nxb::ui
