@@ -24,6 +24,7 @@ TerminalGuard::~TerminalGuard ()
   ansi::show_cursor ();
   ansi::clear_screen ();
   ansi::move_to (1, 1);
+  std::cout << "\033[0m" << std::flush;  // Reset SGR
 }
 
 UIRuntime::UIRuntime (coro::io_scheduler &scheduler) : scheduler_ (&scheduler)
@@ -146,6 +147,8 @@ TerminalCompositor::resize (int width, int height)
   height = std::max (height, 5);
   front_ = Raster (width, height, glyphs_);
   back_ = Raster (width, height, glyphs_);
+  // Clear terminal so diff sees everything as changed
+  ansi::clear_screen ();
 }
 
 Raster &

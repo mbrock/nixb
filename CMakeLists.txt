@@ -190,6 +190,9 @@ install(TARGETS nixb nxbcg RUNTIME DESTINATION bin)
 add_executable(ui3-example src/tty/ui3_example.cpp)
 target_link_libraries(ui3-example PRIVATE nixb_ui)
 
+add_executable(tui-example src/tty/tui_example.cpp)
+target_link_libraries(tui-example PRIVATE nixb_ui)
+
 # add_executable(nixbco src/nixbco.cpp src/nix-log-adapter.cpp)
 # target_link_libraries(nixbco
 #     PRIVATE

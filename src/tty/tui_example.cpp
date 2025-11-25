@@ -1,0 +1,165 @@
+#include "app.hpp"
+#include "tui.hpp"
+
+#include <chrono>
+#include <coro/coro.hpp>
+#include <fmt/core.h>
+#include <vector>
+
+namespace nxb::tui_example
+{
+
+using namespace std::chrono_literals;
+using namespace nxb::tui;
+
+// ============================================================================
+// Application State (plain data)
+// ============================================================================
+
+struct Activity
+{
+  std::string label;
+  float progress = 0.0f;
+  bool finished = false;
+};
+
+struct AppState
+{
+  std::vector<Activity> activities;
+};
+
+// ============================================================================
+// View Functions (State → Layout)
+// ============================================================================
+
+// Progress bar row: [label] [████▌░░░░░] [100%]
+auto
+activity_row (const Activity &act)
+{
+  // Label (fixed width)
+  auto label = text (fmt::format ("{:<20}", act.label));
+
+  // Bar colors
+  Rgba8 bar_fg = act.finished ? Rgba8 (100, 255, 180) : Rgba8 (100, 180, 255);
+  Rgba8 bar_bg = Rgba8 (50, 50, 50);
+
+  // Percentage
+  auto pct = text (fmt::format ("{:>4.0f}%", act.progress * 100),
+                   act.finished ? Rgba8 (100, 255, 100) : Rgba8 (200, 200, 255));
+
+  return row (label, progress_bar (act.progress, bar_fg, bar_bg), pct);
+}
+
+auto
+build_ui (const AppState &state)
+{
+  return column (
+      text ("Build Progress", Rgba8 (120, 200, 255)),
+      hrule (Rgba8 (60, 80, 100)),
+      list (state.activities, activity_row),
+      text (""));
+}
+
+// ============================================================================
+// Main Loop
+// ============================================================================
+
+int
+run ()
+{
+  // Setup
+  auto scheduler
+      = coro::io_scheduler::make_shared (coro::io_scheduler::options{});
+  nxb::ui::UIRuntime runtime (*scheduler);
+
+  std::size_t width = static_cast<std::size_t> (runtime.terminal_width ());
+  std::size_t height = static_cast<std::size_t> (runtime.terminal_height ());
+
+  GlyphTable glyphs;
+  nxb::ui::TerminalCompositor compositor (width, height, glyphs);
+
+  // Application state
+  AppState state;
+  state.activities.push_back ({ "nixpkgs.tar.gz", 0.0f, false });
+  state.activities.push_back ({ "rustc.tar.xz", 0.0f, false });
+  state.activities.push_back ({ "llvm-17.src.tar.xz", 0.0f, false });
+
+  // Animation task - updates state
+  auto animate = [&] () -> coro::task<>
+  {
+    co_await scheduler->schedule ();
+
+    for (int frame = 0; frame <= 100; ++frame)
+      {
+        // Update activities at different speeds
+        state.activities[0].progress = std::min (1.0f, frame / 80.0f);
+        state.activities[1].progress = std::min (1.0f, frame / 60.0f);
+        state.activities[2].progress = std::min (1.0f, frame / 100.0f);
+
+        state.activities[0].finished = state.activities[0].progress >= 1.0f;
+        state.activities[1].finished = state.activities[1].progress >= 1.0f;
+        state.activities[2].finished = state.activities[2].progress >= 1.0f;
+
+        co_await scheduler->yield_for (30ms);
+      }
+
+    // Wait a moment then exit
+    co_await scheduler->yield_for (500ms);
+    runtime.request_shutdown ();
+  };
+
+  // Render loop - reads state, builds layout, renders
+  auto render_loop = [&] () -> coro::task<>
+  {
+    co_await scheduler->schedule ();
+
+    while (!runtime.shutdown_requested ())
+      {
+        // Handle resize
+        if (auto sz = runtime.resize_channel ().try_pop ())
+          {
+            width = sz->width;
+            height = sz->height;
+            compositor.resize (width, height);
+          }
+
+        // Build layout from current state (immediate mode!)
+        auto layout = build_ui (state);
+
+        // Render to back buffer
+        auto &buffer = compositor.back_buffer ();
+        buffer.clear ();
+        layout.render (buffer, Size{ width, height });
+        compositor.present_frame ();
+
+        co_await scheduler->yield_for (16ms); // ~60fps
+      }
+  };
+
+  // Run
+  try
+    {
+      nxb::ui::TerminalGuard guard;
+      std::vector<coro::task<>> tasks;
+      tasks.push_back (runtime.signal_loop ());
+      tasks.push_back (render_loop ());
+      tasks.push_back (animate ());
+      coro::sync_wait (coro::when_all (std::move (tasks)));
+    }
+  catch (const std::exception &e)
+    {
+      fmt::print (stderr, "Error: {}\n", e.what ());
+      return 1;
+    }
+
+  fmt::print ("Done!\n");
+  return 0;
+}
+
+} // namespace nxb::tui_example
+
+int
+main ()
+{
+  return nxb::tui_example::run ();
+}
