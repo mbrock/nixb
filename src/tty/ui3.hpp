@@ -166,9 +166,9 @@ struct BoxLayout
   void
   render (Raster &raster, Size) const
   {
-    for (std::size_t y = 0; y < raster.height (); ++y)
+    for (std::size_t y = 0; y < raster.rows (); ++y)
       {
-        for (std::size_t x = 0; x < raster.width (); ++x)
+        for (std::size_t x = 0; x < raster.cols (); ++x)
           {
             raster.set_bg (x, y, color);
           }
@@ -283,8 +283,8 @@ template <Layout... Children> struct RowLayout
     // Fill background
     if (bg_color != Rgba8::transparent ())
       {
-        for (std::size_t y = 0; y < raster.height (); ++y)
-          for (std::size_t x = 0; x < raster.width (); ++x)
+        for (std::size_t y = 0; y < raster.rows (); ++y)
+          for (std::size_t x = 0; x < raster.cols (); ++x)
             raster.set_bg (x, y, bg_color);
       }
 
@@ -335,8 +335,8 @@ template <Layout... Children> struct ColumnLayout
     // Fill background
     if (bg_color != Rgba8::transparent ())
       {
-        for (std::size_t y = 0; y < raster.height (); ++y)
-          for (std::size_t x = 0; x < raster.width (); ++x)
+        for (std::size_t y = 0; y < raster.rows (); ++y)
+          for (std::size_t x = 0; x < raster.cols (); ++x)
             raster.set_bg (x, y, bg_color);
       }
 

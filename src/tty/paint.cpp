@@ -51,9 +51,9 @@ Painter::fill_background (Raster &raster, const Rect &rect,
   auto sub = raster.subraster (rect.x, rect.y, rect.w, rect.h);
 
   // Fill the subraster - coordinates are now local (0,0) based!
-  for (std::size_t row = 0; row < sub.height (); ++row)
+  for (std::size_t row = 0; row < sub.rows (); ++row)
     {
-      for (std::size_t col = 0; col < sub.width (); ++col)
+      for (std::size_t col = 0; col < sub.cols (); ++col)
         {
           sub.set_glyph (col, row, gid);
           sub.set_fg (col, row, fg_color);
@@ -83,7 +83,7 @@ Painter::draw_text (Raster &raster, GlyphTable & /*glyphs*/, const Rect &rect,
         }
 
       // Write character
-      if (x < rect.x + rect.w && x < raster.width () && y < raster.height ())
+      if (x < rect.x + rect.w && x < raster.cols () && y < raster.rows ())
         {
           raster.set_char (x, y, c);
           raster.set_fg (x, y, color);

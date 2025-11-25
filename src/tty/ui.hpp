@@ -112,7 +112,7 @@ struct Text
   {
     // Raster is already translated to our local coordinate space
     // Just render at (0, 0) within the available raster bounds
-    for (std::size_t i = 0; i < content.length () && i < raster.width (); ++i)
+    for (std::size_t i = 0; i < content.length () && i < raster.cols (); ++i)
       {
         raster.set_char (i, 0, content[i]);
         raster.set_fg (i, 0, color);
@@ -139,9 +139,9 @@ struct Box
   {
     // Raster is already translated to our local coordinate space
     // Fill the entire available raster area
-    for (std::size_t y = 0; y < raster.height (); ++y)
+    for (std::size_t y = 0; y < raster.rows (); ++y)
       {
-        for (std::size_t x = 0; x < raster.width (); ++x)
+        for (std::size_t x = 0; x < raster.cols (); ++x)
           {
             raster.set_bg (x, y, color);
           }
@@ -276,9 +276,9 @@ template <Widget... Children> struct Row
     // Fill background if not transparent
     if (bg_color != Rgba8::transparent ())
       {
-        for (std::size_t y = 0; y < raster.height (); ++y)
+        for (std::size_t y = 0; y < raster.rows (); ++y)
           {
-            for (std::size_t x = 0; x < raster.width (); ++x)
+            for (std::size_t x = 0; x < raster.cols (); ++x)
               {
                 raster.set_bg (x, y, bg_color);
               }
@@ -436,9 +436,9 @@ template <Widget... Children> struct Column
     // Fill background if not transparent
     if (bg_color != Rgba8::transparent ())
       {
-        for (std::size_t y = 0; y < raster.height (); ++y)
+        for (std::size_t y = 0; y < raster.rows (); ++y)
           {
-            for (std::size_t x = 0; x < raster.width (); ++x)
+            for (std::size_t x = 0; x < raster.cols (); ++x)
               {
                 raster.set_bg (x, y, bg_color);
               }

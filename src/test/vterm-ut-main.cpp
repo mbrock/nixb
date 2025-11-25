@@ -36,12 +36,12 @@ inline std::string
 dump_raster (const nxb::Raster &raster, const nxb::GlyphTable &glyphs)
 {
   std::ostringstream out;
-  out << "Raster " << raster.width () << "x" << raster.height () << ":\n";
+  out << "Raster " << raster.cols () << "x" << raster.rows () << ":\n";
 
-  for (std::size_t y = 0; y < raster.height (); ++y)
+  for (std::size_t y = 0; y < raster.rows (); ++y)
     {
       out << "Row " << y << ": ";
-      for (std::size_t x = 0; x < raster.width (); ++x)
+      for (std::size_t x = 0; x < raster.cols (); ++x)
         {
           auto cell = raster.get_cell (x, y);
           if (cell.has_value ())
@@ -327,7 +327,7 @@ boost::ut::suite vterm_tests = []
 
         // The box should be filled with '#' (checking the layout worked)
         int box_cells_filled = back_buffer.count_if (
-            0, 1, 10, 4,
+            Pos::at (0 * ch, 1 * ln), Size{ 10 * ch, 3 * ln },
             [] (const GlyphTable::GlyphId gid) { return gid == '#'; });
 
         // Should have at least some '#' characters from the box

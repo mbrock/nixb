@@ -132,7 +132,8 @@ run ()
         // Render to back buffer
         auto &buffer = compositor.back_buffer ();
         buffer.clear ();
-        layout.render (buffer, Size{ width * ch, height * ln });
+        layout.render (
+            buffer, nxb::tui::Size{ width * nxb::tui::ch, height * nxb::tui::ln });
         compositor.present_frame ();
 
         co_await scheduler->yield_for (16ms); // ~60fps

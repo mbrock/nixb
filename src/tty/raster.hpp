@@ -1,6 +1,7 @@
 #pragma once
 
 #include "glyph-table.hpp"
+#include "units.hpp"
 
 #include <experimental/mdspan>
 #include <fmt/color.h>
@@ -113,6 +114,8 @@ public:
   /// Initialize owning raster with given dimensions.
   /// All cells default to space (ASCII 32) with DEFAULT_COLOR.
   Raster (std::size_t width, std::size_t height, GlyphTable &glyphs);
+  Raster (width_t width, height_t height, GlyphTable &glyphs);
+  Raster (Size size, GlyphTable &glyphs);
 
   /// Create a non-owning view from existing mdspan views.
   /// Used internally for subraster views.
@@ -130,20 +133,40 @@ public:
   Raster &operator= (Raster &&) = default;
 
   /// Dimensions
-  [[nodiscard]] std::size_t
+  [[nodiscard]] width_t
   width () const noexcept
+  {
+    return cols () * ch;
+  }
+  [[nodiscard]] height_t
+  height () const noexcept
+  {
+    return rows () * ln;
+  }
+  [[nodiscard]] Size
+  extent () const noexcept
+  {
+    return { width (), height () };
+  }
+  [[nodiscard]] std::size_t
+  cols () const noexcept
   {
     return glyph_view_.extent (1);
   }
   [[nodiscard]] std::size_t
-  height () const noexcept
+  rows () const noexcept
   {
     return glyph_view_.extent (0);
   }
   [[nodiscard]] std::size_t
   size () const noexcept
   {
-    return width () * height ();
+    return cols () * rows ();
+  }
+  [[nodiscard]] std::size_t
+  cell_count () const noexcept
+  {
+    return size ();
   }
 
   /// Create a non-owning subraster view of a rectangular region.
@@ -152,22 +175,32 @@ public:
   /// nested views).
   [[nodiscard]] Raster subraster (std::size_t x, std::size_t y, std::size_t w,
                                   std::size_t h) const noexcept;
+  [[nodiscard]] Raster subraster (Pos origin, Size size) const noexcept;
 
   /// Set glyph at (x, y). Silently ignores out-of-bounds coordinates.
   void set_glyph (std::size_t x, std::size_t y,
                   GlyphTable::GlyphId gid) const noexcept;
+  void set_glyph (Pos pos, GlyphTable::GlyphId gid) const noexcept;
 
   /// Set foreground color at (x, y)
   void set_fg (std::size_t x, std::size_t y, Rgba8 color) const noexcept;
+  void set_fg (Pos pos, Rgba8 color) const noexcept;
 
   /// Set background color at (x, y)
   void set_bg (std::size_t x, std::size_t y, Rgba8 color) const noexcept;
+  void set_bg (Pos pos, Rgba8 color) const noexcept;
 
   /// Convenience: set ASCII character at (x, y)
   void
-  set_char (const std::size_t x, const std::size_t y, const char ch) noexcept
+  set_char (const std::size_t x, const std::size_t y,
+            const char glyph) noexcept
   {
-    set_glyph (x, y, static_cast<GlyphTable::GlyphId> (ch));
+    set_glyph (x, y, static_cast<GlyphTable::GlyphId> (glyph));
+  }
+  void
+  set_char (Pos pos, const char glyph) noexcept
+  {
+    set_glyph (pos, static_cast<GlyphTable::GlyphId> (glyph));
   }
 
   /// Write UTF-8 text starting at (x, y) with given colors.
@@ -176,16 +209,24 @@ public:
   std::size_t write_text (std::size_t x, std::size_t y, std::string_view text,
                           GlyphTable &glyphs, Rgba8 fg = DEFAULT_COLOR,
                           Rgba8 bg = DEFAULT_COLOR) noexcept;
+  col_t write_text (Pos pos, std::string_view text, GlyphTable &glyphs,
+                    Rgba8 fg = DEFAULT_COLOR,
+                    Rgba8 bg = DEFAULT_COLOR) noexcept;
 
   /// Write UTF-8 text using the raster's glyph table
   std::size_t write_text (std::size_t x, std::size_t y, std::string_view text,
                           Rgba8 fg = DEFAULT_COLOR,
                           Rgba8 bg = DEFAULT_COLOR) noexcept;
+  col_t write_text (Pos pos, std::string_view text,
+                    Rgba8 fg = DEFAULT_COLOR,
+                    Rgba8 bg = DEFAULT_COLOR) noexcept;
 
   /// Fill a rectangle with a single glyph and foreground color.
   /// The background color is left unchanged.
   void fill_rect (std::size_t x, std::size_t y, std::size_t w, std::size_t h,
                   GlyphTable::GlyphId gid, Rgba8 fg_color);
+  void fill_rect (Pos origin, Size size, GlyphTable::GlyphId gid,
+                  Rgba8 fg_color);
 
   /// Clear entire raster to spaces with default colors
   void clear ();
@@ -200,7 +241,7 @@ public:
   glyphs_2d () const noexcept
   {
     return const_glyph_view_t{ glyph_view_.data_handle (),
-                               mdspan_extents{ height (), width () } };
+                               mdspan_extents{ rows (), cols () } };
   }
 
   [[nodiscard]] color_view_t
@@ -212,7 +253,7 @@ public:
   fgs_2d () const noexcept
   {
     return const_color_view_t{ fg_view_.data_handle (),
-                               mdspan_extents{ height (), width () } };
+                               mdspan_extents{ rows (), cols () } };
   }
 
   [[nodiscard]] color_view_t
@@ -224,7 +265,7 @@ public:
   bgs_2d () const noexcept
   {
     return const_color_view_t{ bg_view_.data_handle (),
-                               mdspan_extents{ height (), width () } };
+                               mdspan_extents{ rows (), cols () } };
   }
 
   /// Direct access to SOA arrays (for diffing, inspection, etc.)
@@ -259,19 +300,23 @@ public:
   };
   [[nodiscard]] std::optional<Cell> get_cell (std::size_t x,
                                               std::size_t y) const noexcept;
+  [[nodiscard]] std::optional<Cell> get_cell (Pos pos) const noexcept;
 
   /// Helper: count cells in a region that match a predicate
   template <typename Pred>
   [[nodiscard]] std::size_t
-  count_if (const std::size_t x0, const std::size_t y0, std::size_t x1,
-            std::size_t y1, Pred &&pred) const
+  count_if (Pos origin, Size size, Pred &&pred) const
   {
     const auto view = glyphs_2d ();
+    const auto x0 = origin.col ();
+    const auto y0 = origin.row ();
+    std::size_t x1 = x0 + size.w.numerical_value_in (ch);
+    std::size_t y1 = y0 + size.h.numerical_value_in (ln);
     std::size_t count = 0;
 
     // Clamp to raster bounds
-    x1 = std::min (x1, width ());
-    y1 = std::min (y1, height ());
+    x1 = std::min (x1, cols ());
+    y1 = std::min (y1, rows ());
 
     for (std::size_t y = y0; y < y1; ++y)
       {
