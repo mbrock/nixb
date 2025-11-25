@@ -3,6 +3,7 @@
 #include "raster.hpp"
 
 #include <boost/hana.hpp>
+#include <concepts>
 #include <string>
 
 namespace nxb::ui2
@@ -48,6 +49,50 @@ struct SizeHint
     return { 0, factor };
   }
 };
+
+// ============================================================================
+// Concepts - the "sender/receiver" of layout
+// ============================================================================
+
+/// A widget can report its preferred size
+template <typename W>
+concept Measurable = requires (const W &w) {
+  { w.preferred_size () } -> std::same_as<Size>;
+};
+
+/// A widget can be rendered to a raster
+template <typename W>
+concept Renderable = requires (const W &w, Raster &r) {
+  { w.render (r) } -> std::same_as<void>;
+};
+
+/// A widget has a computed rect (set by layout)
+template <typename W>
+concept HasRect = requires (W &w) {
+  { w.rect } -> std::convertible_to<Rect &>;
+};
+
+/// A widget has width hint for flex layout
+template <typename W>
+concept HasWidthHint = requires (const W &w) {
+  { w.width_hint } -> std::convertible_to<SizeHint>;
+};
+
+/// A widget has height hint for flex layout
+template <typename W>
+concept HasHeightHint = requires (const W &w) {
+  { w.height_hint } -> std::convertible_to<SizeHint>;
+};
+
+/// A widget can be laid out (has a layout method)
+template <typename W>
+concept Layoutable = requires (W &w, Rect r) {
+  { w.layout (r) } -> std::same_as<void>;
+};
+
+/// Full Widget concept - can be measured, laid out, and rendered
+template <typename W>
+concept Widget = Measurable<W> && Renderable<W> && HasRect<W> && HasWidthHint<W>;
 
 // ============================================================================
 // Leaf widgets
@@ -117,7 +162,7 @@ struct Box
 // ============================================================================
 
 /// Row - horizontal flex layout
-template <typename... Children> struct Row
+template <Widget... Children> struct Row
 {
   hana::tuple<Children...> children;
   Rect rect{};
@@ -247,7 +292,7 @@ template <typename... Children> struct Row
 };
 
 /// Column - vertical flex layout
-template <typename... Children> struct Column
+template <Widget... Children> struct Column
 {
   hana::tuple<Children...> children;
   Rect rect{};
@@ -391,14 +436,14 @@ template <typename... Children> struct Column
 // Convenience constructors
 // ============================================================================
 
-template <typename... Children>
+template <Widget... Children>
 Row<std::decay_t<Children>...>
 row (Children &&...children)
 {
   return { hana::make_tuple (std::forward<Children> (children)...) };
 }
 
-template <typename... Children>
+template <Widget... Children>
 Column<std::decay_t<Children>...>
 column (Children &&...children)
 {

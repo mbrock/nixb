@@ -86,6 +86,8 @@ struct ProgressBar
     return ui.preferred_size ();
   }
 
+  // Size hints for flex layout
+  SizeHint width_hint = SizeHint::content ();
   SizeHint height_hint = SizeHint::fixed_size (1);
 };
 
