@@ -134,8 +134,8 @@ UIRuntime::signal_loop ()
 
 TerminalCompositor::TerminalCompositor (const int width, const int height,
                                         GlyphTable &glyphs)
-    : front_ (std::max (width, 10), std::max (height, 5)),
-      back_ (std::max (width, 10), std::max (height, 5)), glyphs_ (glyphs)
+    : front_ (std::max (width, 10), std::max (height, 5), glyphs),
+      back_ (std::max (width, 10), std::max (height, 5), glyphs), glyphs_ (glyphs)
 {
 }
 
@@ -144,8 +144,8 @@ TerminalCompositor::resize (int width, int height)
 {
   width = std::max (width, 10);
   height = std::max (height, 5);
-  front_ = Raster (width, height);
-  back_ = Raster (width, height);
+  front_ = Raster (width, height, glyphs_);
+  back_ = Raster (width, height, glyphs_);
 }
 
 Raster &
@@ -199,13 +199,17 @@ TerminalCompositor::present_frame (std::ostream &out)
   out.write (buf.data (), static_cast<std::streamsize> (buf.size ()));
   out.flush ();
 
-  fmt::memory_buffer reset_buf;
-  ansi::Writer reset_writer (reset_buf);
-  reset_writer.reset ();
-  out.write (reset_buf.data (),
-             static_cast<std::streamsize> (reset_buf.size ()));
+  // fmt::memory_buffer reset_buf;
+  // ansi::Writer reset_writer (reset_buf);
+  // reset_writer.reset ();
+  // out.write (reset_buf.data (),
+  //            static_cast<std::streamsize> (reset_buf.size ()));
 
   std::swap (front_, back_);
+
+  // Copy front → back so back buffer has current frame
+  // This enables persistent raster rendering where widgets only update on change
+  back_ = front_;
 }
 
 coro::task<>

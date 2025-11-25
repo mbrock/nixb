@@ -1,7 +1,6 @@
 #include "app.hpp"
 #include "ui.hpp"
 
-#include <chrono>
 #include <coro/coro.hpp>
 #include <coro/sync_wait.hpp>
 #include <coro/when_all.hpp>

@@ -27,11 +27,13 @@ GlyphTable::GlyphTable ()
 GlyphTable::GlyphId
 GlyphTable::intern (const std::string_view bytes)
 {
-  // Fast path for single bytes
+  // Fast path for single bytes (no lock needed - ASCII is immutable)
   if (bytes.size () == 1)
     {
       return static_cast<unsigned char> (bytes[0]);
     }
+
+  std::lock_guard<std::mutex> lock (mutex_);
 
   // Check if already interned
   if (const auto it = table_.find (bytes); it != table_.end ())

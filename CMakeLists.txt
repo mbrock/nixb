@@ -181,11 +181,14 @@ add_custom_command(TARGET nxb-vterm-tests POST_BUILD
 
 install(TARGETS nixb nxbcg RUNTIME DESTINATION bin)
 
-add_executable(ui-example src/tty/example.cpp)
-target_link_libraries(ui-example PRIVATE nixb_ui)
+# add_executable(ui-example src/tty/example.cpp)
+# target_link_libraries(ui-example PRIVATE nixb_ui)
 
-add_executable(ui2-example src/tty/ui_example.cpp)
-target_link_libraries(ui2-example PRIVATE nixb_ui)
+# add_executable(ui2-example src/tty/ui_example.cpp)
+# target_link_libraries(ui2-example PRIVATE nixb_ui)
+
+add_executable(ui3-example src/tty/ui3_example.cpp)
+target_link_libraries(ui3-example PRIVATE nixb_ui)
 
 # add_executable(nixbco src/nixbco.cpp src/nix-log-adapter.cpp)
 # target_link_libraries(nixbco

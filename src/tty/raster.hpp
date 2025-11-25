@@ -112,12 +112,22 @@ public:
 
   /// Initialize owning raster with given dimensions.
   /// All cells default to space (ASCII 32) with DEFAULT_COLOR.
-  Raster (std::size_t width, std::size_t height);
+  Raster (std::size_t width, std::size_t height, GlyphTable &glyphs);
 
   /// Create a non-owning view from existing mdspan views.
   /// Used internally for subraster views.
   Raster (const glyph_view_t &glyphs, const color_view_t &fgs,
           const color_view_t &bgs);
+
+  /// Copy assignment: deep copy storage and reconstruct mdspan views
+  Raster &operator= (const Raster &other);
+
+  /// Default copy constructor is fine (for views)
+  Raster (const Raster &) = default;
+
+  /// Default move operations
+  Raster (Raster &&) = default;
+  Raster &operator= (Raster &&) = default;
 
   /// Dimensions
   [[nodiscard]] std::size_t
@@ -165,6 +175,11 @@ public:
   /// Multi-byte UTF-8 sequences are interned via the glyph table.
   std::size_t write_text (std::size_t x, std::size_t y, std::string_view text,
                           GlyphTable &glyphs, Rgba8 fg = DEFAULT_COLOR,
+                          Rgba8 bg = DEFAULT_COLOR) noexcept;
+
+  /// Write UTF-8 text using the raster's glyph table
+  std::size_t write_text (std::size_t x, std::size_t y, std::string_view text,
+                          Rgba8 fg = DEFAULT_COLOR,
                           Rgba8 bg = DEFAULT_COLOR) noexcept;
 
   /// Fill a rectangle with a single glyph and foreground color.
@@ -280,6 +295,9 @@ private:
   std::optional<std::vector<GlyphTable::GlyphId>> storage_glyphs_;
   std::optional<std::vector<Rgba8>> storage_fgs_;
   std::optional<std::vector<Rgba8>> storage_bgs_;
+
+  /// GlyphTable reference for text rendering
+  GlyphTable *glyphs_ = nullptr;
 };
 
 } // namespace nxb

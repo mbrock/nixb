@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <mutex>
 #include <optional>
 #include <span>
 #include <string_view>
@@ -24,11 +25,11 @@ public:
   /// Initialize with pre-populated ASCII 0-255
   GlyphTable ();
 
-  /// Rule of 5: GlyphTable owns arena memory
+  /// Rule of 5: GlyphTable is non-copyable, non-movable (owns mutex)
   GlyphTable (const GlyphTable &) = delete;
   GlyphTable &operator= (const GlyphTable &) = delete;
-  GlyphTable (GlyphTable &&) noexcept = default;
-  GlyphTable &operator= (GlyphTable &&) noexcept = default;
+  GlyphTable (GlyphTable &&) = delete;
+  GlyphTable &operator= (GlyphTable &&) = delete;
   ~GlyphTable () = default;
 
   /// Intern a UTF-8 string, returning its GlyphId.
@@ -72,6 +73,9 @@ private:
   /// Hash table for fast lookup (string_view -> GlyphId)
   /// Keys point into arena_, so arena_ must not reallocate
   std::unordered_map<std::string_view, GlyphId> table_;
+
+  /// Mutex for thread-safe interning (multiple widgets may render concurrently)
+  mutable std::mutex mutex_;
 };
 
 } // namespace nxb

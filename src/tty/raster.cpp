@@ -8,13 +8,15 @@ namespace nxb
 {
 
 // Owning constructor
-Raster::Raster (const std::size_t width, const std::size_t height)
+Raster::Raster (const std::size_t width, const std::size_t height,
+                GlyphTable &glyphs)
     : glyph_view_ (nullptr, mdspan_extents{ height, width }),
       fg_view_ (nullptr, mdspan_extents{ height, width }),
       bg_view_ (nullptr, mdspan_extents{ height, width }),
       storage_glyphs_ (std::vector<GlyphTable::GlyphId> (width * height, 32)),
       storage_fgs_ (std::vector (width * height, DEFAULT_COLOR)),
-      storage_bgs_ (std::vector (width * height, DEFAULT_COLOR))
+      storage_bgs_ (std::vector (width * height, DEFAULT_COLOR)),
+      glyphs_ (&glyphs)
 {
   // Update views to point to the allocated storage
   glyph_view_ = glyph_view_t (storage_glyphs_->data (),
@@ -28,8 +30,45 @@ Raster::Raster (const std::size_t width, const std::size_t height)
 // Non-owning view constructor
 Raster::Raster (const glyph_view_t &glyphs, const color_view_t &fgs,
                 const color_view_t &bgs)
-    : glyph_view_ (glyphs), fg_view_ (fgs), bg_view_ (bgs)
+    : glyph_view_ (glyphs), fg_view_ (fgs), bg_view_ (bgs), glyphs_ (nullptr)
 {
+  // Note: glyphs_ will be set when creating subrasters via subraster()
+}
+
+// Copy assignment operator
+Raster &
+Raster::operator= (const Raster &other)
+{
+  if (this == &other)
+    return *this;
+
+  // Copy storage (deep copy if present)
+  storage_glyphs_ = other.storage_glyphs_;
+  storage_fgs_ = other.storage_fgs_;
+  storage_bgs_ = other.storage_bgs_;
+
+  // Copy glyph table pointer
+  glyphs_ = other.glyphs_;
+
+  // Reconstruct mdspan views to point at our own storage
+  if (storage_glyphs_)
+    {
+      const auto h = other.height ();
+      const auto w = other.width ();
+      glyph_view_
+          = glyph_view_t (storage_glyphs_->data (), mdspan_extents{ h, w });
+      fg_view_ = color_view_t (storage_fgs_->data (), mdspan_extents{ h, w });
+      bg_view_ = color_view_t (storage_bgs_->data (), mdspan_extents{ h, w });
+    }
+  else
+    {
+      // Non-owning view: just copy the views
+      glyph_view_ = other.glyph_view_;
+      fg_view_ = other.fg_view_;
+      bg_view_ = other.bg_view_;
+    }
+
+  return *this;
 }
 
 void
@@ -124,6 +163,17 @@ Raster::write_text (const std::size_t x, const std::size_t y,
   return col;
 }
 
+std::size_t
+Raster::write_text (const std::size_t x, const std::size_t y,
+                    const std::string_view text, const Rgba8 fg,
+                    const Rgba8 bg) noexcept
+{
+  if (!glyphs_)
+    return x; // No glyph table, can't render
+
+  return write_text (x, y, text, *glyphs_, fg, bg);
+}
+
 void
 Raster::fill_rect (const std::size_t x, const std::size_t y,
                    const std::size_t w, const std::size_t h,
@@ -202,8 +252,10 @@ Raster::subraster (const std::size_t x, const std::size_t y,
   const auto bg_sub
       = submdspan (bg_view_, std::pair{ y0, y1 }, std::pair{ x0, x1 });
 
-  // Return a non-owning Raster view
-  return Raster (glyph_sub, fg_sub, bg_sub);
+  // Return a non-owning Raster view with inherited glyph table
+  Raster sub (glyph_sub, fg_sub, bg_sub);
+  sub.glyphs_ = glyphs_;
+  return sub;
 }
 
 } // namespace nxb
