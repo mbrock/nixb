@@ -115,74 +115,76 @@ NixBuildState::build_activity_tree ()
 
   // Sort by importance: works on yearning IDs
   // Checks if they have live activities to determine priority
-  auto importance_cmp = [this] (int64_t a, int64_t b) {
-    const auto *yearning_a = get_yearning (a);
-    const auto *yearning_b = get_yearning (b);
-    if (!yearning_a || !yearning_b)
-      {
-        const auto *activity_a = get_activity (a);
-        const auto *activity_b = get_activity (b);
+  auto importance_cmp = [this] (int64_t a, int64_t b)
+    {
+      const auto *yearning_a = get_yearning (a);
+      const auto *yearning_b = get_yearning (b);
+      if (!yearning_a || !yearning_b)
+        {
+          const auto *activity_a = get_activity (a);
+          const auto *activity_b = get_activity (b);
 
-        if (!activity_a || !activity_b)
-          return a < b;
+          if (!activity_a || !activity_b)
+            return a < b;
 
-        if (activity_a->type == nix::actBuild
-            && activity_b->type != nix::actBuild)
-          return true;
-        if (activity_a->type != nix::actBuild
-            && activity_b->type == nix::actBuild)
-          return false;
+          if (activity_a->type == nix::actBuild
+              && activity_b->type != nix::actBuild)
+            return true;
+          if (activity_a->type != nix::actBuild
+              && activity_b->type == nix::actBuild)
+            return false;
 
-        if (activity_a->is_finished && !activity_b->is_finished)
-          return true;
-        if (!activity_a->is_finished && activity_b->is_finished)
-          return false;
+          if (activity_a->is_finished && !activity_b->is_finished)
+            return true;
+          if (!activity_a->is_finished && activity_b->is_finished)
+            return false;
 
-        if (activity_a->has_progress && !activity_b->has_progress)
-          return true;
-        if (!activity_a->has_progress && activity_b->has_progress)
-          return false;
+          if (activity_a->has_progress && !activity_b->has_progress)
+            return true;
+          if (!activity_a->has_progress && activity_b->has_progress)
+            return false;
 
-        if (activity_a->progress.expected > activity_b->progress.expected)
-          return true;
-        if (activity_a->progress.expected < activity_b->progress.expected)
-          return false;
+          if (activity_a->progress.expected > activity_b->progress.expected)
+            return true;
+          if (activity_a->progress.expected < activity_b->progress.expected)
+            return false;
 
-        return a > b;
-      }
+          return a > b;
+        }
 
-    // Compute sort order based on linked activity (if any)
-    auto sort_order = [this] (const Yearning &yearning) -> int {
-      if (!yearning.live_activity_id)
-        return 2; // Queued - medium priority
+      // Compute sort order based on linked activity (if any)
+      auto sort_order = [this] (const Yearning &yearning) -> int
+        {
+          if (!yearning.live_activity_id)
+            return 2; // Queued - medium priority
 
-      const auto *activity = get_activity (*yearning.live_activity_id);
-      if (!activity)
-        return 2;
+          const auto *activity = get_activity (*yearning.live_activity_id);
+          if (!activity)
+            return 2;
 
-      // Lower number = higher priority
-      if (activity->type == nix::actBuild)
-        return 0; // Building NOW - highest priority
-      if (activity->type == nix::actCopyPath
-          || activity->type == nix::actFileTransfer)
-        return 1; // Downloading - high priority
-      if (activity->is_finished)
-        return 3; // Done - low priority
-      return 1;   // Other active states
+          // Lower number = higher priority
+          if (activity->type == nix::actBuild)
+            return 0; // Building NOW - highest priority
+          if (activity->type == nix::actCopyPath
+              || activity->type == nix::actFileTransfer)
+            return 1; // Downloading - high priority
+          if (activity->is_finished)
+            return 3; // Done - low priority
+          return 1;   // Other active states
+        };
+
+      int order_a = sort_order (*yearning_a);
+      int order_b = sort_order (*yearning_b);
+
+      if (order_a != order_b)
+        return order_a < order_b;
+
+      // Within same priority, sort by build plan order
+      if (yearning_a->order != yearning_b->order)
+        return yearning_a->order < yearning_b->order;
+
+      return a < b;
     };
-
-    int order_a = sort_order (*yearning_a);
-    int order_b = sort_order (*yearning_b);
-
-    if (order_a != order_b)
-      return order_a < order_b;
-
-    // Within same priority, sort by build plan order
-    if (yearning_a->order != yearning_b->order)
-      return yearning_a->order < yearning_b->order;
-
-    return a < b;
-  };
 
   for (auto &[parent_id, child_ids] : activity_graph_.children_mut ())
     {
@@ -552,24 +554,28 @@ NixBuildState::format_activity_label (const ActivityInfo &info) const
 std::string
 ActivityInfo::to_json () const
 {
-  return nlohmann::json{
-    { "type", type },
-    { "text", text },
-    { "store_path",
-      store_path.transform ([] (const nix::StorePath &path) -> std::string {
-        return std::string{ path.to_string () };
-      }) },
-    { "derivation_path", derivation_path.transform (
-                             [] (const nix::StorePath &path) -> std::string {
-                               return std::string{ path.to_string () };
-                             }) },
-    { "derivation",
-      derivation.transform ([] (const nix::Derivation &drv) -> std::string {
-        return std::string{ drv.name };
-      }) },
-    { "store_base_url", store_base_url },
-    { "label", label }
-  }.dump ();
+  nlohmann::json object = { {
+      { "type", type },
+      { "text", text },
+      // { "store_path",
+      //   store_path.transform ([] (const nix::StorePath &path) -> std::string
+      //   {
+      //     return std::string{ path.to_string () };
+      //   }) },
+      // { "derivation_path", derivation_path.transform (
+      //                          [] (const nix::StorePath &path) ->
+      //                          std::string {
+      //                            return std::string{ path.to_string () };
+      //                          }) },
+      // { "derivation",
+      //   derivation.transform ([] (const nix::Derivation &drv) -> std::string
+      //   {
+      //     return std::string{ drv.name };
+      //   }) },
+      // { "store_base_url", store_base_url },
+      // { "label", label }
+  } };
+  return object.dump ();
 }
 
 std::string

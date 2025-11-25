@@ -120,7 +120,7 @@ NixLogWatcher::show_derivation (const std::string &installable)
   for (auto &drvpath : drvpaths)
     {
       auto drv = store_->readDerivation (drvpath);
-      drv_json.push_back (drv.toJSON (store_->config).dump (2));
+      drv_json.push_back (drv.toJSON ().dump (2));
     }
 
   return drv_json;
@@ -394,8 +394,8 @@ NixLogWatcher::process_playback_file (const std::string &path)
 void
 NixLogWatcher::process_playback_file (const std::string &path, double speedup)
 {
-  NixLogPlayer player (
-      [this] (const std::string &line) { process_line (line); }, stop_flag_);
+  NixLogPlayer player ([this] (const std::string &line)
+                         { process_line (line); }, stop_flag_);
   player.play (path, speedup);
 
   // Print final state

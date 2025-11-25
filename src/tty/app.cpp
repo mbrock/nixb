@@ -221,10 +221,11 @@ TerminalCompositor::present_loop (coro::io_scheduler &scheduler)
 
   std::uint64_t handled_damage = 0;
 
-  auto publish_size = [] (const TermSize size) -> coro::task<> {
-    co_await resize_channel ().push (size);
-    co_return;
-  };
+  auto publish_size = [] (const TermSize size) -> coro::task<>
+    {
+      co_await resize_channel ().push (size);
+      co_return;
+    };
 
   co_await publish_size (terminal_size ());
 

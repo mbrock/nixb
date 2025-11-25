@@ -39,44 +39,48 @@ UiStateBuilder::build ()
   std::function<bool (int64_t, std::unordered_set<int64_t> &)>
       has_active_descendant
       = [this, &has_active_descendant] (
-            int64_t root_id, std::unordered_set<int64_t> &visited) -> bool {
-    if (visited.contains (root_id))
+            int64_t root_id, std::unordered_set<int64_t> &visited) -> bool
+    {
+      if (visited.contains (root_id))
+        return false;
+      visited.insert (root_id);
+
+      const auto *yearning = state_.get_yearning (root_id);
+      if (yearning && yearning->live_activity_id)
+        {
+          const auto *activity
+              = state_.get_activity (*yearning->live_activity_id);
+          if (activity && activity->type != nix::actBuildWaiting)
+            return true;
+        }
+
+      const auto &children_map = state_.activity_children ();
+      auto it = children_map.find (root_id);
+      if (it != children_map.end ())
+        {
+          for (int64_t child_id : it->second)
+            {
+              if (has_active_descendant (child_id, visited))
+                return true;
+            }
+        }
       return false;
-    visited.insert (root_id);
-
-    const auto *yearning = state_.get_yearning (root_id);
-    if (yearning && yearning->live_activity_id)
-      {
-        const auto *activity
-            = state_.get_activity (*yearning->live_activity_id);
-        if (activity && activity->type != nix::actBuildWaiting)
-          return true;
-      }
-
-    const auto &children_map = state_.activity_children ();
-    auto it = children_map.find (root_id);
-    if (it != children_map.end ())
-      {
-        for (int64_t child_id : it->second)
-          {
-            if (has_active_descendant (child_id, visited))
-              return true;
-          }
-      }
-    return false;
-  };
+    };
 
   std::stable_sort (roots_sorted.begin (), roots_sorted.end (),
-                    [&] (int64_t a, int64_t b) {
-                      std::unordered_set<int64_t> visited_a, visited_b;
-                      bool a_has_active = has_active_descendant (a, visited_a);
-                      bool b_has_active = has_active_descendant (b, visited_b);
+                    [&] (int64_t a, int64_t b)
+                      {
+                        std::unordered_set<int64_t> visited_a, visited_b;
+                        bool a_has_active
+                            = has_active_descendant (a, visited_a);
+                        bool b_has_active
+                            = has_active_descendant (b, visited_b);
 
-                      if (a_has_active != b_has_active)
-                        return a_has_active; // Active branches first
+                        if (a_has_active != b_has_active)
+                          return a_has_active; // Active branches first
 
-                      return false; // Keep original order otherwise
-                    });
+                        return false; // Keep original order otherwise
+                      });
 
   // Render the tree - branches with active builds are now at top
   constexpr int max_depth = 8;

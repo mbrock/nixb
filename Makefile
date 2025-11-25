@@ -6,10 +6,10 @@ endif
 
 export CLICOLOR=1
 
-all: build
-build: build/build.ninja; ninja -C build
-build/build.ninja: CMakeLists.txt; cmake -B build -G Ninja
-clean:; rm -rf build
+all: setup build
+setup:; cmake --preset default
+build:; cmake --build --preset default
+clean:; cmake --build --preset default --target clean
 docs:; doxygen docs/Doxyfile.nix-api
 test: build; $(MAKE) -C build test
 watch:; find src -name '*.cpp' -o -name '*.hpp' | entr -cs 'make && ./build/nxbcg'

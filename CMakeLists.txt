@@ -1,7 +1,6 @@
 cmake_minimum_required(VERSION 3.24)
 project(nixb VERSION 0.3.0 LANGUAGES CXX)
 
-# Build configuration
 set(CMAKE_CXX_STANDARD 26)
 set(CMAKE_CXX_EXTENSIONS ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -11,60 +10,47 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Debug)
 endif()
 
-# CPM Dependency Manager
-# See: https://github.com/cpm-cmake/CPM.cmake
-# Uses CPM_SOURCE_CACHE env var if set for faster rebuilds
 include(cmake/CPM.cmake)
-
-#------------------------------------------------------------------------------
-# System Dependencies (from nix environment)
-#------------------------------------------------------------------------------
 
 cmake_policy(SET CMP0167 NEW)
 find_package(Boost REQUIRED)
 find_package(PkgConfig REQUIRED)
 
-# Import nix libraries as PkgConfig targets
-foreach(nixpkg IN ITEMS NIX_STORE NIX_EXPR NIX_FLAKE NIX_CMD)
-    string(TOLOWER ${nixpkg} nixpkg_lower)
-    string(REPLACE "_" "-" nixpkg_name ${nixpkg_lower})
-    pkg_check_modules(${nixpkg} REQUIRED IMPORTED_TARGET ${nixpkg_name})
-endforeach()
+pkg_check_modules(NIX REQUIRED IMPORTED_TARGET
+  nix-store nix-expr nix-flake nix-cmd nix-util nlohmann_json)
 
-#------------------------------------------------------------------------------
-# CPM Dependencies
-#------------------------------------------------------------------------------
+# Nix's clang wrapper injects include paths via NIX_CFLAGS_COMPILE,
+# which causes CMake to detect them as "implicit" includes
+# and omit them from compile_commands.json.
+#
+# This breaks clangd because it doesn't use the Nix wrapper.
+#
+# Fix: DESTROY ALL IMPLICIT INCLUDES!!!!!!!!!
+set(CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES "")
+set(CMAKE_C_IMPLICIT_INCLUDE_DIRECTORIES "")
 
-# Standard dependencies with straightforward configuration
+CPMAddPackage("gh:boost-ext/ut#v2.3.1")
 CPMAddPackage("gh:simdjson/simdjson#v3.10.1")
 CPMAddPackage("gh:CLIUtils/CLI11#v2.6.1")
 CPMAddPackage("gh:NVIDIA/stdexec#nvhpc-25.09")
 
-# mdspan: using specific commit instead of tag for compatibility
 CPMAddPackage(
     NAME mdspan
     GITHUB_REPOSITORY kokkos/mdspan
     GIT_TAG 537053f83150f1b6f7528c1d961866d8628abc2e
 )
 
-# c-ares: required by libcoro when LIBCORO_FEATURE_NETWORKING is ON
-CPMAddPackage("gh:c-ares/c-ares#v1.34.5")
+# CPMAddPackage("gh:c-ares/c-ares#v1.34.5")
 
-# fmt: CRITICAL - must have FMT_INSTALL ON for mp-units formatter integration
-# Without this, mp-units types cannot be formatted with fmt, causing massive template errors
-# EXCLUDE_FROM_ALL must be NO to ensure proper installation
 CPMFindPackage(
     NAME fmt
     GITHUB_REPOSITORY fmtlib/fmt
     GIT_TAG 3391f9e9929d6ea2562863902cb523af3e47f3f5
     SYSTEM YES
     EXCLUDE_FROM_ALL NO
-    OPTIONS
-        "FMT_INSTALL ON"  # Required for mp-units fmt::formatter integration
+    OPTIONS "FMT_INSTALL ON"
 )
 
-# mp-units: uses SOURCE_SUBDIR because CMakeLists is in src/ subdirectory
-# MP_UNITS_API_STD_FORMAT OFF because we're using fmt formatters instead
 CPMFindPackage(
     NAME mp-units
     VERSION 2.4.0
@@ -75,11 +61,9 @@ CPMFindPackage(
     OPTIONS
         "MP_UNITS_BUILD_INSTALL OFF"
         "MP_UNITS_API_CONTRACTS NONE"
-        "MP_UNITS_API_STD_FORMAT OFF"  # Using fmt formatters instead
+        "MP_UNITS_API_STD_FORMAT OFF"
 )
 
-# range-v3: DOWNLOAD_ONLY because their CMakeLists.txt interferes with our build config
-# We manually create an INTERFACE target to just use the headers
 CPMAddPackage(
     NAME range-v3
     URL https://github.com/ericniebler/range-v3/archive/0.12.0.zip
@@ -92,27 +76,21 @@ if(range-v3_ADDED)
     target_include_directories(range-v3 INTERFACE "${range-v3_SOURCE_DIR}/include")
 endif()
 
-# libcoro: coroutine library with networking enabled (requires c-ares)
 CPMAddPackage(
     NAME libcoro
     GITHUB_REPOSITORY jbaldwin/libcoro
     GIT_TAG v0.15.0
     OPTIONS
-        "LIBCORO_FEATURE_NETWORKING ON"       # Enables async networking (requires c-ares)
+        "LIBCORO_FEATURE_NETWORKING ON"
         "LIBCORO_BUILD_TESTS OFF"
         "LIBCORO_EXTERNAL_DEPENDENCIES ON"
         "LIBCORO_BUILD_EXAMPLES OFF"
+        "LIBCORO_BUILD_SHARED_LIBS ON"
 )
 
-# Keep libvterm as subproject (has custom build process)
 add_subdirectory(subprojects/libvterm EXCLUDE_FROM_ALL)
 
-#------------------------------------------------------------------------------
-# Third-party library configuration
-#------------------------------------------------------------------------------
-
-# Mark third-party libraries as SYSTEM to suppress warnings from their headers
-foreach(target IN ITEMS simdjson CLI11 mp-units stdexec fmt)
+foreach(target IN ITEMS simdjson CLI11 mp-units stdexec fmt libcoro)
     if(TARGET ${target})
         get_target_property(inc_dirs ${target} INTERFACE_INCLUDE_DIRECTORIES)
         if(inc_dirs)
@@ -123,11 +101,6 @@ foreach(target IN ITEMS simdjson CLI11 mp-units stdexec fmt)
     endif()
 endforeach()
 
-#------------------------------------------------------------------------------
-# Project Targets
-#------------------------------------------------------------------------------
-
-# nixb_ui: Static library for terminal UI functionality
 add_library(nixb_ui STATIC
     src/tty/app.cpp
     src/tty/dom.cpp
@@ -140,7 +113,6 @@ add_library(nixb_ui STATIC
     src/tty/raster-diff.cpp
 )
 
-# PUBLIC because users of nixb_ui need these headers and dependencies
 target_include_directories(nixb_ui PUBLIC src)
 target_link_libraries(nixb_ui
     PUBLIC
@@ -154,7 +126,6 @@ target_compile_definitions(nixb_ui PUBLIC
     MDSPAN_USE_PAREN_OPERATOR=0
 )
 
-# nixb: Main executable (old implementation)
 add_executable(nixb
     src/old/main.cpp
     src/old/NixBuildState.cpp
@@ -169,20 +140,15 @@ add_executable(nixb
     src/old/UiStateBuilder.cpp
 )
 
-# PRIVATE because this is an executable - nothing links to it
 target_link_libraries(nixb
     PRIVATE
         fmt::fmt
         simdjson::simdjson
         CLI11::CLI11
         Boost::headers
-        PkgConfig::NIX_STORE
-        PkgConfig::NIX_EXPR
-        PkgConfig::NIX_FLAKE
-        PkgConfig::NIX_CMD
+        PkgConfig::NIX
 )
 
-# nxbcg: cgroups utility executable
 add_executable(nxbcg
     src/cgroups.cpp
     src/uring.cpp
@@ -194,38 +160,25 @@ target_link_libraries(nxbcg
         STDEXEC::stdexec
 )
 
-# nxb-vterm-tests: Terminal emulator tests
 add_executable(nxb-vterm-tests src/test/vterm-ut-main.cpp)
 target_include_directories(nxb-vterm-tests PRIVATE src/test)
 target_link_libraries(nxb-vterm-tests
     PRIVATE
-        nixb_ui          # Includes libcoro, fmt, mdspan transitively
+        nixb_ui
         libvterm
+        Boost::ut
 )
-
-#------------------------------------------------------------------------------
-# Testing
-#------------------------------------------------------------------------------
 
 enable_testing()
 add_test(NAME vterm-tests COMMAND nxb-vterm-tests)
 
-# Auto-run tests after building the test executable
 add_custom_command(TARGET nxb-vterm-tests POST_BUILD
     COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure -R vterm-tests
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
     COMMENT "Running vterm tests..."
 )
 
-#------------------------------------------------------------------------------
-# Installation
-#------------------------------------------------------------------------------
-
 install(TARGETS nixb nxbcg RUNTIME DESTINATION bin)
-
-#------------------------------------------------------------------------------
-# Commented out executables (for reference)
-#------------------------------------------------------------------------------
 
 add_executable(ui-example src/tty/example.cpp)
 target_link_libraries(ui-example PRIVATE nixb_ui)

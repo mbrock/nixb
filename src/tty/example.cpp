@@ -127,26 +127,27 @@ view_driver_task (coro::io_scheduler &scheduler, Dom &dom,
   auto iter = generator.begin ();
   const auto end = generator.end ();
 
-  auto check_resize_queue = [&] () -> bool {
-    bool resized = false;
-    while (true)
-      {
-        auto value = resize_channel ().try_pop ();
-        if (value.has_value ())
-          {
-            size_state = *value;
-            resized = true;
-            continue;
-          }
+  auto check_resize_queue = [&] () -> bool
+    {
+      bool resized = false;
+      while (true)
+        {
+          auto value = resize_channel ().try_pop ();
+          if (value.has_value ())
+            {
+              size_state = *value;
+              resized = true;
+              continue;
+            }
 
-        if (const auto err = value.error ();
-            err == coro::queue_consume_result::empty
-            || err == coro::queue_consume_result::try_lock_failure
-            || err == coro::queue_consume_result::stopped)
-          break;
-      }
-    return resized;
-  };
+          if (const auto err = value.error ();
+              err == coro::queue_consume_result::empty
+              || err == coro::queue_consume_result::try_lock_failure
+              || err == coro::queue_consume_result::stopped)
+            break;
+        }
+      return resized;
+    };
 
   while (!shutdown_requested ())
     {

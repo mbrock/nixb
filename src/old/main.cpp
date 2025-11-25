@@ -97,9 +97,8 @@ main (int argc, char **argv)
   if (!installable.empty ())
     {
       auto bridge = std::make_unique<nixb::NixLogForwardingLogger> (
-          [&watcher] (const std::string &line) {
-            watcher.process_log_line (line);
-          },
+          [&watcher] (const std::string &line)
+            { watcher.process_log_line (line); },
           /*include_prefix=*/true, &stop_flag);
 
       std::vector<std::unique_ptr<nix::Logger>> extras;
