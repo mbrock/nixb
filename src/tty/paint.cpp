@@ -22,11 +22,8 @@ Painter::paint_node (const Dom &dom, const NodeData &node, Raster &raster,
   if (auto *elem = std::get_if<Element> (&node.content))
     {
       // Fill background
-      if (elem->style.bg_glyph != ' ')
-        {
-          fill_background (raster, node.rect, elem->style.bg_glyph,
-                           elem->style.fg_color, elem->style.bg_color);
-        }
+      fill_background (raster, node.rect, elem->style.bg_glyph,
+                       elem->style.fg_color, elem->style.bg_color);
 
       // Paint children
       for (const auto child_id : elem->children)

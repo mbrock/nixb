@@ -2,6 +2,9 @@
 
 #include "glyph-table.hpp"
 #include "raster.hpp"
+#include "signal-pipe.hpp"
+
+#include <atomic>
 #include <coro/coro.hpp>
 #include <coro/event.hpp>
 #include <coro/queue.hpp>
@@ -27,30 +30,103 @@ struct TermSize
   int height;
 };
 
-/// Global shutdown event (set on SIGINT/SIGTERM).
-coro::event &shutdown_event ();
-bool shutdown_requested ();
+/// Reason for shutdown.
+enum class ShutdownReason : std::uint8_t
+{
+  Running,    ///< Not shutting down
+  Completed,  ///< Normal completion requested by application
+  Interrupted ///< User interrupt (SIGINT/SIGTERM)
+};
 
-/// Damage signalling between view generators and compositor.
-coro::event &damage_event ();
-void signal_damage ();
-
-/// Resize notifications (published by runtime, consumed by view drivers).
-coro::queue<TermSize> &resize_channel ();
-
-/// Current terminal dimensions (tracked via SIGWINCH).
-int terminal_width ();
-int terminal_height ();
-TermSize terminal_size ();
-
-/// Initialize runtime state (signals, term size, scheduler pointer).
-void init_ui_runtime (coro::io_scheduler &scheduler);
-
-/// Guard that hides cursor/clears screen on scope exit.
+/// Guard that hides cursor/clears screen on scope entry, restores on exit.
 struct TerminalGuard
 {
   TerminalGuard ();
   ~TerminalGuard ();
+};
+
+/// Runtime state for the UI system.
+/// Encapsulates signal handling, terminal size tracking, and event
+/// coordination.
+class UIRuntime
+{
+public:
+  explicit UIRuntime (coro::io_scheduler &scheduler);
+  ~UIRuntime () = default;
+
+  // Non-copyable, non-moveable (owns signal state)
+  UIRuntime (const UIRuntime &) = delete;
+  UIRuntime &operator= (const UIRuntime &) = delete;
+  UIRuntime (UIRuntime &&) = delete;
+  UIRuntime &operator= (UIRuntime &&) = delete;
+
+  /// Access the scheduler.
+  [[nodiscard]] coro::io_scheduler &
+  scheduler () const noexcept
+  {
+    return *scheduler_;
+  }
+
+  /// Check if shutdown has been requested.
+  [[nodiscard]] bool
+  shutdown_requested () const noexcept
+  {
+    return shutdown_reason_.load (std::memory_order_acquire)
+           != ShutdownReason::Running;
+  }
+
+  /// Get the reason for shutdown.
+  [[nodiscard]] ShutdownReason
+  shutdown_reason () const noexcept
+  {
+    return shutdown_reason_.load (std::memory_order_acquire);
+  }
+
+  /// Request graceful shutdown (normal completion).
+  void request_shutdown ();
+
+  /// Request shutdown due to signal (called from signal_loop).
+  void request_interrupt ();
+
+  /// Signal that the view has been damaged and needs redraw.
+  void signal_damage ();
+
+  /// Current terminal dimensions.
+  [[nodiscard]] TermSize terminal_size () const noexcept;
+  [[nodiscard]] int terminal_width () const noexcept;
+  [[nodiscard]] int terminal_height () const noexcept;
+
+  /// Channel for resize notifications.
+  coro::queue<TermSize> &
+  resize_channel () noexcept
+  {
+    return resize_queue_;
+  }
+
+  /// Event signaled when damage occurs.
+  coro::event &
+  damage_event () noexcept
+  {
+    return damage_event_;
+  }
+
+  /// Coroutine that handles signals from the pipe.
+  /// Should be run as part of the main task group.
+  coro::task<> signal_loop ();
+
+private:
+  void refresh_terminal_size () noexcept;
+
+  coro::io_scheduler *scheduler_;
+  SignalPipe signals_;
+
+  coro::event damage_event_;
+  coro::queue<TermSize> resize_queue_;
+
+  std::atomic<int> term_width_{ 80 };
+  std::atomic<int> term_height_{ 24 };
+  std::atomic<ShutdownReason> shutdown_reason_{ ShutdownReason::Running };
+  std::atomic<std::uint64_t> damage_counter_{ 0 };
 };
 
 class TerminalCompositor
@@ -62,10 +138,10 @@ public:
   Raster &back_buffer () noexcept;
   GlyphTable &glyphs () const noexcept;
 
-  coro::task<> present_loop (coro::io_scheduler &scheduler);
+  /// Present loop that waits for damage events and renders frames.
+  coro::task<> present_loop (UIRuntime &runtime);
 
   // Public for testing the rendering pipeline without async runtime
-  // Pass an output stream, defaults to std::cout in cpp file
   void present_frame ();
   void present_frame (std::ostream &out);
 

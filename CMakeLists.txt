@@ -101,7 +101,7 @@ foreach(target IN ITEMS simdjson CLI11 mp-units stdexec fmt libcoro)
     endif()
 endforeach()
 
-add_library(nixb_ui STATIC
+add_library(nixb_ui
     src/tty/app.cpp
     src/tty/dom.cpp
     src/tty/layout.cpp
@@ -111,6 +111,7 @@ add_library(nixb_ui STATIC
     src/tty/glyph-table.cpp
     src/tty/raster.cpp
     src/tty/raster-diff.cpp
+    src/tty/signal-pipe.cpp
 )
 
 target_include_directories(nixb_ui PUBLIC src)

@@ -4,117 +4,14 @@
 #include "raster-diff.hpp"
 
 #include <algorithm>
-#include <atomic>
 #include <coro/io_scheduler.hpp>
 #include <csignal>
 #include <iostream>
 #include <sys/ioctl.h>
 #include <unistd.h>
 
-namespace
-{
-
-coro::event g_shutdown_event{};
-coro::event g_damage_event{};
-coro::queue<nxb::ui::TermSize> g_resize_queue;
-coro::io_scheduler *g_scheduler = nullptr;
-std::atomic g_term_width{ 80 };
-std::atomic g_term_height{ 24 };
-std::atomic g_resize_requested{ false };
-std::atomic g_shutdown_flag{ false };
-std::atomic<std::uint64_t> g_damage_counter{ 0 };
-
-void
-refresh_terminal_size_internal () noexcept
-{
-  struct winsize ws{};
-  if (ioctl (STDOUT_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_col > 0
-      && ws.ws_row > 0)
-    {
-      g_term_width.store (ws.ws_col, std::memory_order_release);
-      g_term_height.store (ws.ws_row, std::memory_order_release);
-    }
-}
-
-void
-signal_handler (const int signal)
-{
-  if (signal == SIGWINCH)
-    {
-      g_resize_requested.store (true, std::memory_order_release);
-      return;
-    }
-
-  if (signal == SIGINT || signal == SIGTERM)
-    {
-      g_shutdown_flag.store (true, std::memory_order_release);
-      g_shutdown_event.set ();
-      if (g_scheduler != nullptr)
-        {
-          g_scheduler->shutdown ();
-        }
-    }
-}
-
-bool
-consume_resize_request ()
-{
-  return g_resize_requested.exchange (false, std::memory_order_acq_rel);
-}
-
-} // namespace
-
 namespace nxb::ui
 {
-
-coro::event &
-shutdown_event ()
-{
-  return g_shutdown_event;
-}
-
-bool
-shutdown_requested ()
-{
-  return g_shutdown_flag.load (std::memory_order_acquire);
-}
-
-coro::event &
-damage_event ()
-{
-  return g_damage_event;
-}
-
-void
-signal_damage ()
-{
-  g_damage_counter.fetch_add (1, std::memory_order_acq_rel);
-  g_damage_event.set ();
-}
-
-coro::queue<TermSize> &
-resize_channel ()
-{
-  return g_resize_queue;
-}
-
-int
-terminal_width ()
-{
-  return g_term_width.load (std::memory_order_acquire);
-}
-
-int
-terminal_height ()
-{
-  return g_term_height.load (std::memory_order_acquire);
-}
-
-TermSize
-terminal_size ()
-{
-  return TermSize{ terminal_width (), terminal_height () };
-}
 
 TerminalGuard::TerminalGuard ()
 {
@@ -129,14 +26,110 @@ TerminalGuard::~TerminalGuard ()
   ansi::move_to (1, 1);
 }
 
-void
-init_ui_runtime (coro::io_scheduler &scheduler)
+UIRuntime::UIRuntime (coro::io_scheduler &scheduler) : scheduler_ (&scheduler)
 {
-  g_scheduler = &scheduler;
-  std::signal (SIGINT, signal_handler);
-  std::signal (SIGTERM, signal_handler);
-  std::signal (SIGWINCH, signal_handler);
-  refresh_terminal_size_internal ();
+  signals_.watch (SIGINT, SIGTERM, SIGWINCH);
+  refresh_terminal_size ();
+}
+
+void
+UIRuntime::refresh_terminal_size () noexcept
+{
+  struct winsize ws{};
+  if (ioctl (STDOUT_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_col > 0
+      && ws.ws_row > 0)
+    {
+      term_width_.store (ws.ws_col, std::memory_order_release);
+      term_height_.store (ws.ws_row, std::memory_order_release);
+    }
+}
+
+void
+UIRuntime::request_shutdown ()
+{
+  auto expected = ShutdownReason::Running;
+  if (!shutdown_reason_.compare_exchange_strong (
+          expected, ShutdownReason::Completed, std::memory_order_acq_rel))
+    return; // Already shutting down
+
+  damage_event_.set (); // Wake present_loop
+  // Write to signal pipe to wake signal_loop
+  SignalPipe::notify (0); // Signal 0 = shutdown request
+}
+
+void
+UIRuntime::request_interrupt ()
+{
+  auto expected = ShutdownReason::Running;
+  if (!shutdown_reason_.compare_exchange_strong (
+          expected, ShutdownReason::Interrupted, std::memory_order_acq_rel))
+    return; // Already shutting down
+
+  damage_event_.set ();
+}
+
+void
+UIRuntime::signal_damage ()
+{
+  damage_counter_.fetch_add (1, std::memory_order_acq_rel);
+  damage_event_.set ();
+}
+
+TermSize
+UIRuntime::terminal_size () const noexcept
+{
+  return TermSize{ terminal_width (), terminal_height () };
+}
+
+int
+UIRuntime::terminal_width () const noexcept
+{
+  return term_width_.load (std::memory_order_acquire);
+}
+
+int
+UIRuntime::terminal_height () const noexcept
+{
+  return term_height_.load (std::memory_order_acquire);
+}
+
+coro::task<>
+UIRuntime::signal_loop ()
+{
+  co_await scheduler_->schedule ();
+
+  while (!shutdown_requested ())
+    {
+      // Poll the signal pipe for readability
+      co_await scheduler_->poll (signals_.read_fd (), coro::poll_op::read);
+
+      // Drain all pending signals
+      while (auto sig = signals_.try_read ())
+        {
+          switch (*sig)
+            {
+            case 0: // Internal shutdown request (normal completion)
+              signal_damage ();
+              co_return;
+
+            case SIGINT:
+            case SIGTERM:
+              request_interrupt ();
+              co_return;
+
+            case SIGWINCH:
+              refresh_terminal_size ();
+              co_await resize_queue_.push (terminal_size ());
+              signal_damage ();
+              break;
+
+            default:
+              break;
+            }
+        }
+    }
+
+  co_return;
 }
 
 TerminalCompositor::TerminalCompositor (const int width, const int height,
@@ -203,56 +196,45 @@ TerminalCompositor::present_frame (std::ostream &out)
     }
 
   // Emit the accumulated ANSI to the output stream
-  out.write (buf.data (), buf.size ());
+  out.write (buf.data (), static_cast<std::streamsize> (buf.size ()));
   out.flush ();
 
   fmt::memory_buffer reset_buf;
   ansi::Writer reset_writer (reset_buf);
   reset_writer.reset ();
-  out.write (reset_buf.data (), reset_buf.size ());
+  out.write (reset_buf.data (),
+             static_cast<std::streamsize> (reset_buf.size ()));
 
   std::swap (front_, back_);
 }
 
 coro::task<>
-TerminalCompositor::present_loop (coro::io_scheduler &scheduler)
+TerminalCompositor::present_loop (UIRuntime &runtime)
 {
-  co_await scheduler.schedule ();
+  co_await runtime.scheduler ().schedule ();
+  co_await runtime.resize_channel ().push (runtime.terminal_size ());
 
-  std::uint64_t handled_damage = 0;
-
-  auto publish_size = [] (const TermSize size) -> coro::task<>
+  while (!runtime.shutdown_requested ())
     {
-      co_await resize_channel ().push (size);
-      co_return;
-    };
-
-  co_await publish_size (terminal_size ());
-
-  while (!shutdown_requested ())
-    {
-      if (consume_resize_request ())
+      // Check for resize events
+      while (true)
         {
-          refresh_terminal_size_internal ();
-          const auto size = terminal_size ();
-          resize (size.width, size.height);
-          co_await publish_size (size);
-        }
-
-      const auto current_damage
-          = g_damage_counter.load (std::memory_order_acquire);
-      if (current_damage == handled_damage)
-        {
-          damage_event ().reset ();
-          if (g_damage_counter.load (std::memory_order_acquire)
-              == handled_damage)
+          auto value = runtime.resize_channel ().try_pop ();
+          if (value.has_value ())
             {
-              co_await damage_event ();
+              resize (value->width, value->height);
+              continue;
             }
-          continue;
+          break;
         }
 
-      handled_damage = current_damage;
+      // Wait for damage
+      runtime.damage_event ().reset ();
+      co_await runtime.damage_event ();
+
+      if (runtime.shutdown_requested ())
+        break;
+
       present_frame ();
     }
 

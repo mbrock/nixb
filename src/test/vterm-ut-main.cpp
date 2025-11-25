@@ -434,7 +434,6 @@ boost::ut::suite vterm_tests = []
       };
   };
 
-
 int
 main ()
 {

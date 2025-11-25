@@ -26,21 +26,10 @@ namespace
 using namespace std::chrono_literals;
 
 coro::task<>
-shutdown_watcher_task (coro::queue<ProgressState> &bar1_updates,
-                       coro::queue<ProgressState> &bar2_updates)
-{
-  co_await shutdown_event ();
-  co_await bar1_updates.shutdown ();
-  co_await bar2_updates.shutdown ();
-  co_return;
-}
-
-coro::task<>
-simulation_task (coro::io_scheduler &scheduler,
-                 coro::queue<ProgressState> &bar1_updates,
+simulation_task (UIRuntime &runtime, coro::queue<ProgressState> &bar1_updates,
                  coro::queue<ProgressState> &bar2_updates)
 {
-  co_await scheduler.schedule ();
+  co_await runtime.scheduler ().schedule ();
 
   for (int i = 0; i <= 100; i += 10)
     {
@@ -49,7 +38,8 @@ simulation_task (coro::io_scheduler &scheduler,
           .label = "nixpkgs.tar.gz",
           .finished = (i == 100),
       });
-      co_await scheduler.yield_for (std::chrono::milliseconds (100));
+      co_await runtime.scheduler ().yield_for (
+          std::chrono::milliseconds (100));
     }
 
   for (int i = 0; i <= 100; i += 5)
@@ -59,14 +49,16 @@ simulation_task (coro::io_scheduler &scheduler,
           .label = "rustc.tar.xz",
           .finished = (i == 100),
       });
-      co_await scheduler.yield_for (std::chrono::milliseconds (80));
+      co_await runtime.scheduler ().yield_for (std::chrono::milliseconds (80));
     }
 
-  if (!shutdown_requested ())
-    {
-      co_await bar1_updates.shutdown ();
-      co_await bar2_updates.shutdown ();
-    }
+  co_await bar1_updates.shutdown_drain (
+      runtime.scheduler ().shared_from_this ());
+  co_await bar2_updates.shutdown_drain (
+      runtime.scheduler ().shared_from_this ());
+
+  if (!runtime.shutdown_requested ())
+    runtime.request_shutdown ();
 
   co_return;
 }
@@ -115,13 +107,13 @@ dom_view_generator (Dom &dom, LayoutEngine &layout, Painter &painter,
 }
 
 coro::task<>
-view_driver_task (coro::io_scheduler &scheduler, Dom &dom,
-                  LayoutEngine &layout, Painter &painter,
-                  TerminalCompositor &compositor, const NodeId container)
+view_driver_task (UIRuntime &runtime, Dom &dom, LayoutEngine &layout,
+                  Painter &painter, TerminalCompositor &compositor,
+                  const NodeId container)
 {
-  co_await scheduler.schedule ();
+  co_await runtime.scheduler ().schedule ();
 
-  TermSize size_state = terminal_size ();
+  TermSize size_state = runtime.terminal_size ();
   auto generator = dom_view_generator (dom, layout, painter, compositor,
                                        container, size_state);
   auto iter = generator.begin ();
@@ -132,7 +124,7 @@ view_driver_task (coro::io_scheduler &scheduler, Dom &dom,
       bool resized = false;
       while (true)
         {
-          auto value = resize_channel ().try_pop ();
+          auto value = runtime.resize_channel ().try_pop ();
           if (value.has_value ())
             {
               size_state = *value;
@@ -149,13 +141,13 @@ view_driver_task (coro::io_scheduler &scheduler, Dom &dom,
       return resized;
     };
 
-  while (!shutdown_requested ())
+  while (!runtime.shutdown_requested ())
     {
       const bool resized = check_resize_queue ();
 
       if (const bool dirty = dom.is_dirty () || resized; !dirty)
         {
-          co_await scheduler.yield_for (16ms);
+          co_await runtime.scheduler ().yield_for (16ms);
           continue;
         }
 
@@ -164,7 +156,7 @@ view_driver_task (coro::io_scheduler &scheduler, Dom &dom,
 
       (void)*iter;
       ++iter;
-      signal_damage ();
+      runtime.signal_damage ();
     }
 
   co_return;
@@ -189,7 +181,7 @@ make_progress_row (Dom &dom, const NodeId container, std::string label_text,
   bar_container_style.flex_dir = FlexDir::Row;
   bar_container_style.width = Size::fixed (bar_width);
   bar_container_style.height = Size::fixed (1);
-  bar_container_style.bg_glyph = '.';
+  bar_container_style.bg_color = Rgba8 (fmt::color::cyan, 100);
   const NodeId bar_container = dom.create_element (bar_container_style);
   dom.append_child (row, bar_container);
 
@@ -197,8 +189,7 @@ make_progress_row (Dom &dom, const NodeId container, std::string label_text,
   fill_style.flex_dir = FlexDir::Row;
   fill_style.width = Size::fixed (0);
   fill_style.height = Size::fixed (1);
-  fill_style.bg_glyph = '=';
-  fill_style.fg_color = fmt::color::green;
+  fill_style.bg_color = Rgba8 (fmt::color::green, 100);
   const NodeId bar_fill = dom.create_element (fill_style);
   dom.append_child (bar_container, bar_fill);
 
@@ -216,8 +207,7 @@ run_progress_hud ()
 {
   auto scheduler
       = coro::io_scheduler::make_shared (coro::io_scheduler::options{});
-  init_ui_runtime (*scheduler);
-  TerminalGuard guard;
+  UIRuntime runtime (*scheduler);
 
   GlyphTable glyphs;
   LayoutEngine layout;
@@ -226,15 +216,15 @@ run_progress_hud ()
 
   Style container_style = Style::defaults ();
   container_style.flex_dir = FlexDir::Column;
-  container_style.width = Size::fixed (terminal_width ());
-  container_style.height = Size::fixed (terminal_height ());
+  container_style.width = Size::fixed (runtime.terminal_width ());
+  container_style.height = Size::fixed (runtime.terminal_height ());
   container_style.justify = Justify::Start;
   container_style.align = Align::Start;
-  container_style.bg_glyph = '.';
+  container_style.bg_color = fmt::color::dark_slate_blue;
   NodeId container = dom.create_element (container_style);
   dom.append_child (dom.root (), container);
 
-  auto header = dom.create_text ("Build Progress:", fmt::color::white);
+  auto header = dom.create_text ("Progress:", fmt::color::white);
   dom.append_child (container, header);
 
   constexpr int bar_width = 40;
@@ -243,7 +233,7 @@ run_progress_hud ()
   auto bar2_nodes = make_progress_row (dom, container, "rustc.tar.xz",
                                        fmt::color::white, bar_width);
 
-  auto status = dom.create_text ("Initializing...", fmt::color::yellow);
+  auto status = dom.create_text ("Building packages...", fmt::color::yellow);
   dom.append_child (container, status);
 
   coro::queue<ProgressState> bar1_updates;
@@ -255,16 +245,15 @@ run_progress_hud ()
   widgets.push_back (
       progress_bar_widget (*scheduler, dom, bar2_nodes, bar2_updates));
 
-  TerminalCompositor compositor (terminal_width (), terminal_height (),
-                                 glyphs);
+  TerminalCompositor compositor (runtime.terminal_width (),
+                                 runtime.terminal_height (), glyphs);
 
   std::vector<coro::task<>> all_tasks;
-  all_tasks.push_back (compositor.present_loop (*scheduler));
-  all_tasks.push_back (view_driver_task (*scheduler, dom, layout, painter,
-                                         compositor, container));
+  all_tasks.push_back (runtime.signal_loop ());
+  all_tasks.push_back (compositor.present_loop (runtime));
   all_tasks.push_back (
-      simulation_task (*scheduler, bar1_updates, bar2_updates));
-  all_tasks.push_back (shutdown_watcher_task (bar1_updates, bar2_updates));
+      view_driver_task (runtime, dom, layout, painter, compositor, container));
+  all_tasks.push_back (simulation_task (runtime, bar1_updates, bar2_updates));
   for (auto &widget : widgets)
     {
       all_tasks.push_back (std::move (widget));
@@ -272,17 +261,26 @@ run_progress_hud ()
 
   try
     {
+      TerminalGuard guard;
       coro::sync_wait (coro::when_all (std::move (all_tasks)));
-
-      if (shutdown_requested ())
-        fmt::print ("Interrupted by user\n");
-      else
-        fmt::print ("Completed normally\n");
     }
   catch (const std::exception &e)
     {
       fmt::print (stderr, "Error: {}\n", e.what ());
       return 1;
+    }
+
+  switch (runtime.shutdown_reason ())
+    {
+    case ShutdownReason::Running:
+      assert (false);
+      break;
+    case ShutdownReason::Completed:
+      fmt::print ("Completed normally\n");
+      break;
+    case ShutdownReason::Interrupted:
+      fmt::print ("Interrupted by user\n");
+      break;
     }
 
   return 0;
