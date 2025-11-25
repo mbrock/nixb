@@ -4,6 +4,7 @@
 
 #include <coro/coro.hpp>
 #include <fmt/core.h>
+#include <mp-units/framework.h>
 #include <vector>
 
 namespace nxb::tui_example
@@ -63,11 +64,10 @@ run ()
       = coro::io_scheduler::make_shared (coro::io_scheduler::options{});
   nxb::ui::UIRuntime runtime (*scheduler);
 
-  std::size_t width = static_cast<std::size_t> (runtime.terminal_width ());
-  std::size_t height = static_cast<std::size_t> (runtime.terminal_height ());
+  auto size = runtime.terminal_size ();
 
   GlyphTable glyphs;
-  nxb::ui::TerminalCompositor compositor (width, height, glyphs);
+  nxb::ui::TerminalCompositor compositor (size, glyphs);
 
   // Application state
   AppState state;
@@ -81,7 +81,6 @@ run ()
 
     for (int frame = 0; frame <= 100; ++frame)
       {
-        // Update activities at different speeds
         state.activities[0].progress
             = std::min (100.0, frame / 80.0 * 100) * percent;
         state.activities[1].progress
@@ -89,52 +88,39 @@ run ()
         state.activities[2].progress
             = std::min (100.0, frame / 100.0 * 100) * percent;
 
-        state.activities[0].finished
-            = state.activities[0].progress.numerical_value_in (percent)
-              >= 100.0;
-        state.activities[1].finished
-            = state.activities[1].progress.numerical_value_in (percent)
-              >= 100.0;
-        state.activities[2].finished
-            = state.activities[2].progress.numerical_value_in (percent)
-              >= 100.0;
+        state.activities[0].finished = state.activities[0].progress >= 1 * one;
+        state.activities[1].finished = state.activities[1].progress >= 1 * one;
+        state.activities[2].finished = state.activities[2].progress >= 1 * one;
 
         co_await scheduler->yield_for (30ms);
       }
 
-    // Wait a moment then exit
     co_await scheduler->yield_for (500ms);
     runtime.request_shutdown ();
   };
 
-  // Render loop - reads state, builds layout, renders
   auto render_loop = [&] () -> coro::task<> {
     co_await scheduler->schedule ();
 
     while (!runtime.shutdown_requested ())
       {
-        // Handle resize
         if (auto sz = runtime.resize_channel ().try_pop ())
           {
-            width = sz->width;
-            height = sz->height;
-            compositor.resize (width, height);
+            size = sz.value ();
+            compositor.resize (size);
           }
 
-        // Build layout from current state (immediate mode!)
         auto layout = build_ui (state);
 
-        // Render to back buffer
         auto &buffer = compositor.back_buffer ();
         buffer.clear ();
-        layout.render (buffer, nxb::Size{ width * nxb::ch, height * nxb::ln });
+        layout.render (buffer, size);
         compositor.present_frame ();
 
         co_await scheduler->yield_for (16ms); // ~60fps
       }
   };
 
-  // Run
   try
     {
       nxb::ui::TerminalGuard guard;

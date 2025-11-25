@@ -85,11 +85,27 @@ inline constexpr struct terminal_origin_v final
 {
 } terminal_origin_v;
 
+// ANSI cursor positioning is 1-based. Define relative origins that start at
+// (1,1) to keep terminal math type-safe.
+inline constexpr struct ansi_origin final
+    : relative_point_origin<terminal_origin + 1 * ch>
+{
+} ansi_origin;
+
+inline constexpr struct ansi_origin_v final
+    : relative_point_origin<terminal_origin_v + 1 * ln>
+{
+} ansi_origin_v;
+
 /// Column position (absolute X coordinate in terminal)
 using col_t = quantity_point<ch, terminal_origin>;
 
 /// Row position (absolute Y coordinate in terminal)
 using row_t = quantity_point<ln, terminal_origin_v>;
+
+/// Column/row in ANSI 1-based space
+using ansi_col_t = quantity_point<ch, ansi_origin>;
+using ansi_row_t = quantity_point<ln, ansi_origin_v>;
 
 // ============================================================================
 // Composite Types
@@ -102,6 +118,7 @@ struct Size
   height_t h{ 0 * ln };
 
   constexpr Size (width_t w, height_t h) : w{ w }, h{ h } {}
+  constexpr Size () = default;
 };
 
 /// 2D point in terminal space (column, row)
@@ -208,5 +225,30 @@ struct Pos
     return a.x == b.x && a.y == b.y;
   }
 };
+
+// Convert zero-based terminal coordinates to ANSI 1-based points
+[[nodiscard]] constexpr ansi_col_t
+to_ansi (col_t col)
+{
+  return col.point_for (ansi_origin);
+}
+
+[[nodiscard]] constexpr ansi_row_t
+to_ansi (row_t row)
+{
+  return row.point_for (ansi_origin_v);
+}
+
+[[nodiscard]] constexpr ansi_col_t
+to_ansi_x (Pos pos)
+{
+  return to_ansi (pos.x);
+}
+
+[[nodiscard]] constexpr ansi_row_t
+to_ansi_y (Pos pos)
+{
+  return to_ansi (pos.y);
+}
 
 } // namespace nxb

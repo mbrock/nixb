@@ -1,7 +1,7 @@
 #include "app.hpp"
-
 #include "ansi.hpp"
 #include "raster-diff.hpp"
+#include "units.hpp"
 
 #include <algorithm>
 #include <coro/io_scheduler.hpp>
@@ -23,8 +23,8 @@ TerminalGuard::~TerminalGuard ()
 {
   ansi::show_cursor ();
   ansi::clear_screen ();
-  ansi::move_to (1, 1);
-  std::cout << "\033[0m" << std::flush;  // Reset SGR
+  ansi::move_to (Pos::origin ());
+  std::cout << "\033[0m" << std::flush; // Reset SGR
 }
 
 UIRuntime::UIRuntime (coro::io_scheduler &scheduler) : scheduler_ (&scheduler)
@@ -40,8 +40,8 @@ UIRuntime::refresh_terminal_size () noexcept
   if (ioctl (STDOUT_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_col > 0
       && ws.ws_row > 0)
     {
-      term_width_.store (ws.ws_col, std::memory_order_release);
-      term_height_.store (ws.ws_row, std::memory_order_release);
+      term_width_.store (ws.ws_col * ch, std::memory_order_release);
+      term_height_.store (ws.ws_row * ln, std::memory_order_release);
     }
 }
 
@@ -82,13 +82,13 @@ UIRuntime::terminal_size () const noexcept
   return TermSize{ terminal_width (), terminal_height () };
 }
 
-int
+nxb::width_t
 UIRuntime::terminal_width () const noexcept
 {
   return term_width_.load (std::memory_order_acquire);
 }
 
-int
+nxb::height_t
 UIRuntime::terminal_height () const noexcept
 {
   return term_height_.load (std::memory_order_acquire);
@@ -133,21 +133,18 @@ UIRuntime::signal_loop ()
   co_return;
 }
 
-TerminalCompositor::TerminalCompositor (const int width, const int height,
+TerminalCompositor::TerminalCompositor (const nxb::Size size,
                                         GlyphTable &glyphs)
-    : front_ (std::max (width, 10), std::max (height, 5), glyphs),
-      back_ (std::max (width, 10), std::max (height, 5), glyphs), glyphs_ (glyphs)
+    : front_ (size.w, size.h, glyphs), back_ (size.w, size.h, glyphs),
+      glyphs_ (glyphs)
 {
 }
 
 void
-TerminalCompositor::resize (int width, int height)
+TerminalCompositor::resize (nxb::Size size)
 {
-  width = std::max (width, 10);
-  height = std::max (height, 5);
-  front_ = Raster (width, height, glyphs_);
-  back_ = Raster (width, height, glyphs_);
-  // Clear terminal so diff sees everything as changed
+  front_ = Raster (size.w, size.h, glyphs_);
+  back_ = Raster (size.w, size.h, glyphs_);
   ansi::clear_screen ();
 }
 
@@ -174,12 +171,12 @@ TerminalCompositor::present_frame (std::ostream &out)
 {
   fmt::memory_buffer buf;
   ansi::Writer w (buf);
-  w.move_to (1, 1);
+  w.move_to (Pos::origin ());
 
-  for (const auto &[x, y, glyphs, fg_change, bg_change, fg_reset, bg_reset] :
+  for (const auto &[pos, glyphs, fg_change, bg_change, fg_reset, bg_reset] :
        diff_rasters (front_, back_))
     {
-      w.move_to (y + 1, x + 1);
+      w.move_to (pos);
 
       if (bg_reset)
         w.bg_default ();
@@ -198,20 +195,11 @@ TerminalCompositor::present_frame (std::ostream &out)
         }
     }
 
-  // Emit the accumulated ANSI to the output stream
   out.write (buf.data (), static_cast<std::streamsize> (buf.size ()));
   out.flush ();
 
-  // fmt::memory_buffer reset_buf;
-  // ansi::Writer reset_writer (reset_buf);
-  // reset_writer.reset ();
-  // out.write (reset_buf.data (),
-  //            static_cast<std::streamsize> (reset_buf.size ()));
-
   std::swap (front_, back_);
 
-  // Copy front → back so back buffer has current frame
-  // This enables persistent raster rendering where widgets only update on change
   back_ = front_;
 }
 
@@ -229,7 +217,7 @@ TerminalCompositor::present_loop (UIRuntime &runtime)
           auto value = runtime.resize_channel ().try_pop ();
           if (value.has_value ())
             {
-              resize (value->width, value->height);
+              resize (value.value ());
               continue;
             }
           break;

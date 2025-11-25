@@ -354,17 +354,16 @@ private:
         total_flex += hints[i].flex;
       }
 
-    if (total_flex.numerical_value_in (one) > 0 && total > used)
+    if (total_flex > 0 && total > used)
       {
-        auto remaining = (total - used).numerical_value_in (ch);
+        auto remaining = total - used;
         for (std::size_t i = 0; i < N; ++i)
           {
-            auto flex_val = hints[i].flex.numerical_value_in (one);
-            auto total_flex_val = total_flex.numerical_value_in (one);
+            auto flex_val = hints[i].flex;
+            auto total_flex_val = total_flex;
             if (flex_val > 0)
-              result[i] += static_cast<std::size_t> (remaining * flex_val
-                                                     / total_flex_val)
-                           * ch;
+              result[i] += value_cast<width_t> (remaining * flex_val
+                                                / total_flex_val);
           }
       }
 
@@ -466,17 +465,16 @@ private:
         total_flex += hints[i].flex;
       }
 
-    if (total_flex.numerical_value_in (one) > 0 && total > used)
+    if (total_flex > 0 && total > used)
       {
-        auto remaining = (total - used).numerical_value_in (ln);
+        auto remaining = total - used;
         for (std::size_t i = 0; i < N; ++i)
           {
-            auto flex_val = hints[i].flex.numerical_value_in (one);
-            auto total_flex_val = total_flex.numerical_value_in (one);
+            auto flex_val = hints[i].flex;
+            auto total_flex_val = total_flex;
             if (flex_val > 0)
-              result[i] += static_cast<std::size_t> (remaining * flex_val
-                                                     / total_flex_val)
-                           * ln;
+              result[i] += value_cast<height_t> (remaining * flex_val
+                                                 / total_flex_val);
           }
       }
 

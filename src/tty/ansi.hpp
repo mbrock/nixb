@@ -4,6 +4,8 @@
 #include <fmt/format.h>
 #include <string_view>
 
+#include "units.hpp"
+
 namespace nxb::ansi
 {
 
@@ -20,16 +22,18 @@ public:
   explicit Writer (fmt::memory_buffer &buf) : buf_ (buf) {}
 
   /// Move cursor to terminal position (1-based coordinates)
-  Writer &move_to (std::size_t row, std::size_t col);
+  Writer &move_to (ansi_row_t y, ansi_col_t x);
+  Writer &move_to (Pos pos);
 
-  /// Move cursor relatively
-  Writer &move_up (std::size_t n = 1);
-  Writer &move_down (std::size_t n = 1);
-  Writer &move_right (std::size_t n = 1);
-  Writer &move_left (std::size_t n = 1);
+  /// Move cursor relatively (positive deltas)
+  Writer &move_up (height_t n = 1 * ln);
+  Writer &move_down (height_t n = 1 * ln);
+  Writer &move_right (width_t n = 1 * ch);
+  Writer &move_left (width_t n = 1 * ch);
+  Writer &move (Size delta); // right and down only
 
   /// Move to column (1-based)
-  Writer &move_to_column (std::size_t col);
+  Writer &move_to_column (ansi_col_t col);
 
   /// Clear operations
   Writer &clear_screen ();
@@ -40,10 +44,10 @@ public:
   Writer &clear_line_to_cursor ();
 
   /// Scroll region (INCLUSIVE bounds [top, bottom])
-  Writer &set_scroll_region (std::size_t top, std::size_t bottom);
+  Writer &set_scroll_region (row_t top, row_t bottom);
   Writer &reset_scroll_region ();
-  Writer &scroll_up (std::size_t n = 1);
-  Writer &scroll_down (std::size_t n = 1);
+  Writer &scroll_up (height_t n = 1 * ln);
+  Writer &scroll_down (height_t n = 1 * ln);
 
   /// Cursor visibility
   Writer &hide_cursor ();
@@ -110,14 +114,15 @@ private:
 
 /// Standalone functions for immediate output (writes directly to stdout)
 
-void move_to (std::size_t row, std::size_t col);
+void move_to (ansi_row_t row, ansi_col_t col);
+void move_to (Pos pos);
 void clear_screen ();
 void clear_line ();
 void hide_cursor ();
 void show_cursor ();
-void set_scroll_region (std::size_t top, std::size_t bottom);
+void set_scroll_region (row_t top, row_t bottom);
 void reset_scroll_region ();
-void scroll_up (std::size_t n = 1);
-void scroll_down (std::size_t n = 1);
+void scroll_up (height_t n = 1 * ln);
+void scroll_down (height_t n = 1 * ln);
 
 } // namespace nxb::ansi

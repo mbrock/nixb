@@ -138,8 +138,7 @@ diff_rasters (const Raster &front, const Raster &back)
 
           // Build ChangeRun
           ChangeRun run;
-          run.x = x;
-          run.y = y;
+          run.origin = Pos::at (x * ch, y * ln);
 
           // Use linear index for span (still efficient)
           const std::size_t idx = y * back.cols () + x;

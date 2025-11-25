@@ -22,48 +22,72 @@ Writer::csi (std::string_view params, char final_byte)
 }
 
 Writer &
-Writer::move_to (std::size_t row, std::size_t col)
+Writer::move_to (const ansi_row_t row, const ansi_col_t col)
 {
-  csi (fmt::format ("{};{}", row, col), 'H');
+  const auto row_num
+      = static_cast<std::size_t> ((row - terminal_origin_v).numerical_value_in (ln));
+  const auto col_num
+      = static_cast<std::size_t> ((col - terminal_origin).numerical_value_in (ch));
+  csi (fmt::format ("{};{}", row_num, col_num), 'H');
   return *this;
 }
 
 Writer &
-Writer::move_up (std::size_t n)
+Writer::move_to (const Pos pos)
 {
-  if (n > 0)
-    csi (fmt::format ("{}", n), 'A');
+  return move_to (to_ansi_y (pos), to_ansi_x (pos));
+}
+
+Writer &
+Writer::move_up (const height_t n)
+{
+  const auto rows = n.numerical_value_in (ln);
+  if (rows > 0)
+    csi (fmt::format ("{}", rows), 'A');
   return *this;
 }
 
 Writer &
-Writer::move_down (std::size_t n)
+Writer::move_down (const height_t n)
 {
-  if (n > 0)
-    csi (fmt::format ("{}", n), 'B');
+  const auto rows = n.numerical_value_in (ln);
+  if (rows > 0)
+    csi (fmt::format ("{}", rows), 'B');
   return *this;
 }
 
 Writer &
-Writer::move_right (std::size_t n)
+Writer::move_right (const width_t n)
 {
-  if (n > 0)
-    csi (fmt::format ("{}", n), 'C');
+  const auto cols = n.numerical_value_in (ch);
+  if (cols > 0)
+    csi (fmt::format ("{}", cols), 'C');
   return *this;
 }
 
 Writer &
-Writer::move_left (std::size_t n)
+Writer::move_left (const width_t n)
 {
-  if (n > 0)
-    csi (fmt::format ("{}", n), 'D');
+  const auto cols = n.numerical_value_in (ch);
+  if (cols > 0)
+    csi (fmt::format ("{}", cols), 'D');
   return *this;
 }
 
 Writer &
-Writer::move_to_column (std::size_t col)
+Writer::move (const Size delta)
 {
-  csi (fmt::format ("{}", col), 'G');
+  move_right (delta.w);
+  move_down (delta.h);
+  return *this;
+}
+
+Writer &
+Writer::move_to_column (const ansi_col_t col)
+{
+  const auto col_num
+      = static_cast<std::size_t> ((col - terminal_origin).numerical_value_in (ch));
+  csi (fmt::format ("{}", col_num), 'G');
   return *this;
 }
 
@@ -110,9 +134,13 @@ Writer::clear_line_to_cursor ()
 }
 
 Writer &
-Writer::set_scroll_region (std::size_t top, std::size_t bottom)
+Writer::set_scroll_region (const row_t top, const row_t bottom)
 {
-  csi (fmt::format ("{};{}", top, bottom), 'r');
+  const auto top_row
+      = static_cast<std::size_t> ((to_ansi (top) - terminal_origin_v).numerical_value_in (ln));
+  const auto bottom_row
+      = static_cast<std::size_t> ((to_ansi (bottom) - terminal_origin_v).numerical_value_in (ln));
+  csi (fmt::format ("{};{}", top_row, bottom_row), 'r');
   return *this;
 }
 
@@ -124,18 +152,20 @@ Writer::reset_scroll_region ()
 }
 
 Writer &
-Writer::scroll_up (std::size_t n)
+Writer::scroll_up (const height_t n)
 {
-  if (n > 0)
-    csi (fmt::format ("{}", n), 'S');
+  const auto rows = n.numerical_value_in (ln);
+  if (rows > 0)
+    csi (fmt::format ("{}", rows), 'S');
   return *this;
 }
 
 Writer &
-Writer::scroll_down (std::size_t n)
+Writer::scroll_down (const height_t n)
 {
-  if (n > 0)
-    csi (fmt::format ("{}", n), 'T');
+  const auto rows = n.numerical_value_in (ln);
+  if (rows > 0)
+    csi (fmt::format ("{}", rows), 'T');
   return *this;
 }
 
@@ -322,9 +352,19 @@ Writer::text (std::string_view str)
 // ============================================================================
 
 void
-move_to (std::size_t row, std::size_t col)
+move_to (const ansi_row_t row, const ansi_col_t col)
 {
-  fmt::print ("{}{};{}H", CSI, row, col);
+  const auto row_num
+      = static_cast<std::size_t> ((row - terminal_origin_v).numerical_value_in (ln));
+  const auto col_num
+      = static_cast<std::size_t> ((col - terminal_origin).numerical_value_in (ch));
+  fmt::print ("{}{};{}H", CSI, row_num, col_num);
+}
+
+void
+move_to (const Pos pos)
+{
+  move_to (to_ansi_y (pos), to_ansi_x (pos));
 }
 
 void
@@ -352,9 +392,13 @@ show_cursor ()
 }
 
 void
-set_scroll_region (std::size_t top, std::size_t bottom)
+set_scroll_region (const row_t top, const row_t bottom)
 {
-  fmt::print ("{}{};{}r", CSI, top, bottom);
+  const auto top_row
+      = static_cast<std::size_t> ((to_ansi (top) - terminal_origin_v).numerical_value_in (ln));
+  const auto bottom_row
+      = static_cast<std::size_t> ((to_ansi (bottom) - terminal_origin_v).numerical_value_in (ln));
+  fmt::print ("{}{};{}r", CSI, top_row, bottom_row);
 }
 
 void
@@ -364,17 +408,19 @@ reset_scroll_region ()
 }
 
 void
-scroll_up (std::size_t n)
+scroll_up (const height_t n)
 {
-  if (n > 0)
-    fmt::print ("{}{}S", CSI, n);
+  const auto rows = n.numerical_value_in (ln);
+  if (rows > 0)
+    fmt::print ("{}{}S", CSI, rows);
 }
 
 void
-scroll_down (std::size_t n)
+scroll_down (const height_t n)
 {
-  if (n > 0)
-    fmt::print ("{}{}T", CSI, n);
+  const auto rows = n.numerical_value_in (ln);
+  if (rows > 0)
+    fmt::print ("{}{}T", CSI, rows);
 }
 
 } // namespace nxb::ansi

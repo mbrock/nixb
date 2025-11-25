@@ -14,8 +14,7 @@ namespace nxb
 /// regions.
 struct ChangeRun
 {
-  std::size_t x; // Starting column
-  std::size_t y; // Row
+  Pos origin; // Starting position (zero-based, top-left)
 
   /// Slice into the back raster's glyph array (zero-copy)
   std::span<const GlyphTable::GlyphId> glyphs;

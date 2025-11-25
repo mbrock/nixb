@@ -3,6 +3,7 @@
 #include "glyph-table.hpp"
 #include "raster.hpp"
 #include "signal-pipe.hpp"
+#include "tty/units.hpp"
 
 #include <atomic>
 #include <coro/coro.hpp>
@@ -19,11 +20,7 @@ class io_scheduler;
 namespace nxb::ui
 {
 
-struct TermSize
-{
-  int width;
-  int height;
-};
+using TermSize = nxb::Size;
 
 /// Reason for shutdown.
 enum class ShutdownReason : std::uint8_t
@@ -88,8 +85,8 @@ public:
 
   /// Current terminal dimensions.
   [[nodiscard]] TermSize terminal_size () const noexcept;
-  [[nodiscard]] int terminal_width () const noexcept;
-  [[nodiscard]] int terminal_height () const noexcept;
+  [[nodiscard]] width_t terminal_width () const noexcept;
+  [[nodiscard]] height_t terminal_height () const noexcept;
 
   /// Channel for resize notifications.
   coro::queue<TermSize> &
@@ -118,8 +115,8 @@ private:
   coro::event damage_event_;
   coro::queue<TermSize> resize_queue_;
 
-  std::atomic<int> term_width_{ 80 };
-  std::atomic<int> term_height_{ 24 };
+  std::atomic<nxb::width_t> term_width_{ 80 * ch };
+  std::atomic<nxb::height_t> term_height_{ 24 * ln };
   std::atomic<ShutdownReason> shutdown_reason_{ ShutdownReason::Running };
   std::atomic<std::uint64_t> damage_counter_{ 0 };
 };
@@ -127,9 +124,9 @@ private:
 class TerminalCompositor
 {
 public:
-  TerminalCompositor (int width, int height, GlyphTable &glyphs);
+  TerminalCompositor (nxb::Size size, GlyphTable &glyphs);
+  void resize (nxb::Size size);
 
-  void resize (int width, int height);
   Raster &back_buffer () noexcept;
   GlyphTable &glyphs () const noexcept;
 
