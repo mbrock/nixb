@@ -117,22 +117,92 @@ subraster (RasterView &r, Pos pos, Size size)
 }
 
 // ============================================================================
-// Styled span: text + colors (building block for leaf content)
+// Style: fg + bg + emphasis (combinable with operator|)
+// ============================================================================
+
+struct Style
+{
+  Rgba8 fg = DEFAULT_COLOR;
+  Rgba8 bg = DEFAULT_COLOR;
+  Emphasis em = DEFAULT_EMPHASIS;
+
+  constexpr Style
+  operator| (const Style &other) const
+  {
+    return {
+      other.fg != DEFAULT_COLOR ? other.fg : fg,
+      other.bg != DEFAULT_COLOR ? other.bg : bg,
+      other.em != DEFAULT_EMPHASIS ? other.em : em,
+    };
+  }
+};
+
+// Style builders
+constexpr Style
+fg (Rgba8 color)
+{
+  return { color, DEFAULT_COLOR, DEFAULT_EMPHASIS };
+}
+
+constexpr Style
+bg (Rgba8 color)
+{
+  return { DEFAULT_COLOR, color, DEFAULT_EMPHASIS };
+}
+
+constexpr Style
+em (Emphasis e)
+{
+  return { DEFAULT_COLOR, DEFAULT_COLOR, e };
+}
+
+// Emphasis shortcuts
+inline constexpr Style bold{ DEFAULT_COLOR, DEFAULT_COLOR, Emphasis::bold };
+inline constexpr Style faint{ DEFAULT_COLOR, DEFAULT_COLOR, Emphasis::faint };
+inline constexpr Style italic{ DEFAULT_COLOR, DEFAULT_COLOR, Emphasis::italic };
+inline constexpr Style underline{ DEFAULT_COLOR, DEFAULT_COLOR,
+                                  Emphasis::underline };
+inline constexpr Style reverse{ DEFAULT_COLOR, DEFAULT_COLOR, Emphasis::reverse };
+inline constexpr Style strikethrough{ DEFAULT_COLOR, DEFAULT_COLOR,
+                                      Emphasis::strikethrough };
+
+// ============================================================================
+// Styled span: text + style (building block for styled_text)
 // ============================================================================
 
 struct Span
 {
   std::string text;
-  Rgba8 fg = Rgba8::white ();
-  Rgba8 bg = Rgba8::transparent ();
+  Style style{};
 };
 
-// Render a span to a raster at position 0,0
-inline void
-render_span (RasterView &r, const Span &s)
+// Create a span with optional style
+inline Span
+span (std::string text, Style s = {})
 {
-  write_text (r, Pos::origin (), s.text);
-  // TODO: apply colors to the span region
+  return { std::move (text), s };
+}
+
+// Render a single span at a position, returns next column
+inline col_t
+render_span (RasterView &r, Pos pos, const Span &s)
+{
+  const auto start_x = pos.x;
+  const auto end_x = r.write_text (pos, s.text);
+
+  // Apply style to each cell in the span
+  for (auto x = start_x; x < end_x; x += 1 * ch)
+    {
+      const Pos p{ x, pos.y };
+      if (s.style.fg != DEFAULT_COLOR)
+        r.set_fg (p, s.style.fg);
+      if (s.style.bg != DEFAULT_COLOR)
+        r.set_bg (p, s.style.bg);
+      if (s.style.em != DEFAULT_EMPHASIS)
+        r.set_em (p, s.style.em);
+    }
+
+  return end_x;
 }
 
 // ============================================================================
@@ -176,13 +246,49 @@ utf8_width (std::string_view s)
 // Primitives
 // ============================================================================
 
-// Text: fixed-width string
+// Text: fixed-width string (unstyled)
 inline auto
 text (std::string s)
 {
   auto w = utf8_width (s);
   return leaf (WidthHint::fixed (w), HeightHint::fixed (1 * ln),
                [=] (RasterView &r, Size) { write_text (r, Pos::origin (), s); });
+}
+
+// Text: fixed-width string with style
+inline auto
+text (std::string s, Style style)
+{
+  auto w = utf8_width (s);
+  return leaf (WidthHint::fixed (w), HeightHint::fixed (1 * ln),
+               [=] (RasterView &r, Size) {
+                 render_span (r, Pos::origin (), Span{ s, style });
+               });
+}
+
+// Styled text: multiple spans on a single line
+template <typename... Spans>
+  requires (std::same_as<std::decay_t<Spans>, Span> && ...)
+inline auto
+styled_text (Spans &&...spans)
+{
+  // Calculate total width
+  width_t total_w = 0 * ch;
+  ((total_w += utf8_width (spans.text)), ...);
+
+  // Capture spans in a tuple
+  auto span_tuple = std::tuple{ std::forward<Spans> (spans)... };
+
+  return leaf (WidthHint::fixed (total_w), HeightHint::fixed (1 * ln),
+               [=] (RasterView &r, Size) {
+                 col_t col = Pos::origin ().x;
+                 std::apply (
+                     [&] (const auto &...s) {
+                       ((col = render_span (r, Pos{ col, Pos::origin ().y }, s)),
+                        ...);
+                     },
+                     span_tuple);
+               });
 }
 
 // Fill: solid color rectangle (grows in both dimensions)

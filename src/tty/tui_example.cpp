@@ -30,6 +30,16 @@ struct AppState
 };
 
 // ============================================================================
+// Colors
+// ============================================================================
+
+const Rgba8 cyan{ 100, 200, 255 };
+const Rgba8 green{ 100, 255, 150 };
+const Rgba8 yellow{ 255, 220, 100 };
+const Rgba8 dim_white{ 180, 180, 180 };
+const Rgba8 bright_white{ 255, 255, 255 };
+
+// ============================================================================
 // View Functions (State → Layout)
 // ============================================================================
 
@@ -37,10 +47,17 @@ struct AppState
 auto
 activity_row (const Activity &act)
 {
-  auto label = text (fmt::format ("{:<20}", act.label));
+  // Label styled based on completion state
+  auto label_style = act.finished ? (fg (green) | bold) : fg (dim_white);
+  auto label = text (fmt::format ("{:<20}", act.label), label_style);
 
-  auto pct_text = text (
-      fmt::format ("{:>4.0f}%", act.progress.numerical_value_in (percent)));
+  // Percentage with color gradient
+  auto pct_val = act.progress.numerical_value_in (percent);
+  auto pct_style = pct_val >= 100 ? fg (green)
+                   : pct_val >= 50 ? fg (yellow)
+                                   : fg (dim_white);
+  auto pct_text
+      = text (fmt::format ("{:>4.0f}%", pct_val), pct_style | bold);
 
   return row (label, progress_bar (act.progress), pct_text);
 }
@@ -48,8 +65,12 @@ activity_row (const Activity &act)
 auto
 build_ui (const AppState &state)
 {
-  return column (text ("Build Progress"), hrule (),
-                 list (state.activities, activity_row), text (""));
+  // Styled title using spans
+  auto title = styled_text (span ("Build ", fg (bright_white) | bold),
+                            span ("Progress", fg (cyan) | italic));
+
+  return column (title, hrule (), list (state.activities, activity_row),
+                 text (""));
 }
 
 // ============================================================================
