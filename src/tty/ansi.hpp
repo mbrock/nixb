@@ -129,4 +129,15 @@ void reset_scroll_region ();
 void scroll_up (height_t n = 1 * ln);
 void scroll_down (height_t n = 1 * ln);
 
+/// RAII guard that hides cursor on construction, restores terminal state on
+/// destruction. Resets scroll region, shows cursor, clears screen.
+struct TerminalGuard
+{
+  TerminalGuard ();
+  ~TerminalGuard ();
+
+  TerminalGuard (const TerminalGuard &) = delete;
+  TerminalGuard &operator= (const TerminalGuard &) = delete;
+};
+
 } // namespace nxb::ansi

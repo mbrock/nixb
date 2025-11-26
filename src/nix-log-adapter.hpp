@@ -1,50 +1,160 @@
 #pragma once
 
-#include "coro/queue.hpp"
-#include <coro/coro.hpp>
-#include <coro/io_scheduler.hpp>
-#include <string>
+// Undefine the 'unix' macro from libc to avoid conflict with nix::unix namespace
+#ifdef unix
+#undef unix
+#endif
 
 #include <nix/util/logging.hh>
+
+#include <coro/coro.hpp>
+#include <coro/queue.hpp>
+#include <string>
+#include <variant>
+
+namespace nixb::nix_event
+{
+
+/// Strong type for activity IDs to prevent mixing with other int64_t values.
+struct ActivityId
+{
+  int64_t value;
+
+  explicit constexpr ActivityId (int64_t v) : value (v) {}
+  constexpr bool
+  operator== (const ActivityId &) const
+      = default;
+};
+
+// Activity kinds - what type of activity started
+namespace activity
+{
+
+struct Build
+{
+  std::string drv_path;
+  std::string output;
+};
+
+struct Download
+{
+  std::string url;
+};
+
+struct Copy
+{
+  std::string path;
+  std::string from_store;
+  std::string to_store;
+};
+
+struct Realise
+{
+  std::string path;
+};
+
+struct Substitute
+{
+  std::string path;
+  std::string from_store;
+};
+
+struct QueryPathInfo
+{
+  std::string path;
+  std::string from_store;
+};
+
+struct PostBuildHook
+{
+  std::string drv_path;
+};
+
+struct BuildWaiting
+{
+};
+
+struct Unknown
+{
+  nix::ActivityType type;
+  std::string text;
+};
+
+using Kind = std::variant<Build, Download, Copy, Realise, Substitute,
+                          QueryPathInfo, PostBuildHook, BuildWaiting, Unknown>;
+
+} // namespace activity
+
+// Activity lifecycle events
+struct ActivityStarted
+{
+  ActivityId id;
+  ActivityId parent;
+  activity::Kind kind;
+};
+
+struct ActivityProgress
+{
+  ActivityId id;
+  int64_t done;
+  int64_t expected;
+  int64_t running;
+  int64_t failed;
+};
+
+struct ActivityPhase
+{
+  ActivityId id;
+  std::string phase;
+};
+
+struct ActivityFinished
+{
+  ActivityId id;
+};
+
+// Non-activity events
+struct LogLine
+{
+  nix::Verbosity level;
+  std::string text;
+};
+
+struct Error
+{
+  nix::ErrorInfo info;
+};
+
+using Event = std::variant<ActivityStarted, ActivityProgress, ActivityPhase,
+                           ActivityFinished, LogLine, Error>;
+
+// Parsing helpers - convert nix logger types to semantic events
+using Fields = nix::Logger::Fields;
+
+std::string get_string_field (const Fields &fields, size_t idx);
+int64_t get_int_field (const Fields &fields, size_t idx);
+
+activity::Kind parse_activity_kind (nix::ActivityType type,
+                                    const std::string &text,
+                                    const Fields &fields);
+
+std::optional<Event> parse_result (ActivityId act, nix::ResultType type,
+                                   const Fields &fields);
+
+} // namespace nixb::nix_event
 
 namespace nixb::coro_adapter
 {
 
-struct log_message
-{
-  nix::Verbosity level;
-  std::string text;
-};
+using Event = nix_event::Event;
 
-struct activity_started
-{
-  int64_t id;
-  nix::ActivityType type;
-  nix::Verbosity level;
-  std::string text;
-  int64_t parent;
-  std::vector<std::variant<int64_t, std::string>> fields;
-};
-
-struct activity_progress
-{
-  int64_t id;
-  nix::ResultType type;
-  std::vector<std::variant<int64_t, std::string>> fields;
-};
-
-struct activity_stopped
-{
-  int64_t id;
-};
-
-using log_event = std::variant<log_message, nix::ErrorInfo, activity_started,
-                               activity_progress, activity_stopped>;
-
-class nix_log_adapter : public nix::Logger
+/// Logger adapter that pushes semantic events to a queue.
+/// Note: Uses sync_wait internally, so not suitable for async contexts.
+/// For async replay, use nixb::replay functions instead.
+class NixLogAdapter : public nix::Logger
 {
 public:
-  explicit nix_log_adapter (coro::queue<log_event> &queue);
+  explicit NixLogAdapter (coro::queue<Event> &queue);
 
   void log (nix::Verbosity lvl, std::string_view s) override;
   void logEI (const nix::ErrorInfo &ei) override;
@@ -56,10 +166,7 @@ public:
                const Fields &fields) override;
 
 private:
-  static std::vector<std::variant<int64_t, std::string>>
-  extract_fields (const Fields &fields);
-
-  coro::queue<log_event> &queue_;
+  coro::queue<Event> &queue_;
 };
 
 } // namespace nixb::coro_adapter

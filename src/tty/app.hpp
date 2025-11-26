@@ -1,5 +1,7 @@
 #pragma once
 
+#include "ansi.hpp"
+#include "compositor.hpp"
 #include "glyph-table.hpp"
 #include "raster.hpp"
 #include "signal-pipe.hpp"
@@ -12,7 +14,7 @@
 #include <coro/io_scheduler.hpp>
 #include <coro/queue.hpp>
 #include <coro/task.hpp>
-#include <iosfwd>
+#include <stop_token>
 
 namespace nxb::ui
 {
@@ -27,16 +29,8 @@ enum class ShutdownReason : std::uint8_t
   Interrupted ///< User interrupt (SIGINT/SIGTERM)
 };
 
-/// Guard that hides cursor on scope entry, restores terminal state on exit.
-/// Resets scroll region and shows cursor on destruction.
-struct TerminalGuard
-{
-  TerminalGuard ();
-  ~TerminalGuard ();
-};
-
-// Forward declaration
-class TerminalCompositor;
+// Re-export TerminalGuard for convenience
+using ansi::TerminalGuard;
 
 /// Runtime state for the UI system.
 /// Owns scheduler, glyph table, compositor, and coordinates signals/events.
@@ -90,6 +84,13 @@ public:
   /// Signal that the view has been damaged and needs redraw.
   void signal_damage ();
 
+  /// Stop token
+  std::stop_token
+  get_stop_token () const noexcept
+  {
+    return stop_source_.get_token ();
+  }
+
   /// Current terminal dimensions.
   [[nodiscard]] TermSize terminal_size () const noexcept;
   [[nodiscard]] width_t terminal_width () const noexcept;
@@ -120,12 +121,13 @@ public:
 
     update_hud_height (hud_h);
 
-    render_impl ([&layout] (RasterView &view, Size size)
-                   { layout.render (view, size); });
+    render_impl ([&layout] (RasterView &view, Size size) {
+      layout.render (view, size);
+    });
   }
 
-  /// Print a line to the scroll region (only works when HUD height < terminal).
-  /// In full-screen mode, this is a no-op.
+  /// Print a line to the scroll region (only works when HUD height <
+  /// terminal). In full-screen mode, this is a no-op.
   void println (std::string_view line);
 
   /// Run a render loop until shutdown.
@@ -146,6 +148,10 @@ public:
   /// Coroutine that handles signals from the pipe.
   /// Should be run as part of the main task group.
   coro::task<> signal_loop ();
+
+  /// Present loop that waits for damage events and renders frames.
+  /// Used internally by run_render_loop, but can also be used standalone.
+  coro::task<> present_loop ();
 
   // =========================================================================
   // Low-level access (for advanced use)
@@ -185,37 +191,8 @@ private:
   std::atomic<nxb::height_t> term_height_{ 24 * ln };
   std::atomic<ShutdownReason> shutdown_reason_{ ShutdownReason::Running };
   std::atomic<std::uint64_t> damage_counter_{ 0 };
-};
 
-class TerminalCompositor
-{
-public:
-  TerminalCompositor (nxb::Size size, GlyphTable &glyphs);
-  void resize (nxb::Size size);
-
-  Raster &back_buffer () noexcept;
-  GlyphTable &glyphs () const noexcept;
-  nxb::Size size () const noexcept;
-
-  /// Set HUD height. Raster covers only the bottom hud_height rows.
-  /// The scroll region is set to rows above the HUD.
-  /// If hud_height >= terminal height, no scroll region (full-screen mode).
-  void set_hud_height (height_t hud_height, height_t term_height);
-  [[nodiscard]] height_t hud_height () const noexcept;
-
-  /// Present loop that waits for damage events and renders frames.
-  coro::task<> present_loop (UIRuntime &runtime);
-
-  // Public for testing the rendering pipeline without async runtime
-  void present_frame ();
-  void present_frame (std::ostream &out);
-
-private:
-  Raster front_;
-  Raster back_;
-  GlyphTable &glyphs_;
-  height_t hud_height_{ 0 * ln };                        // 0 = full-screen mode
-  row_t hud_start_row_{ terminal_origin_v + 0 * ln };    // row where HUD starts
+  std::stop_source stop_source_;
 };
 
 // ============================================================================
@@ -247,12 +224,11 @@ run (State initial_state, BuildUI build_ui, Update update,
           [&state, build_ui] { return build_ui (state); }, frame_time));
 
       auto task = [] (UIRuntime &runtime, State &state,
-                      Update update) -> coro::task<>
-        {
-          co_await runtime.scheduler ().schedule ();
-          co_await update (runtime, state);
-          runtime.request_shutdown ();
-        };
+                      Update update) -> coro::task<> {
+        co_await runtime.scheduler ().schedule ();
+        co_await update (runtime, state);
+        runtime.request_shutdown ();
+      };
 
       tasks.push_back (task (runtime, state, update));
 

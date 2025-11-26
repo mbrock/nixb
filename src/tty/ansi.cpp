@@ -142,8 +142,7 @@ Writer &
 Writer::set_scroll_region (const row_t top, const row_t bottom)
 {
   // Convert 0-indexed row_t to 1-indexed ANSI row numbers
-  const auto top_row
-      = (top - terminal_origin_v).numerical_value_in (ln) + 1;
+  const auto top_row = (top - terminal_origin_v).numerical_value_in (ln) + 1;
   const auto bottom_row
       = (bottom - terminal_origin_v).numerical_value_in (ln) + 1;
   csi (fmt::format ("{};{}", top_row, bottom_row), 'r');
@@ -415,8 +414,7 @@ void
 set_scroll_region (const row_t top, const row_t bottom)
 {
   // Convert 0-indexed row_t to 1-indexed ANSI row numbers
-  const auto top_row
-      = (top - terminal_origin_v).numerical_value_in (ln) + 1;
+  const auto top_row = (top - terminal_origin_v).numerical_value_in (ln) + 1;
   const auto bottom_row
       = (bottom - terminal_origin_v).numerical_value_in (ln) + 1;
   fmt::print ("{}{};{}r", CSI, top_row, bottom_row);
@@ -442,6 +440,18 @@ scroll_down (const height_t n)
   const auto rows = n.numerical_value_in (ln);
   if (rows > 0)
     fmt::print ("{}{}T", CSI, rows);
+}
+
+TerminalGuard::TerminalGuard () { hide_cursor (); }
+
+TerminalGuard::~TerminalGuard ()
+{
+  reset_scroll_region ();
+  show_cursor ();
+  clear_screen ();
+  move_to (Pos::origin ());
+  fmt::print ("{}0m", CSI); // Reset SGR
+  std::fflush (stdout);
 }
 
 } // namespace nxb::ansi

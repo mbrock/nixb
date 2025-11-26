@@ -1,9 +1,7 @@
 #include "app.hpp"
 #include "ansi.hpp"
-#include "raster-diff.hpp"
 #include "units.hpp"
 
-#include <algorithm>
 #include <coro/io_scheduler.hpp>
 #include <csignal>
 #include <iostream>
@@ -12,20 +10,6 @@
 
 namespace nxb::ui
 {
-
-TerminalGuard::TerminalGuard ()
-{
-  ansi::hide_cursor ();
-}
-
-TerminalGuard::~TerminalGuard ()
-{
-  ansi::reset_scroll_region ();
-  ansi::show_cursor ();
-  ansi::clear_screen ();
-  ansi::move_to (Pos::origin ());
-  std::cout << "\033[0m" << std::flush; // Reset SGR
-}
 
 UIRuntime::UIRuntime ()
     : scheduler_ (
@@ -75,6 +59,8 @@ UIRuntime::request_interrupt ()
     return; // Already shutting down
 
   damage_event_.set ();
+
+  stop_source_.request_stop ();
 }
 
 void
@@ -145,18 +131,17 @@ UIRuntime::println (std::string_view line)
   if (hud_h >= term_h)
     return;
 
-  // Save cursor, move to bottom of scroll region, print, restore
   fmt::memory_buffer buf;
   ansi::Writer w (buf);
 
-  // Move to bottom of scroll region and print with trailing newline.
-  // The newline causes the scroll region to scroll up, like the old code.
+  // Move to bottom of scroll region (one row above HUD) and print with
+  // trailing newline. The newline causes the scroll region to scroll up.
   // Reset SGR first to avoid HUD styling leaking into log output.
-  auto scroll_bottom_pos = Pos{ terminal_origin + 0 * ch,
-                                terminal_origin_v + (term_h - hud_h) };
-  w.move_to (scroll_bottom_pos);
+  auto scroll_bottom = terminal_origin_v + (term_h - hud_h) - 1 * ln;
+  w.move_to (Pos{ terminal_origin + 0 * ch, scroll_bottom });
   w.reset ();
   w.text (line);
+  //  w.text (fmt::format ("{}", hud_h.numerical_value_in (ln)));
   w.clear_line_from_cursor ();
   w.text ("\n");
 
@@ -209,221 +194,26 @@ UIRuntime::signal_loop ()
   co_return;
 }
 
-TerminalCompositor::TerminalCompositor (const nxb::Size size,
-                                        GlyphTable &glyphs)
-    : front_ (size.w, size.h, glyphs), back_ (size.w, size.h, glyphs),
-      glyphs_ (glyphs), hud_height_ (size.h),
-      hud_start_row_ (terminal_origin_v + 0 * ln)
-{
-}
-
-void
-TerminalCompositor::resize (nxb::Size size)
-{
-  // In HUD mode, only resize to HUD height
-  auto raster_h = hud_height_ > 0 * ln ? hud_height_ : size.h;
-  front_ = Raster (size.w, raster_h, glyphs_);
-  back_ = Raster (size.w, raster_h, glyphs_);
-
-  // Clear only the HUD region
-  if (hud_height_ > 0 * ln && hud_height_ < size.h)
-    {
-      // Clear HUD area
-      fmt::memory_buffer buf;
-      ansi::Writer w (buf);
-      auto end_row = terminal_origin_v + size.h;
-      for (auto row = hud_start_row_; row < end_row; row += 1 * ln)
-        {
-          w.move_to (Pos{ terminal_origin + 0 * ch, row });
-          w.clear_line ();
-        }
-      std::cout.write (buf.data (), static_cast<std::streamsize> (buf.size ()));
-      std::cout.flush ();
-    }
-  else
-    {
-      ansi::clear_screen ();
-    }
-}
-
-void
-TerminalCompositor::set_hud_height (height_t hud_height, height_t term_height)
-{
-  if (hud_height == hud_height_)
-    return;
-
-  hud_height_ = hud_height;
-
-  // Calculate where the HUD starts
-  if (hud_height >= term_height)
-    {
-      // Full-screen mode
-      hud_start_row_ = terminal_origin_v + 0 * ln;
-      ansi::reset_scroll_region ();
-    }
-  else
-    {
-      // HUD mode: scroll region above, HUD at bottom
-      hud_start_row_ = terminal_origin_v + (term_height - hud_height);
-      auto scroll_top = terminal_origin_v + 0 * ln;
-      auto scroll_bottom = terminal_origin_v + (term_height - hud_height);
-      ansi::set_scroll_region (scroll_top, scroll_bottom);
-    }
-
-  // Resize rasters to match HUD height
-  auto w = front_.width ();
-  front_ = Raster (w, hud_height, glyphs_);
-  back_ = Raster (w, hud_height, glyphs_);
-}
-
-height_t
-TerminalCompositor::hud_height () const noexcept
-{
-  return hud_height_;
-}
-
-Raster &
-TerminalCompositor::back_buffer () noexcept
-{
-  return back_;
-}
-
-GlyphTable &
-TerminalCompositor::glyphs () const noexcept
-{
-  return glyphs_;
-}
-
-nxb::Size
-TerminalCompositor::size () const noexcept
-{
-  return { back_.width (), back_.height () };
-}
-
-void
-TerminalCompositor::present_frame ()
-{
-  present_frame (std::cout);
-}
-
-void
-TerminalCompositor::present_frame (std::ostream &out)
-{
-  fmt::memory_buffer buf;
-  ansi::Writer w (buf);
-
-  // Offset for HUD mode: raster row 0 maps to hud_start_row_ on terminal
-  // hud_start_row_ is a row_t (point), subtract origin to get quantity offset
-  auto row_offset = hud_start_row_ - terminal_origin_v;
-
-  // Track current colors to re-emit after SGR reset
-  std::optional<Rgba8> current_fg;
-  std::optional<Rgba8> current_bg;
-
-  // Helper to emit color (palette or true color)
-  auto emit_fg = [&w] (const Rgba8 &c) {
-    if (c.is_palette ())
-      w.fg_palette (c.palette_index ());
-    else
-      w.fg (c.to_rgb ());
-  };
-
-  auto emit_bg = [&w] (const Rgba8 &c) {
-    if (c.is_palette ())
-      w.bg_palette (c.palette_index ());
-    else
-      w.bg (c.to_rgb ());
-  };
-
-  diff_rasters (front_, back_,
-                [&] (const ChangeRun &run)
-                  {
-                    // Offset position to HUD region
-                    auto pos = Pos{ run.origin.x, run.origin.y + row_offset };
-                    w.move_to (pos);
-
-                    // Handle emphasis reset first (SGR 0 resets everything)
-                    if (run.em_reset)
-                      {
-                        w.reset ();
-                        // Re-emit colors after reset
-                        if (current_fg)
-                          emit_fg (*current_fg);
-                        if (current_bg)
-                          emit_bg (*current_bg);
-                      }
-
-                    // Update background
-                    if (run.bg_reset)
-                      {
-                        w.bg_default ();
-                        current_bg = std::nullopt;
-                      }
-                    else if (run.bg_change)
-                      {
-                        emit_bg (*run.bg_change);
-                        current_bg = run.bg_change;
-                      }
-
-                    // Update foreground
-                    if (run.fg_reset)
-                      {
-                        w.fg_default ();
-                        current_fg = std::nullopt;
-                      }
-                    else if (run.fg_change)
-                      {
-                        emit_fg (*run.fg_change);
-                        current_fg = run.fg_change;
-                      }
-
-                    // Apply new emphasis (cast to fmt::emphasis)
-                    if (run.em_change)
-                      w.style (static_cast<ansi::emphasis> (*run.em_change));
-
-                    for (const auto gid : run.glyphs)
-                      {
-                        if (auto text = glyphs_.get (gid))
-                          w.text (*text);
-                      }
-                  });
-
-  out.write (buf.data (), static_cast<std::streamsize> (buf.size ()));
-  out.flush ();
-
-  std::swap (front_, back_);
-
-  back_ = front_;
-}
-
 coro::task<>
-TerminalCompositor::present_loop (UIRuntime &runtime)
+UIRuntime::present_loop ()
 {
-  co_await runtime.scheduler ().schedule ();
-  co_await runtime.resize_channel ().push (runtime.terminal_size ());
+  co_await scheduler_->schedule ();
+  co_await resize_queue_.push (terminal_size ());
 
-  while (!runtime.shutdown_requested ())
+  while (!shutdown_requested ())
     {
       // Check for resize events
-      while (true)
-        {
-          auto value = runtime.resize_channel ().try_pop ();
-          if (value.has_value ())
-            {
-              resize (value.value ());
-              continue;
-            }
-          break;
-        }
+      while (auto value = resize_queue_.try_pop ())
+        compositor_->resize (*value);
 
       // Wait for damage
-      runtime.damage_event ().reset ();
-      co_await runtime.damage_event ();
+      damage_event_.reset ();
+      co_await damage_event_;
 
-      if (runtime.shutdown_requested ())
+      if (shutdown_requested ())
         break;
 
-      present_frame ();
+      compositor_->present_frame ();
     }
 
   co_return;

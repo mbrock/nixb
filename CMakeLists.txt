@@ -104,6 +104,7 @@ endforeach()
 add_library(nixb_ui
     src/tty/app.cpp
     src/tty/ansi.cpp
+    src/tty/compositor.cpp
     src/tty/glyph-table.cpp
     src/tty/raster.cpp
     src/tty/signal-pipe.cpp
@@ -126,12 +127,28 @@ target_compile_definitions(nixb_ui PUBLIC
 add_executable(nxbcg
     src/cgroups.cpp
     src/uring.cpp
+    src/nix-log-adapter.cpp
+    src/log-replay.cpp
 )
 target_link_libraries(nxbcg
     PRIVATE
-        fmt::fmt
-        mp-units::mp-units
         STDEXEC::stdexec
+        nixb_ui
+        PkgConfig::NIX
+        simdjson::simdjson
+)
+
+add_executable(nxb
+    src/nxb-main.cpp
+    src/nix-log-adapter.cpp
+    src/log-replay.cpp
+)
+target_link_libraries(nxb
+    PRIVATE
+        nixb_ui
+        PkgConfig::NIX
+        simdjson::simdjson
+        CLI11::CLI11
 )
 
 add_executable(nxb-tui-tests src/test/tui-ut-main.cpp)
@@ -140,6 +157,7 @@ target_link_libraries(nxb-tui-tests
     PRIVATE
         nixb_ui
         Boost::ut
+        libcoro
 )
 
 enable_testing()
