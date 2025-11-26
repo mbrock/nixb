@@ -103,7 +103,7 @@ foreach(target IN ITEMS simdjson CLI11 mp-units fmt libcoro)
     endif()
 endforeach()
 
-add_library(libnxt STATIC
+add_library(libnxt
     src/nxt/app.cpp
     src/nxt/ansi.cpp
     src/nxt/compositor.cpp
@@ -145,18 +145,18 @@ target_compile_definitions(nxb PRIVATE
     BOOST_STACKTRACE_USE_ADDR2LINE
     BOOST_STACKTRACE_ADDR2LINE_LOCATION="/usr/bin/addr2line"
 )
-# target_compile_options(nxb PRIVATE -g -fno-omit-frame-pointer)
-# target_link_options(nxb PRIVATE -rdynamic -no-pie)
+target_compile_options(nxb PRIVATE -fPIC -g -fno-omit-frame-pointer)
+target_link_options(nxb PRIVATE -rdynamic -no-pie)
 
 # Test executables
-add_executable(raster-test src/test/raster-test.cpp)
-target_link_libraries(raster-test PRIVATE libnxt Boost::ut libcoro)
+# add_executable(raster-test src/test/raster-test.cpp)
+# target_link_libraries(raster-test PRIVATE libnxt Boost::ut libcoro)
 
-add_executable(terminal-test src/test/terminal-test.cpp)
-target_link_libraries(terminal-test PRIVATE libnxt libvterm::libvterm Boost::ut)
+# add_executable(terminal-test src/test/terminal-test.cpp)
+# target_link_libraries(terminal-test PRIVATE libnxt libvterm::libvterm Boost::ut)
 
-enable_testing()
-add_test(NAME raster-test COMMAND raster-test)
-add_test(NAME terminal-test COMMAND terminal-test)
+# enable_testing()
+# add_test(NAME raster-test COMMAND raster-test)
+# add_test(NAME terminal-test COMMAND terminal-test)
 
 

@@ -21,23 +21,24 @@
           pkgs = import nixpkgs { inherit system; };
         in
         {
-          default = (pkgs.mkShell.override { stdenv = pkgs.clangStdenv; }) {
+          default = pkgs.mkShell {
             hardeningDisable = [ "all" ];
+            dontStrip = true;
             packages = with pkgs; [
               detnix.packages.${system}.nix.dev
 
-              libblake3.dev
-              libsodium.dev
-              brotli.dev
-              libcpuid
+#              libblake3.dev
+#              libsodium.dev
+#              brotli.dev
+#              libcpuid
               curl.dev
-              libseccomp.dev
+#              libseccomp.dev
               sqlite.dev
               libgit2.dev
               pcre2.dev
               lowdown.dev
-              editline.dev
-              liburing.dev
+#              editline.dev
+#              liburing.dev
 
               c-ares.dev
               boost
@@ -49,7 +50,6 @@
               treefmt
               cmake-language-server
               ccache
-              mold
             ];
           };
         }

@@ -1,22 +1,27 @@
-#include "log-replay.hpp"
-#include "nix-api.hpp"
-#include "nix-log-adapter.hpp"
-
 #include <exception>
+
+// #include <boost/stacktrace.hpp>
+#include <boost/stacktrace/frame.hpp>
+#include <boost/stacktrace/stacktrace.hpp>
+
+#include <sys/stat.h>
+
 #include <fmt/base.h>
 #include <fmt/color.h>
-#include <future>
+#include <fmt/core.h>
+
+#include <CLI/CLI.hpp>
+
 #include <nix/util/error.hh>
+
 #include <nxt/ansi.hpp>
 #include <nxt/app.hpp>
 #include <nxt/async.hpp>
 #include <nxt/tui.hpp>
 
-#include <CLI/CLI.hpp>
-#include <fmt/core.h>
-
-#include <boost/stacktrace.hpp>
-#include <sys/stat.h>
+#include "log-replay.hpp"
+#include "nix-api.hpp"
+#include "nix-log-adapter.hpp"
 
 void my_terminate_handler() {
   try {
@@ -178,11 +183,12 @@ nxb::task<> run_derive(nxb::ui::UIRuntime &runtime, DeriveState &state,
   nix::verbosity = nix::lvlDebug;
   //  nix::loggerSettings.showTrace = true;
 
-  runtime.println("Starting evaluation...");
+  runtime.println("Starting evaluation with TrivialStore...");
 
   try {
-    nxb::NixContext ctx;
-    runtime.println("Context created, resolving installable...");
+    nxb::NixContext ctx(true); // use trivial store!
+    runtime.println(
+        fmt::format("Store: {}", ctx.store()->config.getHumanReadableURI()));
     auto drv_paths = nxb::resolve_installable(ctx, state.installable);
 
     if (!drv_paths.empty()) {
@@ -221,6 +227,104 @@ int cmd_derive(const std::string &installable) {
                       update_derive);
 }
 
+struct BuildState {
+  std::string installable;
+  bool done = false;
+  std::string error_msg;
+  std::vector<std::string> build_results;
+};
+
+auto build_build_ui(const BuildState &state) {
+  auto results_text =
+      state.build_results.empty()
+          ? text("")
+          : text(fmt::format("{} results", state.build_results.size()));
+
+  return column(
+      hrule(),
+      text(fmt::format("Building: {}", state.installable),
+           fg(nxb::Rgba8::cyan())),
+      text(state.done ? (state.error_msg.empty() ? "Done" : "Error")
+                      : "Building...",
+           fg(state.done && state.error_msg.empty() ? nxb::Rgba8::green()
+                                                    : nxb::Rgba8::yellow())),
+      results_text);
+}
+
+nxb::task<> run_build(nxb::ui::UIRuntime &runtime, BuildState &state,
+                      nxb::queue<NixLogEvent> &events) {
+  auto adapter = std::make_unique<nixb::coro_adapter::NixLogAdapter>(events);
+  nix::logger = std::move(adapter);
+  nix::verbosity = nix::lvlDebug;
+
+  runtime.println(
+      fmt::format("Building {} with TrivialStore...", state.installable));
+
+  try {
+    nxb::NixContext ctx(true); // use trivial store
+    runtime.println(
+        fmt::format("Store: {}", ctx.store()->config.getHumanReadableURI()));
+
+    auto drv_paths = nxb::resolve_installable(ctx, state.installable);
+    runtime.println(fmt::format("Resolved {} derivation(s)", drv_paths.size()));
+
+    if (drv_paths.empty()) {
+      state.error_msg = "No derivations found";
+    } else {
+      std::vector<nix::DerivedPath> to_build;
+      for (const auto &drv_path : drv_paths) {
+        runtime.println(
+            fmt::format("  drv: {}", ctx.store()->printStorePath(drv_path)));
+        to_build.push_back(nix::DerivedPath::Built{
+            .drvPath = nix::makeConstantStorePathRef(drv_path),
+            .outputs = nix::OutputsSpec::All{},
+        });
+      }
+
+      runtime.println("\nCalling buildPathsWithResults...");
+      auto results =
+          ctx.store()->buildPathsWithResults(to_build, nix::bmNormal);
+
+      runtime.println(fmt::format("\nBuild results: {}", results.size()));
+      for (const auto &result : results) {
+        auto status = result.tryGetSuccess() ? "success" : "failed";
+        auto path_str = result.path.to_string(*ctx.store());
+        runtime.println(fmt::format("  path: {} status: {}", path_str, status));
+        state.build_results.push_back(fmt::format("{}: {}", path_str, status));
+
+        if (auto *failure = result.tryGetFailure()) {
+          runtime.println(fmt::format("    error: {}", failure->errorMsg));
+        }
+      }
+    }
+  } catch (std::exception &e) {
+    state.error_msg = e.what();
+    runtime.println(fmt::format("Error: {}", e.what()));
+    boost::stacktrace::stacktrace trace =
+        boost::stacktrace::stacktrace::from_current_exception();
+    for (const auto &frame : trace) {
+      runtime.println(
+          fmt::format("{}:{}", frame.source_file(), frame.source_line()));
+    }
+  }
+
+  state.done = true;
+  runtime.signal_damage();
+  co_await events.shutdown();
+}
+
+nxb::task<> update_build(nxb::ui::UIRuntime &runtime, BuildState &state) {
+  nxb::queue<NixLogEvent> events;
+  co_await runtime.run(consume_events(runtime, events),
+                       run_build(runtime, state, events));
+}
+
+int cmd_build(const std::string &installable) {
+  nxb::ansi::init();
+  return nxb::ui::run(BuildState{.installable = installable}, build_build_ui,
+                      update_build);
+}
+
 } // anonymous namespace
 
 int main(int argc, char **argv) {
@@ -246,6 +350,14 @@ int main(int argc, char **argv) {
                    "Flake installable (e.g. .#default)")
       ->required();
 
+  std::string build_installable;
+  auto *build_cmd = app.add_subcommand(
+      "build", "Build a flake installable (using TrivialStore)");
+  build_cmd
+      ->add_option("installable", build_installable,
+                   "Flake installable (e.g. .#default)")
+      ->required();
+
   CLI11_PARSE(app, argc, argv);
 
   if (play_cmd->parsed())
@@ -253,6 +365,9 @@ int main(int argc, char **argv) {
 
   if (derive_cmd->parsed())
     return cmd_derive(installable);
+
+  if (build_cmd->parsed())
+    return cmd_build(build_installable);
 
   // No subcommand - show help
   fmt::print("{}", app.help());

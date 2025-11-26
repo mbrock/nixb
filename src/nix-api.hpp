@@ -50,6 +50,8 @@
 #include <nix/store/store-open.hh>
 #include <nix/util/ref.hh>
 
+#include "nxb-store.hpp"
+
 namespace nxb {
 
 // ============================================================================
@@ -85,14 +87,26 @@ inline std::string format_phase_name(std::string_view phase) {
 /// Creates a store connection and lazily initializes an EvalState.
 class NixContext {
 public:
-  NixContext() : eval_settings_(read_only_mode_) {
-    // fetch_settings_.allowDirty = true;
-    // fetch_settings_.warnDirty = false;
-
+  NixContext(bool use_trivial_store = false) : eval_settings_(read_only_mode_) {
     nix::initGC();
     nix::initLibUtil();
     nix::initLibStore();
-    store_ = nix::openStore();
+
+    if (use_trivial_store) {
+      auto config =
+          std::make_shared<TrivialStoreConfig>(nix::StoreConfig::Params{});
+      store_ = std::make_shared<TrivialStore>(nix::ref<const TrivialStoreConfig>(config));
+    } else {
+      store_ = nix::openStore();
+    }
+  }
+
+  // Constructor with explicit store
+  NixContext(std::shared_ptr<nix::Store> store)
+      : store_(std::move(store)), eval_settings_(read_only_mode_) {
+    nix::initGC();
+    nix::initLibUtil();
+    nix::initLibStore();
   }
 
   std::shared_ptr<nix::Store> store_ptr() { return store_; }
