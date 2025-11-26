@@ -1,6 +1,6 @@
-#include "app.hpp"
-#include "tty/units.hpp"
-#include "tui.hpp"
+#include "nxt/app.hpp"
+#include "nxt/units.hpp"
+#include "nxt/tui.hpp"
 
 #include <coro/coro.hpp>
 #include <fmt/core.h>

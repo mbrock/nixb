@@ -1,7 +1,7 @@
 #pragma once
 
-#include "glyph-table.hpp"
-#include "units.hpp"
+#include "nxt/glyph-table.hpp"
+#include "nxt/units.hpp"
 
 #include <experimental/mdspan>
 #include <fmt/color.h>

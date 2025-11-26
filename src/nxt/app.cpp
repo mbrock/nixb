@@ -1,6 +1,6 @@
-#include "app.hpp"
-#include "ansi.hpp"
-#include "units.hpp"
+#include "nxt/app.hpp"
+#include "nxt/ansi.hpp"
+#include "nxt/units.hpp"
 
 #include <coro/io_scheduler.hpp>
 #include <csignal>
@@ -44,7 +44,7 @@ UIRuntime::request_shutdown ()
     return; // Already shutting down
 
   stop_source_.request_stop ();
-  damage_event_.set (); // Wake present_loop
+  damage_event_.set ();   // Wake present_loop
   SignalPipe::notify (0); // Wake signal_loop
 }
 

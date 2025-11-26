@@ -1,6 +1,6 @@
-#include "compositor.hpp"
-#include "ansi.hpp"
-#include "raster-diff.hpp"
+#include "nxt/compositor.hpp"
+#include "nxt/ansi.hpp"
+#include "nxt/raster-diff.hpp"
 
 #include <iostream>
 

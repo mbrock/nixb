@@ -1,6 +1,6 @@
-#include "ansi.hpp"
-#include "tty/units.hpp"
-#include "tui.hpp"
+#include "nxt/ansi.hpp"
+#include "nxt/units.hpp"
+#include "nxt/tui.hpp"
 
 #include <cstdio>
 #include <iostream>

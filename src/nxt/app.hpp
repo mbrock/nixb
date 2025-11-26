@@ -1,11 +1,11 @@
 #pragma once
 
-#include "ansi.hpp"
-#include "compositor.hpp"
-#include "glyph-table.hpp"
-#include "raster.hpp"
-#include "signal-pipe.hpp"
-#include "tty/units.hpp"
+#include "nxt/ansi.hpp"
+#include "nxt/compositor.hpp"
+#include "nxt/glyph-table.hpp"
+#include "nxt/raster.hpp"
+#include "nxt/signal-pipe.hpp"
+#include "nxt/units.hpp"
 
 #include <atomic>
 #include <chrono>

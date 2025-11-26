@@ -1,8 +1,8 @@
 #pragma once
 
-#include "glyph-table.hpp"
-#include "raster.hpp"
-#include "tty/units.hpp"
+#include "nxt/glyph-table.hpp"
+#include "nxt/raster.hpp"
+#include "nxt/units.hpp"
 
 #include <iosfwd>
 

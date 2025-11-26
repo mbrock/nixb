@@ -1,6 +1,6 @@
-#include "../tty/ansi.hpp"
-#include "../tty/app.hpp"
-#include "../tty/tui.hpp"
+#include <nxt/ansi.hpp>
+#include <nxt/app.hpp>
+#include <nxt/tui.hpp>
 #include "../vterm-wrapper.hpp"
 
 #include <boost/ut.hpp>

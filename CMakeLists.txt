@@ -101,17 +101,17 @@ foreach(target IN ITEMS simdjson CLI11 mp-units stdexec fmt libcoro)
     endif()
 endforeach()
 
-add_library(nixb_ui
-    src/tty/app.cpp
-    src/tty/ansi.cpp
-    src/tty/compositor.cpp
-    src/tty/glyph-table.cpp
-    src/tty/raster.cpp
-    src/tty/signal-pipe.cpp
+add_library(libnxt
+    src/nxt/app.cpp
+    src/nxt/ansi.cpp
+    src/nxt/compositor.cpp
+    src/nxt/glyph-table.cpp
+    src/nxt/raster.cpp
+    src/nxt/signal-pipe.cpp
 )
 
-target_include_directories(nixb_ui PUBLIC src)
-target_link_libraries(nixb_ui
+target_include_directories(libnxt PUBLIC src)
+target_link_libraries(libnxt
     PUBLIC
         libcoro          # Coroutine functionality exposed in headers
         fmt::fmt         # Formatting used in public interface
@@ -119,7 +119,7 @@ target_link_libraries(nixb_ui
         mp-units::mp-units # Units library for tui.hpp
         Boost::headers   # Boost headers used in public interface (header-only)
 )
-target_compile_definitions(nixb_ui PUBLIC
+target_compile_definitions(libnxt PUBLIC
     MDSPAN_USE_BRACKET_OPERATOR=1
     MDSPAN_USE_PAREN_OPERATOR=0
 )
@@ -133,7 +133,7 @@ add_executable(nxbcg
 target_link_libraries(nxbcg
     PRIVATE
         STDEXEC::stdexec
-        nixb_ui
+        libnxt
         PkgConfig::NIX
         simdjson::simdjson
 )
@@ -145,7 +145,7 @@ add_executable(nxb
 )
 target_link_libraries(nxb
     PRIVATE
-        nixb_ui
+        libnxt
         PkgConfig::NIX
         simdjson::simdjson
         CLI11::CLI11
@@ -155,7 +155,7 @@ add_executable(nxb-tui-tests src/test/tui-ut-main.cpp)
 target_include_directories(nxb-tui-tests PRIVATE src/test)
 target_link_libraries(nxb-tui-tests
     PRIVATE
-        nixb_ui
+        libnxt
         Boost::ut
         libcoro
 )
@@ -173,7 +173,7 @@ add_executable(nxb-app-tests src/test/app-ut-main.cpp)
 target_include_directories(nxb-app-tests PRIVATE src/test)
 target_link_libraries(nxb-app-tests
     PRIVATE
-        nixb_ui
+        libnxt
         libvterm::libvterm
         Boost::ut
 )
@@ -188,5 +188,5 @@ add_custom_command(TARGET nxb-app-tests POST_BUILD
 
 install(TARGETS nxbcg RUNTIME DESTINATION bin)
 
-add_executable(tui-example src/tty/tui_example.cpp)
-target_link_libraries(tui-example PRIVATE nixb_ui)
+add_executable(tui-example src/nxt/tui_example.cpp)
+target_link_libraries(tui-example PRIVATE libnxt)

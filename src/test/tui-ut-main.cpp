@@ -1,7 +1,7 @@
-#include "../tty/ansi.hpp"
-#include "../tty/raster-diff.hpp"
-#include "../tty/tui.hpp"
-#include "../tty/units.hpp"
+#include <nxt/ansi.hpp>
+#include <nxt/raster-diff.hpp>
+#include <nxt/tui.hpp>
+#include <nxt/units.hpp>
 
 #include <boost/ut.hpp>
 

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "raster.hpp"
+#include "nxt/raster.hpp"
 
 #include <optional>
 #include <ranges>

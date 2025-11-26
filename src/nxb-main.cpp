@@ -1,8 +1,9 @@
 #include "log-replay.hpp"
 #include "nix-log-adapter.hpp"
-#include "tty/ansi.hpp"
-#include "tty/app.hpp"
-#include "tty/tui.hpp"
+
+#include <nxt/ansi.hpp>
+#include <nxt/app.hpp>
+#include <nxt/tui.hpp>
 
 #include <CLI/CLI.hpp>
 #include <coro/coro.hpp>
@@ -85,6 +86,7 @@ auto
 build_ui (const PlaybackState &state)
 {
   return column (
+      hrule (),
       text (fmt::format ("Playing: {}", state.file), fg (nxb::Rgba8::cyan ())),
       text (state.done ? "Done" : "Playing...", fg (nxb::Rgba8::green ())),
       progress_bar (0.5 * mp_units::one));

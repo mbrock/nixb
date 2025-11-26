@@ -1,4 +1,4 @@
-#include "signal-pipe.hpp"
+#include "nxt/signal-pipe.hpp"
 
 #include <cerrno>
 #include <csignal>
