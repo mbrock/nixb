@@ -106,7 +106,6 @@ add_library(nixb_ui
     src/tty/ansi.cpp
     src/tty/glyph-table.cpp
     src/tty/raster.cpp
-    src/tty/raster-diff.cpp
     src/tty/signal-pipe.cpp
 )
 

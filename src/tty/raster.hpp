@@ -6,6 +6,7 @@
 #include <experimental/mdspan>
 #include <fmt/color.h>
 #include <optional>
+#include <ranges>
 #include <span>
 #include <string_view>
 #include <vector>
@@ -88,260 +89,346 @@ struct Rgba8
   constexpr auto operator<=> (const Rgba8 &) const = default;
 };
 
-/// Terminal raster using Structure-of-Arrays layout for cache efficiency.
-/// Each cell contains a glyph ID (maps to UTF-8 via GlyphTable), foreground
-/// color, and background color.
-///
-/// Uses std::mdspan for efficient 2D indexing with zero overhead.
-/// Can be either an owning raster (with storage) or a non-owning view
-/// (subraster).
-class Raster
+// ============================================================================
+// Type aliases for mdspan views
+// ============================================================================
+
+using mdspan_extents = std::experimental::extents<std::size_t,
+                                                   std::dynamic_extent,
+                                                   std::dynamic_extent>;
+using glyph_view_t
+    = std::experimental::mdspan<GlyphTable::GlyphId, mdspan_extents>;
+using const_glyph_view_t
+    = std::experimental::mdspan<const GlyphTable::GlyphId, mdspan_extents>;
+using color_view_t = std::experimental::mdspan<Rgba8, mdspan_extents>;
+using const_color_view_t
+    = std::experimental::mdspan<const Rgba8, mdspan_extents>;
+
+/// Default color for terminal cells (transparent = use terminal default)
+inline constexpr Rgba8 DEFAULT_COLOR = Rgba8::transparent ();
+
+// ============================================================================
+// mdspan to range adapter
+// ============================================================================
+
+/// Convert a 2D mdspan to a flat range (row-major order).
+/// Works with any layout (contiguous or strided from submdspan).
+template <typename T, typename Extents, typename Layout, typename Accessor>
+auto
+as_range (std::experimental::mdspan<T, Extents, Layout, Accessor> m)
+{
+  const auto rows = m.extent (0);
+  const auto cols = m.extent (1);
+  return std::views::iota (std::size_t{ 0 }, rows * cols)
+         | std::views::transform ([=] (std::size_t i) -> T & {
+             return m[i / cols, i % cols];
+           });
+}
+
+/// Get a single row from a 2D mdspan as a range.
+template <typename T, typename Extents, typename Layout, typename Accessor>
+auto
+row_range (std::experimental::mdspan<T, Extents, Layout, Accessor> m,
+           std::size_t row_idx)
+{
+  const auto cols = m.extent (1);
+  return std::views::iota (std::size_t{ 0 }, cols)
+         | std::views::transform (
+             [=] (std::size_t col) -> T & { return m[row_idx, col]; });
+}
+
+/// Get an indexed row range (pairs of column index and value reference).
+template <typename T, typename Extents, typename Layout, typename Accessor>
+auto
+indexed_row (std::experimental::mdspan<T, Extents, Layout, Accessor> m,
+             std::size_t row_idx)
+{
+  const auto cols = m.extent (1);
+  return std::views::iota (std::size_t{ 0 }, cols)
+         | std::views::transform ([=] (std::size_t col) {
+             return std::pair<std::size_t, T &>{ col, m[row_idx, col] };
+           });
+}
+
+/// A cell with its column position for iteration.
+struct IndexedCell
+{
+  width_t col;
+  GlyphTable::GlyphId glyph;
+  Rgba8 fg;
+  Rgba8 bg;
+
+  bool
+  operator== (const IndexedCell &other) const
+  {
+    return glyph == other.glyph && fg == other.fg && bg == other.bg;
+  }
+};
+
+/// Get a row as indexed cells (col, glyph, fg, bg).
+inline auto
+indexed_cell_row (const_glyph_view_t glyphs, const_color_view_t fgs,
+                  const_color_view_t bgs, std::size_t row_idx)
+{
+  const auto cols = glyphs.extent (1);
+  return std::views::iota (std::size_t{ 0 }, cols)
+         | std::views::transform ([=] (std::size_t x) {
+             return IndexedCell{ x * ch, glyphs[row_idx, x], fgs[row_idx, x],
+                                 bgs[row_idx, x] };
+           });
+}
+
+// ============================================================================
+// RasterView - non-owning view into raster storage
+// ============================================================================
+
+/// Cell data for inspection
+struct Cell
+{
+  GlyphTable::GlyphId glyph;
+  Rgba8 fg;
+  Rgba8 bg;
+};
+
+/// Non-owning view into raster storage. This is the primary working type
+/// for all rendering operations. Views can create sub-views (subraster)
+/// for hierarchical layout.
+class RasterView
 {
 public:
-  /// Type aliases for mdspan views
-  /// Using dynamic extents for both dimensions (rows, cols)
-  using mdspan_extents
-      = std::experimental::extents<std::size_t, std::dynamic_extent,
-                                   std::dynamic_extent>;
-  using glyph_view_t
-      = std::experimental::mdspan<GlyphTable::GlyphId, mdspan_extents>;
-  using const_glyph_view_t
-      = std::experimental::mdspan<const GlyphTable::GlyphId, mdspan_extents>;
-  using color_view_t = std::experimental::mdspan<Rgba8, mdspan_extents>;
-  using const_color_view_t
-      = std::experimental::mdspan<const Rgba8, mdspan_extents>;
-
-  /// Default color for terminal cells (transparent = use terminal default)
-  static constexpr Rgba8 DEFAULT_COLOR = Rgba8::transparent ();
-
-  /// Initialize owning raster with given dimensions.
-  /// All cells default to space (ASCII 32) with DEFAULT_COLOR.
-  Raster (std::size_t width, std::size_t height, GlyphTable &glyphs);
-  Raster (width_t width, height_t height, GlyphTable &glyphs);
-  Raster (Size size, GlyphTable &glyphs);
-
-  /// Create a non-owning view from existing mdspan views.
-  /// Used internally for subraster views.
-  Raster (const glyph_view_t &glyphs, const color_view_t &fgs,
-          const color_view_t &bgs);
-
-  /// Copy assignment: deep copy storage and reconstruct mdspan views
-  Raster &operator= (const Raster &other);
-
-  /// Default copy constructor is fine (for views)
-  Raster (const Raster &) = default;
-
-  /// Default move operations
-  Raster (Raster &&) = default;
-  Raster &operator= (Raster &&) = default;
+  /// Construct from mdspan views and glyph table
+  RasterView (glyph_view_t glyphs, color_view_t fgs, color_view_t bgs,
+              GlyphTable &glyph_table) noexcept
+      : glyphs_ (glyphs), fgs_ (fgs), bgs_ (bgs), glyph_table_ (&glyph_table)
+  {
+  }
 
   /// Dimensions
   [[nodiscard]] width_t
   width () const noexcept
   {
-    return cols () * ch;
+    return glyphs_.extent (1) * ch;
   }
   [[nodiscard]] height_t
   height () const noexcept
   {
-    return rows () * ln;
+    return glyphs_.extent (0) * ln;
   }
   [[nodiscard]] Size
   extent () const noexcept
   {
     return { width (), height () };
   }
-  [[nodiscard]] std::size_t
-  cols () const noexcept
-  {
-    return glyph_view_.extent (1);
-  }
-  [[nodiscard]] std::size_t
-  rows () const noexcept
-  {
-    return glyph_view_.extent (0);
-  }
-  [[nodiscard]] std::size_t
-  size () const noexcept
-  {
-    return cols () * rows ();
-  }
-  [[nodiscard]] std::size_t
-  cell_count () const noexcept
-  {
-    return size ();
-  }
 
-  /// Create a non-owning subraster view of a rectangular region.
-  /// The subraster behaves just like a full raster but references the parent's
-  /// storage. Coordinates are relative to this raster (works recursively for
-  /// nested views).
-  [[nodiscard]] Raster subraster (std::size_t x, std::size_t y, std::size_t w,
-                                  std::size_t h) const noexcept;
-  [[nodiscard]] Raster subraster (Pos origin, Size size) const noexcept;
-  [[nodiscard]] Raster subraster (Size size) const noexcept;
+  /// Create a sub-view of a rectangular region.
+  /// Coordinates are relative to this view.
+  [[nodiscard]] RasterView subraster (Pos origin, Size size) const noexcept;
 
-  /// Set glyph at (x, y). Silently ignores out-of-bounds coordinates.
-  void set_glyph (std::size_t x, std::size_t y,
-                  GlyphTable::GlyphId gid) const noexcept;
+  /// Set glyph at position. Silently ignores out-of-bounds.
   void set_glyph (Pos pos, GlyphTable::GlyphId gid) const noexcept;
 
-  /// Set foreground color at (x, y)
-  void set_fg (std::size_t x, std::size_t y, Rgba8 color) const noexcept;
+  /// Set foreground color at position
   void set_fg (Pos pos, Rgba8 color) const noexcept;
 
-  /// Set background color at (x, y)
-  void set_bg (std::size_t x, std::size_t y, Rgba8 color) const noexcept;
+  /// Set background color at position
   void set_bg (Pos pos, Rgba8 color) const noexcept;
 
-  /// Convenience: set ASCII character at (x, y)
+  /// Convenience: set ASCII character
   void
-  set_char (const std::size_t x, const std::size_t y,
-            const char glyph) const noexcept
+  set_char (Pos pos, char c) const noexcept
   {
-    set_glyph (x, y, static_cast<GlyphTable::GlyphId> (glyph));
-  }
-  void
-  set_char (Pos pos, const char glyph) noexcept
-  {
-    set_glyph (pos, static_cast<GlyphTable::GlyphId> (glyph));
+    set_glyph (pos, static_cast<GlyphTable::GlyphId> (c));
   }
 
-  /// Write UTF-8 text starting at (x, y) with given colors.
-  /// Returns the ending column position (for chaining writes).
-  /// Multi-byte UTF-8 sequences are interned via the glyph table.
-  std::size_t write_text (std::size_t x, std::size_t y, std::string_view text,
-                          GlyphTable &glyphs) noexcept;
-  col_t write_text (Pos pos, std::string_view text,
-                    GlyphTable &glyphs) noexcept;
+  /// Write UTF-8 text. Returns ending column position.
+  col_t write_text (Pos pos, std::string_view text) const noexcept;
 
-  /// Write UTF-8 text using the raster's glyph table
-  std::size_t write_text (std::size_t x, std::size_t y,
-                          std::string_view text) noexcept;
-  col_t write_text (Pos pos, std::string_view text) noexcept;
+  /// Get cell data. Returns nullopt if out of bounds.
+  [[nodiscard]] std::optional<Cell> get_cell (Pos pos) const noexcept;
 
-  /// Fill a rectangle with a single glyph and foreground color.
-  /// The background color is left unchanged.
-  void fill_rect (std::size_t x, std::size_t y, std::size_t w, std::size_t h,
-                  GlyphTable::GlyphId gid, Rgba8 fg_color);
-  void fill_rect (Pos origin, Size size, GlyphTable::GlyphId gid,
-                  Rgba8 fg_color);
-
-  /// Clear entire raster to spaces with default colors
-  void clear ();
-
-  /// 2D mdspan views for natural (row, col) indexing
+  /// 2D mdspan views for direct access
   [[nodiscard]] glyph_view_t
-  glyphs_2d () noexcept
-  {
-    return glyph_view_;
-  }
-  [[nodiscard]] const_glyph_view_t
   glyphs_2d () const noexcept
   {
-    return const_glyph_view_t{ glyph_view_.data_handle (),
-                               mdspan_extents{ rows (), cols () } };
+    return glyphs_;
   }
-
   [[nodiscard]] color_view_t
-  fgs_2d () noexcept
-  {
-    return fg_view_;
-  }
-  [[nodiscard]] const_color_view_t
   fgs_2d () const noexcept
   {
-    return const_color_view_t{ fg_view_.data_handle (),
-                               mdspan_extents{ rows (), cols () } };
+    return fgs_;
   }
-
   [[nodiscard]] color_view_t
-  bgs_2d () noexcept
-  {
-    return bg_view_;
-  }
-  [[nodiscard]] const_color_view_t
   bgs_2d () const noexcept
   {
-    return const_color_view_t{ bg_view_.data_handle (),
-                               mdspan_extents{ rows (), cols () } };
+    return bgs_;
   }
 
-  /// Direct access to SOA arrays (for diffing, inspection, etc.)
-  /// Only available for owning rasters (not views).
-  /// Returns empty span for non-owning views.
+  /// Flat ranges for algorithms (row-major order)
+  [[nodiscard]] auto
+  glyphs () const
+  {
+    return as_range (glyphs_);
+  }
+  [[nodiscard]] auto
+  fgs () const
+  {
+    return as_range (fgs_);
+  }
+  [[nodiscard]] auto
+  bgs () const
+  {
+    return as_range (bgs_);
+  }
+
+  /// Access glyph table
+  [[nodiscard]] GlyphTable &
+  glyph_table () const noexcept
+  {
+    return *glyph_table_;
+  }
+
+private:
+  glyph_view_t glyphs_;
+  color_view_t fgs_;
+  color_view_t bgs_;
+  GlyphTable *glyph_table_;
+};
+
+// ============================================================================
+// Raster - owning storage that produces views
+// ============================================================================
+
+/// Owning raster storage. Allocates and manages the underlying arrays.
+/// Use view() to get a RasterView for rendering operations.
+class Raster
+{
+public:
+  /// Initialize with given dimensions.
+  /// All cells default to space (ASCII 32) with DEFAULT_COLOR.
+  Raster (std::size_t width, std::size_t height, GlyphTable &glyphs);
+  Raster (width_t width, height_t height, GlyphTable &glyphs);
+  Raster (Size size, GlyphTable &glyphs);
+
+  /// Get a view of the entire raster
+  [[nodiscard]] RasterView view () noexcept;
+
+  /// Implicit conversion to view (convenience)
+  operator RasterView () noexcept { return view (); }
+
+  /// Dimensions
+  [[nodiscard]] width_t
+  width () const noexcept
+  {
+    return width_;
+  }
+  [[nodiscard]] height_t
+  height () const noexcept
+  {
+    return height_;
+  }
+  [[nodiscard]] Size
+  extent () const noexcept
+  {
+    return { width_, height_ };
+  }
+
+  /// Clear to spaces with default colors
+  void clear ();
+
+  /// Direct access to storage (for diffing)
   [[nodiscard]] std::span<const GlyphTable::GlyphId>
   glyphs () const noexcept
   {
-    return storage_glyphs_ ? std::span (*storage_glyphs_)
-                           : std::span<const GlyphTable::GlyphId> ();
+    return glyphs_storage_;
   }
   [[nodiscard]] std::span<const Rgba8>
   fgs () const noexcept
   {
-    return storage_fgs_ ? std::span (*storage_fgs_)
-                        : std::span<const Rgba8> ();
+    return fgs_storage_;
   }
   [[nodiscard]] std::span<const Rgba8>
   bgs () const noexcept
   {
-    return storage_bgs_ ? std::span (*storage_bgs_)
-                        : std::span<const Rgba8> ();
+    return bgs_storage_;
   }
 
-  /// Get cell data at (x, y).
-  /// Returns nullopt if out of bounds.
-  struct Cell
+  /// Get a span of glyphs for a region on a row
+  [[nodiscard]] std::span<const GlyphTable::GlyphId>
+  glyph_span (height_t y, width_t x, std::size_t len) const noexcept
   {
-    GlyphTable::GlyphId glyph;
-    Rgba8 fg;
-    Rgba8 bg;
-  };
-  [[nodiscard]] std::optional<Cell> get_cell (std::size_t x,
-                                              std::size_t y) const noexcept;
-  [[nodiscard]] std::optional<Cell> get_cell (Pos pos) const noexcept;
+    const auto cols = width_.numerical_value_in (ch);
+    const auto offset = y.numerical_value_in (ln) * cols
+                        + x.numerical_value_in (ch);
+    return std::span{ glyphs_storage_ }.subspan (offset, len);
+  }
 
-  /// Helper: count cells in a region that match a predicate
-  template <typename Pred>
-  [[nodiscard]] std::size_t
-  count_if (Pos origin, Size size, Pred &&pred) const
+  /// 2D views (const, for diffing)
+  [[nodiscard]] const_glyph_view_t glyphs_2d () const noexcept;
+  [[nodiscard]] const_color_view_t fgs_2d () const noexcept;
+  [[nodiscard]] const_color_view_t bgs_2d () const noexcept;
+
+  /// Get a row as indexed cells for iteration
+  [[nodiscard]] auto
+  row (height_t y) const
   {
-    const auto view = glyphs_2d ();
-    const auto x0 = origin.col ();
-    const auto y0 = origin.row ();
-    std::size_t x1 = x0 + size.w.numerical_value_in (ch);
-    std::size_t y1 = y0 + size.h.numerical_value_in (ln);
-    std::size_t count = 0;
+    return indexed_cell_row (glyphs_2d (), fgs_2d (), bgs_2d (),
+                             y.numerical_value_in (ln));
+  }
 
-    // Clamp to raster bounds
-    x1 = std::min (x1, cols ());
-    y1 = std::min (y1, rows ());
+  /// Iterate rows (just the row ranges)
+  [[nodiscard]] auto
+  rows () const
+  {
+    return std::views::iota (std::size_t{ 0 },
+                             height_.numerical_value_in (ln))
+           | std::views::transform (
+               [this] (std::size_t y) { return row (y * ln); });
+  }
 
-    for (std::size_t y = y0; y < y1; ++y)
-      {
-        for (std::size_t x = x0; x < x1; ++x)
-          {
-            if (pred (view[y, x]))
-              ++count;
-          }
-      }
-    return count;
+  /// Iterate rows with their y coordinate: (height_t, row_range)
+  [[nodiscard]] auto
+  indexed_rows () const
+  {
+    return std::views::iota (std::size_t{ 0 },
+                             height_.numerical_value_in (ln))
+           | std::views::transform ([this] (std::size_t yi) {
+               const auto y = yi * ln;
+               return std::pair{ y, row (y) };
+             });
+  }
+
+  /// Access glyph table
+  [[nodiscard]] GlyphTable &
+  glyph_table () const noexcept
+  {
+    return *glyph_table_;
   }
 
 private:
-  /// mdspan views - always present, define the view into the data
-  glyph_view_t glyph_view_;
-  color_view_t fg_view_;
-  color_view_t bg_view_;
-
-  /// Storage - only present for owning rasters
-  /// For non-owning views (subrasters), these are empty
-  std::optional<std::vector<GlyphTable::GlyphId>> storage_glyphs_;
-  std::optional<std::vector<Rgba8>> storage_fgs_;
-  std::optional<std::vector<Rgba8>> storage_bgs_;
-
-  /// GlyphTable reference for text rendering
-  GlyphTable *glyphs_ = nullptr;
+  width_t width_;
+  height_t height_;
+  std::vector<GlyphTable::GlyphId> glyphs_storage_;
+  std::vector<Rgba8> fgs_storage_;
+  std::vector<Rgba8> bgs_storage_;
+  GlyphTable *glyph_table_;
 };
+
+// ============================================================================
+// Row-based iteration helpers
+// ============================================================================
+
+/// Zip two rasters' rows together for comparison.
+/// Yields (height_t y, zipped_row) where zipped_row pairs corresponding cells.
+inline auto
+zip_rows (const Raster &front, const Raster &back)
+{
+  return std::views::iota (std::size_t{ 0 },
+                           back.height ().numerical_value_in (ln))
+         | std::views::transform ([&] (std::size_t yi) {
+             const auto y = yi * ln;
+             return std::pair{ y,
+                               std::views::zip (front.row (y), back.row (y)) };
+           });
+}
 
 } // namespace nxb

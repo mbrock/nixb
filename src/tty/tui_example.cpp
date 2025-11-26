@@ -114,7 +114,8 @@ run ()
 
         auto &buffer = compositor.back_buffer ();
         buffer.clear ();
-        layout.render (buffer, size);
+        auto view = buffer.view ();
+        layout.render (view, size);
         compositor.present_frame ();
 
         co_await scheduler->yield_for (16ms); // ~60fps

@@ -2,68 +2,147 @@
 
 #include "raster.hpp"
 
-#include <coro/generator.hpp>
 #include <optional>
+#include <ranges>
 #include <span>
 
 namespace nxb
 {
 
-/// A run of consecutive cells with changed content and consistent colors.
-/// Designed to minimize ANSI escape sequences by batching color-consistent
-/// regions.
+// ============================================================================
+// Data types
+// ============================================================================
+
+/// A detected change: position, glyphs, and colors (before color optimization).
+struct RawChange
+{
+  Pos origin;
+  std::span<const GlyphTable::GlyphId> glyphs;
+  Rgba8 fg;
+  Rgba8 bg;
+};
+
+/// A run of changed cells, with color deltas for minimal ANSI output.
 struct ChangeRun
 {
-  Pos origin; // Starting position (zero-based, top-left)
-
-  /// Slice into the back raster's glyph array (zero-copy)
+  Pos origin;
   std::span<const GlyphTable::GlyphId> glyphs;
-
-  /// Foreground color change (nullopt = color unchanged from last run)
   std::optional<Rgba8> fg_change;
-
-  /// Background color change (nullopt = color unchanged from last run)
   std::optional<Rgba8> bg_change;
-
-  /// Reset foreground to terminal default
   bool fg_reset = false;
-
-  /// Reset background to terminal default
   bool bg_reset = false;
 };
 
-/// Iterator state for diff scanning (hidden from public API)
-namespace detail
+/// Tracks terminal color state, converting RawChange → ChangeRun with deltas.
+struct ColorState
 {
-struct DiffState
-{
-  const Raster *front;
-  const Raster *back;
-  std::optional<Rgba8> current_fg;
-  std::optional<Rgba8> current_bg;
+  std::optional<Rgba8> fg;
+  std::optional<Rgba8> bg;
+
+  ChangeRun
+  operator() (const RawChange &raw)
+  {
+    ChangeRun run{ raw.origin, raw.glyphs, {}, {}, false, false };
+
+    if (raw.fg == DEFAULT_COLOR && fg)
+      {
+        run.fg_reset = true;
+        fg = std::nullopt;
+      }
+    else if (raw.fg != DEFAULT_COLOR && raw.fg != fg)
+      {
+        run.fg_change = raw.fg;
+        fg = raw.fg;
+      }
+
+    if (raw.bg == DEFAULT_COLOR && bg)
+      {
+        run.bg_reset = true;
+        bg = std::nullopt;
+      }
+    else if (raw.bg != DEFAULT_COLOR && raw.bg != bg)
+      {
+        run.bg_change = raw.bg;
+        bg = raw.bg;
+      }
+
+    return run;
+  }
 };
 
-/// Find the first cell difference in a line starting from start_x
-std::optional<std::size_t>
-find_next_diff_in_line (const DiffState &state, std::size_t y,
-                        std::size_t start_x) noexcept;
+// ============================================================================
+// Pipeline building blocks
+// ============================================================================
 
-/// Find where the color-consistent run ends
-std::size_t find_run_end (const DiffState &state, std::size_t y,
-                          std::size_t start_x, std::optional<Rgba8> run_fg,
-                          std::optional<Rgba8> run_bg) noexcept;
+/// Did this cell change? (comparing old vs new from a zipped pair)
+constexpr auto is_changed = [] (const auto &pair) {
+  const auto &[old_cell, new_cell] = pair;
+  return old_cell != new_cell;
+};
 
-} // namespace detail
+/// Should two cell pairs belong in the same run?
+/// Yes if: both changed (or both unchanged) AND same colors in new buffer.
+constexpr auto same_run = [] (const auto &a, const auto &b) {
+  const auto &[old_a, new_a] = a;
+  const auto &[old_b, new_b] = b;
+  return is_changed (a) == is_changed (b)  // same change status
+         && new_a.fg == new_b.fg           // same foreground
+         && new_a.bg == new_b.bg;          // same background
+};
 
-/// Generate change runs between two rasters using coroutines.
-/// Automatically tracks terminal color state to minimize escape sequences.
+// ============================================================================
+// The diff pipeline
+// ============================================================================
+
+/// Extract changed runs from a single row.
+/// Groups cells by run boundaries, keeps only changed runs, converts to
+/// RawChange.
+inline auto
+row_changes (height_t y, auto cells, const Raster &back)
+{
+  return cells
+         | std::views::chunk_by (same_run)
+         | std::views::filter ([] (auto chunk) {
+             return is_changed (*chunk.begin ());
+           })
+         | std::views::transform ([y, &back] (auto chunk) {
+             const auto &[old_cell, new_cell] = *chunk.begin ();
+             return RawChange{
+               .origin = Pos::at (new_cell.col, y),
+               .glyphs = back.glyph_span (y, new_cell.col,
+                                          std::ranges::distance (chunk)),
+               .fg = new_cell.fg,
+               .bg = new_cell.bg,
+             };
+           });
+}
+
+/// Iterate changed regions between two rasters as a lazy range.
 ///
-/// Usage:
-///   for (const auto& run : diff_rasters(front, back)) {
-///       // Emit ANSI codes for run.fg_change, run.bg_change, run.fg_reset,
-///       // etc. // Write run.glyphs to terminal
-///   }
-coro::generator<ChangeRun> diff_rasters (const Raster &front,
-                                         const Raster &back);
+/// Pipeline:
+///   zip_rows(front, back)    -- pair up rows from both rasters
+///   | transform(row_changes) -- extract changed runs from each row
+///   | join                   -- flatten into single stream
+///
+inline auto
+raw_changes (const Raster &front, const Raster &back)
+{
+  return zip_rows (front, back)
+         | std::views::transform ([&back] (auto row_pair) {
+             auto [y, cells] = row_pair;
+             return row_changes (y, cells, back);
+           })
+         | std::views::join;
+}
+
+/// Iterate changed regions, tracking color state for minimal ANSI output.
+template <typename F>
+void
+diff_rasters (const Raster &front, const Raster &back, F &&emit)
+{
+  ColorState colors;
+  for (const auto &raw : raw_changes (front, back))
+    emit (colors (raw));
+}
 
 } // namespace nxb

@@ -42,7 +42,7 @@ using HeightHint = SizeHint<ln>;
 // ============================================================================
 
 template <typename L>
-concept Layout = requires (const L &layout, Raster &raster, Size size) {
+concept Layout = requires (const L &layout, RasterView &raster, Size size) {
   { layout.width_hint () } -> std::convertible_to<WidthHint>;
   { layout.height_hint () } -> std::convertible_to<HeightHint>;
   { layout.render (raster, size) } -> std::same_as<void>;
@@ -71,7 +71,7 @@ template <typename RenderFn> struct Leaf
   }
 
   void
-  render (Raster &raster, Size size) const
+  render (RasterView &raster, Size size) const
   {
     render_fn (raster, size);
   }
@@ -89,48 +89,31 @@ leaf (WidthHint w, HeightHint h, F &&f)
 // ============================================================================
 
 // Write text at a typed position
-inline std::size_t
-write_text (Raster &r, Pos pos, std::string_view text)
+inline col_t
+write_text (RasterView &r, Pos pos, std::string_view text)
 {
-  return r.write_text (pos.col (), pos.row (), text);
+  return r.write_text (pos, text);
 }
 
 // Set foreground color at a typed position
 inline void
-set_fg (Raster &r, Pos pos, Rgba8 color)
+set_fg (RasterView &r, Pos pos, Rgba8 color)
 {
-  r.set_fg (pos.col (), pos.row (), color);
+  r.set_fg (pos, color);
 }
 
 // Set background color at a typed position
 inline void
-set_bg (Raster &r, Pos pos, Rgba8 color)
+set_bg (RasterView &r, Pos pos, Rgba8 color)
 {
-  r.set_bg (pos.col (), pos.row (), color);
+  r.set_bg (pos, color);
 }
 
 // Create subraster from position and size
-inline Raster
-subraster (const Raster &r, Pos pos, Size size)
+inline RasterView
+subraster (RasterView &r, Pos pos, Size size)
 {
-  return r.subraster (pos.col (), pos.row (), size.w.numerical_value_in (ch),
-                      size.h.numerical_value_in (ln));
-}
-
-// Iterate over all positions in a region
-template <typename Fn>
-void
-for_each_cell (Pos origin, Size extent, Fn &&fn)
-{
-  const auto w = extent.w.numerical_value_in (ch);
-  const auto h = extent.h.numerical_value_in (ln);
-  for (std::size_t dy = 0; dy < h; ++dy)
-    {
-      for (std::size_t dx = 0; dx < w; ++dx)
-        {
-          fn (origin + dx * ch + dy * ln);
-        }
-    }
+  return r.subraster (pos, size);
 }
 
 // ============================================================================
@@ -146,11 +129,10 @@ struct Span
 
 // Render a span to a raster at position 0,0
 inline void
-render_span (Raster &r, const Span &s)
+render_span (RasterView &r, const Span &s)
 {
   write_text (r, Pos::origin (), s.text);
-  auto subraster
-      = r.subraster (Pos::origin (), Size (s.text.size () * ch, 1 * ln));
+  // TODO: apply colors to the span region
 }
 
 // ============================================================================
@@ -200,7 +182,7 @@ text (std::string s)
 {
   auto w = utf8_width (s);
   return leaf (WidthHint::fixed (w), HeightHint::fixed (1 * ln),
-               [=] (Raster &r, Size) { write_text (r, Pos::origin (), s); });
+               [=] (RasterView &r, Size) { write_text (r, Pos::origin (), s); });
 }
 
 // Fill: solid color rectangle (grows in both dimensions)
@@ -208,9 +190,8 @@ inline auto
 fill (Rgba8 color = Rgba8 (60, 60, 60))
 {
   return leaf (WidthHint::grow (), HeightHint::grow (),
-               [=] (Raster &r, Size size) {
-                 for_each_cell (Pos::origin (), size,
-                                [&] (Pos p) { set_bg (r, p, color); });
+               [=] (RasterView &r, Size) {
+                 std::ranges::fill (r.bgs (), color);
                });
 }
 
@@ -219,7 +200,7 @@ inline auto
 hrule ()
 {
   return leaf (WidthHint::grow (), HeightHint::fixed (1 * ln),
-               [=] (Raster &r, Size size) {
+               [=] (RasterView &r, Size size) {
                  write_text (r, Pos::origin (), repeat ("─", size.w));
                });
 }
@@ -254,13 +235,10 @@ progress_bar (percent_t pct, Rgba8 fg = Rgba8 (100, 180, 255),
               Rgba8 bg = Rgba8 (50, 50, 50))
 {
   return leaf (WidthHint::grow (), HeightHint::fixed (1 * ln),
-               [=] (Raster &r, Size size) {
-                 for_each_cell (Pos::origin (), Size{ size.w, 1 * ln },
-                                [&] (Pos p) {
-                                  set_bg (r, p, bg);
-                                  set_fg (r, p, fg);
-                                });
-                 write_text (r, Pos::origin (), bar_string (pct, size.w));
+               [=] (RasterView &r, Size) {
+                 std::ranges::fill (r.bgs (), bg);
+                 std::ranges::fill (r.fgs (), fg);
+                 r.write_text (Pos::origin (), bar_string (pct, r.width ()));
                });
 }
 
@@ -301,7 +279,7 @@ template <Layout... Children> struct Row
   }
 
   void
-  render (Raster &raster, Size size) const
+  render (RasterView &raster, Size size) const
   {
     constexpr std::size_t N = sizeof...(Children);
     if constexpr (N == 0)
@@ -414,7 +392,7 @@ template <Layout... Children> struct Column
   }
 
   void
-  render (Raster &raster, Size size) const
+  render (RasterView &raster, Size size) const
   {
     constexpr std::size_t N = sizeof...(Children);
     if constexpr (N == 0)
@@ -511,7 +489,7 @@ template <typename T, typename ViewFn> struct List
   }
 
   void
-  render (Raster &raster, Size size) const
+  render (RasterView &raster, Size size) const
   {
     const auto row_size = Size{ size.w, 1 * ln };
 

@@ -173,27 +173,26 @@ TerminalCompositor::present_frame (std::ostream &out)
   ansi::Writer w (buf);
   w.move_to (Pos::origin ());
 
-  for (const auto &[pos, glyphs, fg_change, bg_change, fg_reset, bg_reset] :
-       diff_rasters (front_, back_))
-    {
-      w.move_to (pos);
+  diff_rasters (front_, back_,
+                [&] (const ChangeRun &run) {
+                  w.move_to (run.origin);
 
-      if (bg_reset)
-        w.bg_default ();
-      else if (bg_change)
-        w.bg (bg_change->to_rgb ());
+                  if (run.bg_reset)
+                    w.bg_default ();
+                  else if (run.bg_change)
+                    w.bg (run.bg_change->to_rgb ());
 
-      if (fg_reset)
-        w.fg_default ();
-      else if (fg_change)
-        w.fg (fg_change->to_rgb ());
+                  if (run.fg_reset)
+                    w.fg_default ();
+                  else if (run.fg_change)
+                    w.fg (run.fg_change->to_rgb ());
 
-      for (const auto gid : glyphs)
-        {
-          if (auto text = glyphs_.get (gid))
-            w.text (*text);
-        }
-    }
+                  for (const auto gid : run.glyphs)
+                    {
+                      if (auto text = glyphs_.get (gid))
+                        w.text (*text);
+                    }
+                });
 
   out.write (buf.data (), static_cast<std::streamsize> (buf.size ()));
   out.flush ();
