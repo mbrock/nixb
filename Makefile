@@ -1,15 +1,22 @@
-.PHONY: all setup setup-opt build clean docs test vterm-test watch
+.PHONY: all setup build clean docs test watch
 
-ifndef IN_NIX_SHELL
-$(error You need to run this under 'nix develop')
-endif
+export CLICOLOR_FORCE=1
 
-export CLICOLOR=1
+CMAKE := nix develop -c cmake
 
 all: setup build
-setup:; cmake --preset default
-build:; cmake --build --preset default
-clean:; cmake --build --preset default --target clean
+setup:; $(CMAKE) --preset default
+build:; $(CMAKE) --build --preset default
+clean:; $(CMAKE) --build --preset default --target clean
 docs:; doxygen docs/Doxyfile.nix-api
-test: build; $(MAKE) -C build test
 watch:; find src -name '*.cpp' -o -name '*.hpp' | entr -cs 'make && ./build/nxbcg'
+
+# Run all tests with nice colorful output
+test: build
+	@echo ""
+	@echo "\033[1;36m━━━ raster-test ━━━\033[0m"
+	@./build/default/raster-test || true
+	@echo ""
+	@echo "\033[1;36m━━━ terminal-test ━━━\033[0m"
+	@./build/default/terminal-test || true
+	@echo ""

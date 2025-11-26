@@ -149,40 +149,16 @@ target_link_libraries(nxb
         CLI11::CLI11
 )
 
-add_executable(nxb-tui-tests src/test/tui-ut-main.cpp)
-target_include_directories(nxb-tui-tests PRIVATE src/test)
-target_link_libraries(nxb-tui-tests
-    PRIVATE
-        libnxt
-        Boost::ut
-        libcoro
-)
+# Test executables
+add_executable(raster-test src/test/raster-test.cpp)
+target_link_libraries(raster-test PRIVATE libnxt Boost::ut libcoro)
+
+add_executable(terminal-test src/test/terminal-test.cpp)
+target_link_libraries(terminal-test PRIVATE libnxt libvterm::libvterm Boost::ut)
 
 enable_testing()
-add_test(NAME tui-tests COMMAND nxb-tui-tests)
-
-add_custom_command(TARGET nxb-tui-tests POST_BUILD
-    COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure -R tui-tests
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-    COMMENT "Running tui tests..."
-)
-
-add_executable(nxb-app-tests src/test/app-ut-main.cpp)
-target_include_directories(nxb-app-tests PRIVATE src/test)
-target_link_libraries(nxb-app-tests
-    PRIVATE
-        libnxt
-        libvterm::libvterm
-        Boost::ut
-)
-
-add_test(NAME app-tests COMMAND nxb-app-tests)
-
-add_custom_command(TARGET nxb-app-tests POST_BUILD
-    COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure -R app-tests
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-    COMMENT "Running app tests..."
-)
+add_test(NAME raster-test COMMAND raster-test)
+add_test(NAME terminal-test COMMAND terminal-test)
 
 install(TARGETS nxbcg RUNTIME DESTINATION bin)
 
