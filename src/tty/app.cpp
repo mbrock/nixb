@@ -173,19 +173,52 @@ TerminalCompositor::present_frame (std::ostream &out)
   ansi::Writer w (buf);
   w.move_to (Pos::origin ());
 
+  // Track current colors to re-emit after SGR reset
+  std::optional<Rgba8> current_fg;
+  std::optional<Rgba8> current_bg;
+
   diff_rasters (front_, back_,
                 [&] (const ChangeRun &run) {
                   w.move_to (run.origin);
 
-                  if (run.bg_reset)
-                    w.bg_default ();
-                  else if (run.bg_change)
-                    w.bg (run.bg_change->to_rgb ());
+                  // Handle emphasis reset first (SGR 0 resets everything)
+                  if (run.em_reset)
+                    {
+                      w.reset ();
+                      // Re-emit colors after reset
+                      if (current_fg)
+                        w.fg (current_fg->to_rgb ());
+                      if (current_bg)
+                        w.bg (current_bg->to_rgb ());
+                    }
 
+                  // Update background
+                  if (run.bg_reset)
+                    {
+                      w.bg_default ();
+                      current_bg = std::nullopt;
+                    }
+                  else if (run.bg_change)
+                    {
+                      w.bg (run.bg_change->to_rgb ());
+                      current_bg = run.bg_change;
+                    }
+
+                  // Update foreground
                   if (run.fg_reset)
-                    w.fg_default ();
+                    {
+                      w.fg_default ();
+                      current_fg = std::nullopt;
+                    }
                   else if (run.fg_change)
-                    w.fg (run.fg_change->to_rgb ());
+                    {
+                      w.fg (run.fg_change->to_rgb ());
+                      current_fg = run.fg_change;
+                    }
+
+                  // Apply new emphasis (cast to fmt::emphasis)
+                  if (run.em_change)
+                    w.style (static_cast<ansi::emphasis> (*run.em_change));
 
                   for (const auto gid : run.glyphs)
                     {

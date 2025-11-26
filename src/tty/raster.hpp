@@ -14,80 +14,217 @@
 namespace nxb
 {
 
-/// Packed RGBA color (RGBA8888 format: 0xRRGGBBAA in memory)
-/// Interoperable with fmt::rgb for seamless integration with fmt's color
-/// system.
+/// Terminal color: packed into 32 bits.
+///
+/// Encoding (uses alpha=0 space for special values):
+///   alpha > 0:           True color RGBA (24-bit color + alpha)
+///   0x00000000-0x000000FF: 256-color palette (includes ANSI 16)
+///   0x00000100:          Terminal default (SGR 39/49)
+///
+/// This lets us represent all terminal color modes in a single uint32_t:
+///   - ANSI 16 colors (palette 0-15, respects terminal theme)
+///   - 256-color palette (0-255)
+///   - 24-bit true color with alpha
+///   - Terminal default (reset to user's configured color)
+///
 struct Rgba8
 {
   std::uint32_t value;
 
-  /// Construct from RGBA components
-  constexpr Rgba8 (const std::uint8_t r, const std::uint8_t g,
-                   const std::uint8_t b, const std::uint8_t a = 255) noexcept
-      : value (r | g << 8 | b << 16 | a << 24)
+  // ==========================================================================
+  // Construction
+  // ==========================================================================
+
+  /// Construct from RGBA components (true color)
+  constexpr Rgba8 (std::uint8_t r, std::uint8_t g, std::uint8_t b,
+                   std::uint8_t a = 255) noexcept
+      : value (r | (g << 8) | (b << 16) | (a << 24))
   {
   }
 
-  /// Construct from fmt::rgb (opaque)
-  constexpr Rgba8 (const fmt::rgb rgb, const std::uint8_t a = 255) noexcept
-      : value (rgb.r | rgb.g << 8 | rgb.b << 16 | a << 24)
+  /// Construct from fmt::rgb (opaque true color)
+  constexpr Rgba8 (fmt::rgb rgb, std::uint8_t a = 255) noexcept
+      : value (rgb.r | (rgb.g << 8) | (rgb.b << 16) | (a << 24))
   {
   }
 
-  /// Construct from fmt::color (opaque)
-  constexpr Rgba8 (const fmt::color c, const std::uint8_t a = 255) noexcept
+  /// Construct from fmt::color (opaque true color)
+  constexpr Rgba8 (fmt::color c, std::uint8_t a = 255) noexcept
       : Rgba8 (fmt::rgb (c), a)
   {
   }
 
-  /// Transparent black (default for terminal)
+  /// Private: construct from raw value
+  static constexpr Rgba8
+  from_raw (std::uint32_t v) noexcept
+  {
+    Rgba8 c{ 0, 0, 0, 0 };
+    c.value = v;
+    return c;
+  }
+
+  // ==========================================================================
+  // Named constructors for special values
+  // ==========================================================================
+
+  /// Terminal default color (SGR 39 for fg, SGR 49 for bg)
+  static constexpr Rgba8
+  terminal_default () noexcept
+  {
+    return from_raw (0x00000100);
+  }
+
+  /// 256-color palette (0-255, includes ANSI 16 at 0-15)
+  static constexpr Rgba8
+  palette (std::uint8_t index) noexcept
+  {
+    return from_raw (index);
+  }
+
+  /// ANSI colors by name (0-15)
+  static constexpr Rgba8 black () noexcept { return palette (0); }
+  static constexpr Rgba8 red () noexcept { return palette (1); }
+  static constexpr Rgba8 green () noexcept { return palette (2); }
+  static constexpr Rgba8 yellow () noexcept { return palette (3); }
+  static constexpr Rgba8 blue () noexcept { return palette (4); }
+  static constexpr Rgba8 magenta () noexcept { return palette (5); }
+  static constexpr Rgba8 cyan () noexcept { return palette (6); }
+  static constexpr Rgba8 white () noexcept { return palette (7); }
+  static constexpr Rgba8 bright_black () noexcept { return palette (8); }
+  static constexpr Rgba8 bright_red () noexcept { return palette (9); }
+  static constexpr Rgba8 bright_green () noexcept { return palette (10); }
+  static constexpr Rgba8 bright_yellow () noexcept { return palette (11); }
+  static constexpr Rgba8 bright_blue () noexcept { return palette (12); }
+  static constexpr Rgba8 bright_magenta () noexcept { return palette (13); }
+  static constexpr Rgba8 bright_cyan () noexcept { return palette (14); }
+  static constexpr Rgba8 bright_white () noexcept { return palette (15); }
+
+  /// Fully transparent (for compositing - layer below shows through)
   static constexpr Rgba8
   transparent () noexcept
   {
-    return { 0, 0, 0, 0 };
+    // Use a value outside palette and default range
+    return from_raw (0x00000200);
   }
 
-  /// Opaque white
-  static constexpr Rgba8
-  white () noexcept
+  // ==========================================================================
+  // Queries
+  // ==========================================================================
+
+  [[nodiscard]] constexpr bool
+  is_true_color () const noexcept
   {
-    return { 255, 255, 255, 255 };
+    return (value >> 24) > 0; // alpha > 0
   }
 
-  /// Extract color components
+  [[nodiscard]] constexpr bool
+  is_palette () const noexcept
+  {
+    return value <= 0xFF;
+  }
+
+  [[nodiscard]] constexpr bool
+  is_terminal_default () const noexcept
+  {
+    return value == 0x00000100;
+  }
+
+  [[nodiscard]] constexpr bool
+  is_transparent () const noexcept
+  {
+    return value == 0x00000200;
+  }
+
   [[nodiscard]] constexpr std::uint8_t
-  r () const noexcept
+  palette_index () const noexcept
+  {
+    return static_cast<std::uint8_t> (value & 0xFF);
+  }
+
+  // ==========================================================================
+  // RGBA component access (only meaningful for true color)
+  // ==========================================================================
+
+  [[nodiscard]] constexpr std::uint8_t r () const noexcept
   {
     return value & 0xFF;
   }
-  [[nodiscard]] constexpr std::uint8_t
-  g () const noexcept
+  [[nodiscard]] constexpr std::uint8_t g () const noexcept
   {
-    return value >> 8 & 0xFF;
+    return (value >> 8) & 0xFF;
   }
-  [[nodiscard]] constexpr std::uint8_t
-  b () const noexcept
+  [[nodiscard]] constexpr std::uint8_t b () const noexcept
   {
-    return value >> 16 & 0xFF;
+    return (value >> 16) & 0xFF;
   }
-  [[nodiscard]] constexpr std::uint8_t
-  a () const noexcept
+  [[nodiscard]] constexpr std::uint8_t a () const noexcept
   {
-    return value >> 24 & 0xFF;
+    return (value >> 24) & 0xFF;
   }
 
-  /// Convert to fmt::rgb (discards alpha)
+  /// Convert to fmt::rgb (only meaningful for true color)
   [[nodiscard]] constexpr fmt::rgb
   to_rgb () const noexcept
   {
     return fmt::rgb (r (), g (), b ());
   }
 
-  /// Format
-  friend std::ostream &operator<< (std::ostream &os, const Rgba8 &c);
+  // ==========================================================================
+  // Comparison and formatting
+  // ==========================================================================
 
   constexpr auto operator<=> (const Rgba8 &) const = default;
+
+  friend std::ostream &operator<< (std::ostream &os, const Rgba8 &c);
 };
+
+// ============================================================================
+// Text emphasis (SGR attributes beyond color)
+// ============================================================================
+
+/// Bitfield for text emphasis attributes.
+/// These map directly to SGR codes: bold=1, faint=2, italic=3, etc.
+enum class Emphasis : std::uint8_t
+{
+  none = 0,
+  bold = 1 << 0,
+  faint = 1 << 1,
+  italic = 1 << 2,
+  underline = 1 << 3,
+  blink = 1 << 4,
+  reverse = 1 << 5,
+  conceal = 1 << 6,
+  strikethrough = 1 << 7,
+};
+
+constexpr Emphasis
+operator| (Emphasis a, Emphasis b) noexcept
+{
+  return static_cast<Emphasis> (static_cast<std::uint8_t> (a)
+                                | static_cast<std::uint8_t> (b));
+}
+
+constexpr Emphasis
+operator& (Emphasis a, Emphasis b) noexcept
+{
+  return static_cast<Emphasis> (static_cast<std::uint8_t> (a)
+                                & static_cast<std::uint8_t> (b));
+}
+
+constexpr Emphasis &
+operator|= (Emphasis &a, Emphasis b) noexcept
+{
+  return a = a | b;
+}
+
+constexpr bool
+has_emphasis (Emphasis set, Emphasis flag) noexcept
+{
+  return (set & flag) != Emphasis::none;
+}
+
+/// Default emphasis (none)
+inline constexpr Emphasis DEFAULT_EMPHASIS = Emphasis::none;
 
 // ============================================================================
 // Type aliases for mdspan views
@@ -103,9 +240,12 @@ using const_glyph_view_t
 using color_view_t = std::experimental::mdspan<Rgba8, mdspan_extents>;
 using const_color_view_t
     = std::experimental::mdspan<const Rgba8, mdspan_extents>;
+using emphasis_view_t = std::experimental::mdspan<Emphasis, mdspan_extents>;
+using const_emphasis_view_t
+    = std::experimental::mdspan<const Emphasis, mdspan_extents>;
 
-/// Default color for terminal cells (transparent = use terminal default)
-inline constexpr Rgba8 DEFAULT_COLOR = Rgba8::transparent ();
+/// Default color for terminal cells (resets to terminal's configured color)
+inline constexpr Rgba8 DEFAULT_COLOR = Rgba8::terminal_default ();
 
 // ============================================================================
 // mdspan to range adapter
@@ -157,24 +297,27 @@ struct IndexedCell
   GlyphTable::GlyphId glyph;
   Rgba8 fg;
   Rgba8 bg;
+  Emphasis em;
 
   bool
   operator== (const IndexedCell &other) const
   {
-    return glyph == other.glyph && fg == other.fg && bg == other.bg;
+    return glyph == other.glyph && fg == other.fg && bg == other.bg
+           && em == other.em;
   }
 };
 
-/// Get a row as indexed cells (col, glyph, fg, bg).
+/// Get a row as indexed cells (col, glyph, fg, bg, em).
 inline auto
 indexed_cell_row (const_glyph_view_t glyphs, const_color_view_t fgs,
-                  const_color_view_t bgs, std::size_t row_idx)
+                  const_color_view_t bgs, const_emphasis_view_t ems,
+                  std::size_t row_idx)
 {
   const auto cols = glyphs.extent (1);
   return std::views::iota (std::size_t{ 0 }, cols)
          | std::views::transform ([=] (std::size_t x) {
              return IndexedCell{ x * ch, glyphs[row_idx, x], fgs[row_idx, x],
-                                 bgs[row_idx, x] };
+                                 bgs[row_idx, x], ems[row_idx, x] };
            });
 }
 
@@ -188,6 +331,7 @@ struct Cell
   GlyphTable::GlyphId glyph;
   Rgba8 fg;
   Rgba8 bg;
+  Emphasis em;
 };
 
 /// Non-owning view into raster storage. This is the primary working type
@@ -198,8 +342,9 @@ class RasterView
 public:
   /// Construct from mdspan views and glyph table
   RasterView (glyph_view_t glyphs, color_view_t fgs, color_view_t bgs,
-              GlyphTable &glyph_table) noexcept
-      : glyphs_ (glyphs), fgs_ (fgs), bgs_ (bgs), glyph_table_ (&glyph_table)
+              emphasis_view_t ems, GlyphTable &glyph_table) noexcept
+      : glyphs_ (glyphs), fgs_ (fgs), bgs_ (bgs), ems_ (ems),
+        glyph_table_ (&glyph_table)
   {
   }
 
@@ -233,6 +378,9 @@ public:
   /// Set background color at position
   void set_bg (Pos pos, Rgba8 color) const noexcept;
 
+  /// Set emphasis at position
+  void set_em (Pos pos, Emphasis em) const noexcept;
+
   /// Convenience: set ASCII character
   void
   set_char (Pos pos, char c) const noexcept
@@ -262,6 +410,11 @@ public:
   {
     return bgs_;
   }
+  [[nodiscard]] emphasis_view_t
+  ems_2d () const noexcept
+  {
+    return ems_;
+  }
 
   /// Flat ranges for algorithms (row-major order)
   [[nodiscard]] auto
@@ -279,6 +432,11 @@ public:
   {
     return as_range (bgs_);
   }
+  [[nodiscard]] auto
+  ems () const
+  {
+    return as_range (ems_);
+  }
 
   /// Access glyph table
   [[nodiscard]] GlyphTable &
@@ -291,6 +449,7 @@ private:
   glyph_view_t glyphs_;
   color_view_t fgs_;
   color_view_t bgs_;
+  emphasis_view_t ems_;
   GlyphTable *glyph_table_;
 };
 
@@ -351,6 +510,11 @@ public:
   {
     return bgs_storage_;
   }
+  [[nodiscard]] std::span<const Emphasis>
+  ems () const noexcept
+  {
+    return ems_storage_;
+  }
 
   /// Get a span of glyphs for a region on a row
   [[nodiscard]] std::span<const GlyphTable::GlyphId>
@@ -366,12 +530,13 @@ public:
   [[nodiscard]] const_glyph_view_t glyphs_2d () const noexcept;
   [[nodiscard]] const_color_view_t fgs_2d () const noexcept;
   [[nodiscard]] const_color_view_t bgs_2d () const noexcept;
+  [[nodiscard]] const_emphasis_view_t ems_2d () const noexcept;
 
   /// Get a row as indexed cells for iteration
   [[nodiscard]] auto
   row (height_t y) const
   {
-    return indexed_cell_row (glyphs_2d (), fgs_2d (), bgs_2d (),
+    return indexed_cell_row (glyphs_2d (), fgs_2d (), bgs_2d (), ems_2d (),
                              y.numerical_value_in (ln));
   }
 
@@ -410,6 +575,7 @@ private:
   std::vector<GlyphTable::GlyphId> glyphs_storage_;
   std::vector<Rgba8> fgs_storage_;
   std::vector<Rgba8> bgs_storage_;
+  std::vector<Emphasis> ems_storage_;
   GlyphTable *glyph_table_;
 };
 

@@ -72,6 +72,17 @@ RasterView::set_bg (const Pos pos, const Rgba8 color) const noexcept
   bgs_[y, x] = color;
 }
 
+void
+RasterView::set_em (const Pos pos, const Emphasis em) const noexcept
+{
+  const auto x = pos.col ();
+  const auto y = pos.row ();
+  if (x >= glyphs_.extent (1) || y >= glyphs_.extent (0))
+    return;
+
+  ems_[y, x] = em;
+}
+
 col_t
 RasterView::write_text (const Pos pos, const std::string_view text) const
     noexcept
@@ -124,7 +135,7 @@ RasterView::get_cell (const Pos pos) const noexcept
   if (x >= glyphs_.extent (1) || y >= glyphs_.extent (0))
     return std::nullopt;
 
-  return Cell{ glyphs_[y, x], fgs_[y, x], bgs_[y, x] };
+  return Cell{ glyphs_[y, x], fgs_[y, x], bgs_[y, x], ems_[y, x] };
 }
 
 RasterView
@@ -148,8 +159,10 @@ RasterView::subraster (const Pos origin, const Size size) const noexcept
       = submdspan (fgs_, std::pair{ y0, y1 }, std::pair{ x0, x1 });
   const auto bg_sub
       = submdspan (bgs_, std::pair{ y0, y1 }, std::pair{ x0, x1 });
+  const auto em_sub
+      = submdspan (ems_, std::pair{ y0, y1 }, std::pair{ x0, x1 });
 
-  return RasterView (glyph_sub, fg_sub, bg_sub, *glyph_table_);
+  return RasterView (glyph_sub, fg_sub, bg_sub, em_sub, *glyph_table_);
 }
 
 // ============================================================================
@@ -168,6 +181,7 @@ Raster::Raster (const width_t width, const height_t height, GlyphTable &glyphs)
       glyphs_storage_ (cols_from (width) * rows_from (height), 32),
       fgs_storage_ (cols_from (width) * rows_from (height), DEFAULT_COLOR),
       bgs_storage_ (cols_from (width) * rows_from (height), DEFAULT_COLOR),
+      ems_storage_ (cols_from (width) * rows_from (height), DEFAULT_EMPHASIS),
       glyph_table_ (&glyphs)
 {
 }
@@ -186,8 +200,9 @@ Raster::view () noexcept
   glyph_view_t glyphs (glyphs_storage_.data (), mdspan_extents{ rows, cols });
   color_view_t fgs (fgs_storage_.data (), mdspan_extents{ rows, cols });
   color_view_t bgs (bgs_storage_.data (), mdspan_extents{ rows, cols });
+  emphasis_view_t ems (ems_storage_.data (), mdspan_extents{ rows, cols });
 
-  return RasterView (glyphs, fgs, bgs, *glyph_table_);
+  return RasterView (glyphs, fgs, bgs, ems, *glyph_table_);
 }
 
 void
@@ -196,6 +211,7 @@ Raster::clear ()
   std::ranges::fill (glyphs_storage_, 32);
   std::ranges::fill (fgs_storage_, DEFAULT_COLOR);
   std::ranges::fill (bgs_storage_, DEFAULT_COLOR);
+  std::ranges::fill (ems_storage_, DEFAULT_EMPHASIS);
 }
 
 const_glyph_view_t
@@ -223,6 +239,15 @@ Raster::bgs_2d () const noexcept
   const auto cols = cols_from (width_);
   return const_color_view_t (bgs_storage_.data (),
                              mdspan_extents{ rows, cols });
+}
+
+const_emphasis_view_t
+Raster::ems_2d () const noexcept
+{
+  const auto rows = rows_from (height_);
+  const auto cols = cols_from (width_);
+  return const_emphasis_view_t (ems_storage_.data (),
+                                mdspan_extents{ rows, cols });
 }
 
 } // namespace nxb

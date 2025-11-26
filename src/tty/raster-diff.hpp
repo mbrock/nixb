@@ -13,57 +13,72 @@ namespace nxb
 // Data types
 // ============================================================================
 
-/// A detected change: position, glyphs, and colors (before color optimization).
+/// A detected change: position, glyphs, colors, emphasis (before optimization).
 struct RawChange
 {
   Pos origin;
   std::span<const GlyphTable::GlyphId> glyphs;
   Rgba8 fg;
   Rgba8 bg;
+  Emphasis em;
 };
 
-/// A run of changed cells, with color deltas for minimal ANSI output.
+/// A run of changed cells, with color/emphasis deltas for minimal ANSI output.
 struct ChangeRun
 {
   Pos origin;
   std::span<const GlyphTable::GlyphId> glyphs;
   std::optional<Rgba8> fg_change;
   std::optional<Rgba8> bg_change;
+  std::optional<Emphasis> em_change;
   bool fg_reset = false;
   bool bg_reset = false;
+  bool em_reset = false;
 };
 
-/// Tracks terminal color state, converting RawChange → ChangeRun with deltas.
-struct ColorState
+/// Tracks terminal style state, converting RawChange → ChangeRun with deltas.
+struct StyleState
 {
   std::optional<Rgba8> fg;
   std::optional<Rgba8> bg;
+  std::optional<Emphasis> em;
 
   ChangeRun
   operator() (const RawChange &raw)
   {
-    ChangeRun run{ raw.origin, raw.glyphs, {}, {}, false, false };
+    ChangeRun run{ raw.origin, raw.glyphs, {}, {}, {}, false, false, false };
 
-    if (raw.fg == DEFAULT_COLOR && fg)
+    if (raw.fg.is_terminal_default () && fg)
       {
         run.fg_reset = true;
         fg = std::nullopt;
       }
-    else if (raw.fg != DEFAULT_COLOR && raw.fg != fg)
+    else if (!raw.fg.is_terminal_default () && raw.fg != fg)
       {
         run.fg_change = raw.fg;
         fg = raw.fg;
       }
 
-    if (raw.bg == DEFAULT_COLOR && bg)
+    if (raw.bg.is_terminal_default () && bg)
       {
         run.bg_reset = true;
         bg = std::nullopt;
       }
-    else if (raw.bg != DEFAULT_COLOR && raw.bg != bg)
+    else if (!raw.bg.is_terminal_default () && raw.bg != bg)
       {
         run.bg_change = raw.bg;
         bg = raw.bg;
+      }
+
+    if (raw.em == Emphasis::none && em)
+      {
+        run.em_reset = true;
+        em = std::nullopt;
+      }
+    else if (raw.em != Emphasis::none && raw.em != em)
+      {
+        run.em_change = raw.em;
+        em = raw.em;
       }
 
     return run;
@@ -81,13 +96,14 @@ constexpr auto is_changed = [] (const auto &pair) {
 };
 
 /// Should two cell pairs belong in the same run?
-/// Yes if: both changed (or both unchanged) AND same colors in new buffer.
+/// Yes if: both changed (or both unchanged) AND same style in new buffer.
 constexpr auto same_run = [] (const auto &a, const auto &b) {
   const auto &[old_a, new_a] = a;
   const auto &[old_b, new_b] = b;
   return is_changed (a) == is_changed (b)  // same change status
          && new_a.fg == new_b.fg           // same foreground
-         && new_a.bg == new_b.bg;          // same background
+         && new_a.bg == new_b.bg           // same background
+         && new_a.em == new_b.em;          // same emphasis
 };
 
 // ============================================================================
@@ -113,6 +129,7 @@ row_changes (height_t y, auto cells, const Raster &back)
                                           std::ranges::distance (chunk)),
                .fg = new_cell.fg,
                .bg = new_cell.bg,
+               .em = new_cell.em,
              };
            });
 }
@@ -135,14 +152,14 @@ raw_changes (const Raster &front, const Raster &back)
          | std::views::join;
 }
 
-/// Iterate changed regions, tracking color state for minimal ANSI output.
+/// Iterate changed regions, tracking style state for minimal ANSI output.
 template <typename F>
 void
 diff_rasters (const Raster &front, const Raster &back, F &&emit)
 {
-  ColorState colors;
+  StyleState style;
   for (const auto &raw : raw_changes (front, back))
-    emit (colors (raw));
+    emit (style (raw));
 }
 
 } // namespace nxb
