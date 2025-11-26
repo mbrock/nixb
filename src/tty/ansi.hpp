@@ -69,6 +69,10 @@ public:
   Writer &fg (terminal_color c);
   Writer &bg (terminal_color c);
 
+  /// 256-color palette
+  Writer &fg_palette (std::uint8_t index);
+  Writer &bg_palette (std::uint8_t index);
+
   /// Reset colors
   Writer &fg_default ();
   Writer &bg_default ();

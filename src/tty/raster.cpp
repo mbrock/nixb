@@ -39,8 +39,8 @@ operator<< (std::ostream &os, const Rgba8 &c)
 // ============================================================================
 
 void
-RasterView::set_glyph (const Pos pos, const GlyphTable::GlyphId gid) const
-    noexcept
+RasterView::set_glyph (const Pos pos,
+                       const GlyphTable::GlyphId gid) const noexcept
 {
   const auto x = pos.col ();
   const auto y = pos.row ();
@@ -84,8 +84,8 @@ RasterView::set_em (const Pos pos, const Emphasis em) const noexcept
 }
 
 col_t
-RasterView::write_text (const Pos pos, const std::string_view text) const
-    noexcept
+RasterView::write_text (const Pos pos,
+                        const std::string_view text) const noexcept
 {
   const auto rows = glyphs_.extent (0);
   const auto cols = glyphs_.extent (1);
@@ -176,8 +176,7 @@ Raster::Raster (const std::size_t width, const std::size_t height,
 }
 
 Raster::Raster (const width_t width, const height_t height, GlyphTable &glyphs)
-    : width_ (width),
-      height_ (height),
+    : width_ (width), height_ (height),
       glyphs_storage_ (cols_from (width) * rows_from (height), 32),
       fgs_storage_ (cols_from (width) * rows_from (height), DEFAULT_COLOR),
       bgs_storage_ (cols_from (width) * rows_from (height), DEFAULT_COLOR),

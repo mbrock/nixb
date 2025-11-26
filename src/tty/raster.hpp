@@ -82,22 +82,86 @@ struct Rgba8
   }
 
   /// ANSI colors by name (0-15)
-  static constexpr Rgba8 black () noexcept { return palette (0); }
-  static constexpr Rgba8 red () noexcept { return palette (1); }
-  static constexpr Rgba8 green () noexcept { return palette (2); }
-  static constexpr Rgba8 yellow () noexcept { return palette (3); }
-  static constexpr Rgba8 blue () noexcept { return palette (4); }
-  static constexpr Rgba8 magenta () noexcept { return palette (5); }
-  static constexpr Rgba8 cyan () noexcept { return palette (6); }
-  static constexpr Rgba8 white () noexcept { return palette (7); }
-  static constexpr Rgba8 bright_black () noexcept { return palette (8); }
-  static constexpr Rgba8 bright_red () noexcept { return palette (9); }
-  static constexpr Rgba8 bright_green () noexcept { return palette (10); }
-  static constexpr Rgba8 bright_yellow () noexcept { return palette (11); }
-  static constexpr Rgba8 bright_blue () noexcept { return palette (12); }
-  static constexpr Rgba8 bright_magenta () noexcept { return palette (13); }
-  static constexpr Rgba8 bright_cyan () noexcept { return palette (14); }
-  static constexpr Rgba8 bright_white () noexcept { return palette (15); }
+  static constexpr Rgba8
+  black () noexcept
+  {
+    return palette (0);
+  }
+  static constexpr Rgba8
+  red () noexcept
+  {
+    return palette (1);
+  }
+  static constexpr Rgba8
+  green () noexcept
+  {
+    return palette (2);
+  }
+  static constexpr Rgba8
+  yellow () noexcept
+  {
+    return palette (3);
+  }
+  static constexpr Rgba8
+  blue () noexcept
+  {
+    return palette (4);
+  }
+  static constexpr Rgba8
+  magenta () noexcept
+  {
+    return palette (5);
+  }
+  static constexpr Rgba8
+  cyan () noexcept
+  {
+    return palette (6);
+  }
+  static constexpr Rgba8
+  white () noexcept
+  {
+    return palette (7);
+  }
+  static constexpr Rgba8
+  bright_black () noexcept
+  {
+    return palette (8);
+  }
+  static constexpr Rgba8
+  bright_red () noexcept
+  {
+    return palette (9);
+  }
+  static constexpr Rgba8
+  bright_green () noexcept
+  {
+    return palette (10);
+  }
+  static constexpr Rgba8
+  bright_yellow () noexcept
+  {
+    return palette (11);
+  }
+  static constexpr Rgba8
+  bright_blue () noexcept
+  {
+    return palette (12);
+  }
+  static constexpr Rgba8
+  bright_magenta () noexcept
+  {
+    return palette (13);
+  }
+  static constexpr Rgba8
+  bright_cyan () noexcept
+  {
+    return palette (14);
+  }
+  static constexpr Rgba8
+  bright_white () noexcept
+  {
+    return palette (15);
+  }
 
   /// Fully transparent (for compositing - layer below shows through)
   static constexpr Rgba8
@@ -145,19 +209,23 @@ struct Rgba8
   // RGBA component access (only meaningful for true color)
   // ==========================================================================
 
-  [[nodiscard]] constexpr std::uint8_t r () const noexcept
+  [[nodiscard]] constexpr std::uint8_t
+  r () const noexcept
   {
     return value & 0xFF;
   }
-  [[nodiscard]] constexpr std::uint8_t g () const noexcept
+  [[nodiscard]] constexpr std::uint8_t
+  g () const noexcept
   {
     return (value >> 8) & 0xFF;
   }
-  [[nodiscard]] constexpr std::uint8_t b () const noexcept
+  [[nodiscard]] constexpr std::uint8_t
+  b () const noexcept
   {
     return (value >> 16) & 0xFF;
   }
-  [[nodiscard]] constexpr std::uint8_t a () const noexcept
+  [[nodiscard]] constexpr std::uint8_t
+  a () const noexcept
   {
     return (value >> 24) & 0xFF;
   }
@@ -230,9 +298,9 @@ inline constexpr Emphasis DEFAULT_EMPHASIS = Emphasis::none;
 // Type aliases for mdspan views
 // ============================================================================
 
-using mdspan_extents = std::experimental::extents<std::size_t,
-                                                   std::dynamic_extent,
-                                                   std::dynamic_extent>;
+using mdspan_extents
+    = std::experimental::extents<std::size_t, std::dynamic_extent,
+                                 std::dynamic_extent>;
 using glyph_view_t
     = std::experimental::mdspan<GlyphTable::GlyphId, mdspan_extents>;
 using const_glyph_view_t
@@ -260,9 +328,8 @@ as_range (std::experimental::mdspan<T, Extents, Layout, Accessor> m)
   const auto rows = m.extent (0);
   const auto cols = m.extent (1);
   return std::views::iota (std::size_t{ 0 }, rows * cols)
-         | std::views::transform ([=] (std::size_t i) -> T & {
-             return m[i / cols, i % cols];
-           });
+         | std::views::transform ([=] (std::size_t i) -> T &
+                                    { return m[i / cols, i % cols]; });
 }
 
 /// Get a single row from a 2D mdspan as a range.
@@ -273,8 +340,8 @@ row_range (std::experimental::mdspan<T, Extents, Layout, Accessor> m,
 {
   const auto cols = m.extent (1);
   return std::views::iota (std::size_t{ 0 }, cols)
-         | std::views::transform (
-             [=] (std::size_t col) -> T & { return m[row_idx, col]; });
+         | std::views::transform ([=] (std::size_t col) -> T &
+                                    { return m[row_idx, col]; });
 }
 
 /// Get an indexed row range (pairs of column index and value reference).
@@ -285,9 +352,11 @@ indexed_row (std::experimental::mdspan<T, Extents, Layout, Accessor> m,
 {
   const auto cols = m.extent (1);
   return std::views::iota (std::size_t{ 0 }, cols)
-         | std::views::transform ([=] (std::size_t col) {
-             return std::pair<std::size_t, T &>{ col, m[row_idx, col] };
-           });
+         | std::views::transform (
+             [=] (std::size_t col)
+               {
+                 return std::pair<std::size_t, T &>{ col, m[row_idx, col] };
+               });
 }
 
 /// A cell with its column position for iteration.
@@ -315,10 +384,13 @@ indexed_cell_row (const_glyph_view_t glyphs, const_color_view_t fgs,
 {
   const auto cols = glyphs.extent (1);
   return std::views::iota (std::size_t{ 0 }, cols)
-         | std::views::transform ([=] (std::size_t x) {
-             return IndexedCell{ x * ch, glyphs[row_idx, x], fgs[row_idx, x],
-                                 bgs[row_idx, x], ems[row_idx, x] };
-           });
+         | std::views::transform (
+             [=] (std::size_t x)
+               {
+                 return IndexedCell{ x * ch, glyphs[row_idx, x],
+                                     fgs[row_idx, x], bgs[row_idx, x],
+                                     ems[row_idx, x] };
+               });
 }
 
 // ============================================================================
@@ -521,8 +593,8 @@ public:
   glyph_span (height_t y, width_t x, std::size_t len) const noexcept
   {
     const auto cols = width_.numerical_value_in (ch);
-    const auto offset = y.numerical_value_in (ln) * cols
-                        + x.numerical_value_in (ch);
+    const auto offset
+        = y.numerical_value_in (ln) * cols + x.numerical_value_in (ch);
     return std::span{ glyphs_storage_ }.subspan (offset, len);
   }
 
@@ -544,22 +616,22 @@ public:
   [[nodiscard]] auto
   rows () const
   {
-    return std::views::iota (std::size_t{ 0 },
-                             height_.numerical_value_in (ln))
-           | std::views::transform (
-               [this] (std::size_t y) { return row (y * ln); });
+    return std::views::iota (std::size_t{ 0 }, height_.numerical_value_in (ln))
+           | std::views::transform ([this] (std::size_t y)
+                                      { return row (y * ln); });
   }
 
   /// Iterate rows with their y coordinate: (height_t, row_range)
   [[nodiscard]] auto
   indexed_rows () const
   {
-    return std::views::iota (std::size_t{ 0 },
-                             height_.numerical_value_in (ln))
-           | std::views::transform ([this] (std::size_t yi) {
-               const auto y = yi * ln;
-               return std::pair{ y, row (y) };
-             });
+    return std::views::iota (std::size_t{ 0 }, height_.numerical_value_in (ln))
+           | std::views::transform (
+               [this] (std::size_t yi)
+                 {
+                   const auto y = yi * ln;
+                   return std::pair{ y, row (y) };
+                 });
   }
 
   /// Access glyph table
@@ -590,11 +662,13 @@ zip_rows (const Raster &front, const Raster &back)
 {
   return std::views::iota (std::size_t{ 0 },
                            back.height ().numerical_value_in (ln))
-         | std::views::transform ([&] (std::size_t yi) {
-             const auto y = yi * ln;
-             return std::pair{ y,
-                               std::views::zip (front.row (y), back.row (y)) };
-           });
+         | std::views::transform (
+             [&] (std::size_t yi)
+               {
+                 const auto y = yi * ln;
+                 return std::pair{ y, std::views::zip (front.row (y),
+                                                       back.row (y)) };
+               });
 }
 
 } // namespace nxb

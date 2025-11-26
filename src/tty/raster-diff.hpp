@@ -13,7 +13,8 @@ namespace nxb
 // Data types
 // ============================================================================
 
-/// A detected change: position, glyphs, colors, emphasis (before optimization).
+/// A detected change: position, glyphs, colors, emphasis (before
+/// optimization).
 struct RawChange
 {
   Pos origin;
@@ -90,21 +91,23 @@ struct StyleState
 // ============================================================================
 
 /// Did this cell change? (comparing old vs new from a zipped pair)
-constexpr auto is_changed = [] (const auto &pair) {
-  const auto &[old_cell, new_cell] = pair;
-  return old_cell != new_cell;
-};
+constexpr auto is_changed = [] (const auto &pair)
+  {
+    const auto &[old_cell, new_cell] = pair;
+    return old_cell != new_cell;
+  };
 
 /// Should two cell pairs belong in the same run?
 /// Yes if: both changed (or both unchanged) AND same style in new buffer.
-constexpr auto same_run = [] (const auto &a, const auto &b) {
-  const auto &[old_a, new_a] = a;
-  const auto &[old_b, new_b] = b;
-  return is_changed (a) == is_changed (b)  // same change status
-         && new_a.fg == new_b.fg           // same foreground
-         && new_a.bg == new_b.bg           // same background
-         && new_a.em == new_b.em;          // same emphasis
-};
+constexpr auto same_run = [] (const auto &a, const auto &b)
+  {
+    const auto &[old_a, new_a] = a;
+    const auto &[old_b, new_b] = b;
+    return is_changed (a) == is_changed (b) // same change status
+           && new_a.fg == new_b.fg          // same foreground
+           && new_a.bg == new_b.bg          // same background
+           && new_a.em == new_b.em;         // same emphasis
+  };
 
 // ============================================================================
 // The diff pipeline
@@ -116,22 +119,22 @@ constexpr auto same_run = [] (const auto &a, const auto &b) {
 inline auto
 row_changes (height_t y, auto cells, const Raster &back)
 {
-  return cells
-         | std::views::chunk_by (same_run)
-         | std::views::filter ([] (auto chunk) {
-             return is_changed (*chunk.begin ());
-           })
-         | std::views::transform ([y, &back] (auto chunk) {
-             const auto &[old_cell, new_cell] = *chunk.begin ();
-             return RawChange{
-               .origin = Pos::at (new_cell.col, y),
-               .glyphs = back.glyph_span (y, new_cell.col,
-                                          std::ranges::distance (chunk)),
-               .fg = new_cell.fg,
-               .bg = new_cell.bg,
-               .em = new_cell.em,
-             };
-           });
+  return cells | std::views::chunk_by (same_run)
+         | std::views::filter ([] (auto chunk)
+                                 { return is_changed (*chunk.begin ()); })
+         | std::views::transform (
+             [y, &back] (auto chunk)
+               {
+                 const auto &[old_cell, new_cell] = *chunk.begin ();
+                 return RawChange{
+                   .origin = Pos::at (new_cell.col, y),
+                   .glyphs = back.glyph_span (y, new_cell.col,
+                                              std::ranges::distance (chunk)),
+                   .fg = new_cell.fg,
+                   .bg = new_cell.bg,
+                   .em = new_cell.em,
+                 };
+               });
 }
 
 /// Iterate changed regions between two rasters as a lazy range.
@@ -145,10 +148,12 @@ inline auto
 raw_changes (const Raster &front, const Raster &back)
 {
   return zip_rows (front, back)
-         | std::views::transform ([&back] (auto row_pair) {
-             auto [y, cells] = row_pair;
-             return row_changes (y, cells, back);
-           })
+         | std::views::transform (
+             [&back] (auto row_pair)
+               {
+                 auto [y, cells] = row_pair;
+                 return row_changes (y, cells, back);
+               })
          | std::views::join;
 }
 

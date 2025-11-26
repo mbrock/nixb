@@ -74,7 +74,8 @@ private:
   /// Keys point into arena_, so arena_ must not reallocate
   std::unordered_map<std::string_view, GlyphId> table_;
 
-  /// Mutex for thread-safe interning (multiple widgets may render concurrently)
+  /// Mutex for thread-safe interning (multiple widgets may render
+  /// concurrently)
   mutable std::mutex mutex_;
 };
 

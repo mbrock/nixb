@@ -159,10 +159,12 @@ em (Emphasis e)
 // Emphasis shortcuts
 inline constexpr Style bold{ DEFAULT_COLOR, DEFAULT_COLOR, Emphasis::bold };
 inline constexpr Style faint{ DEFAULT_COLOR, DEFAULT_COLOR, Emphasis::faint };
-inline constexpr Style italic{ DEFAULT_COLOR, DEFAULT_COLOR, Emphasis::italic };
+inline constexpr Style italic{ DEFAULT_COLOR, DEFAULT_COLOR,
+                               Emphasis::italic };
 inline constexpr Style underline{ DEFAULT_COLOR, DEFAULT_COLOR,
                                   Emphasis::underline };
-inline constexpr Style reverse{ DEFAULT_COLOR, DEFAULT_COLOR, Emphasis::reverse };
+inline constexpr Style reverse{ DEFAULT_COLOR, DEFAULT_COLOR,
+                                Emphasis::reverse };
 inline constexpr Style strikethrough{ DEFAULT_COLOR, DEFAULT_COLOR,
                                       Emphasis::strikethrough };
 
@@ -252,7 +254,8 @@ text (std::string s)
 {
   auto w = utf8_width (s);
   return leaf (WidthHint::fixed (w), HeightHint::fixed (1 * ln),
-               [=] (RasterView &r, Size) { write_text (r, Pos::origin (), s); });
+               [=] (RasterView &r, Size)
+                 { render_span (r, Pos::origin (), Span{ s, {} }); });
 }
 
 // Text: fixed-width string with style
@@ -261,9 +264,8 @@ text (std::string s, Style style)
 {
   auto w = utf8_width (s);
   return leaf (WidthHint::fixed (w), HeightHint::fixed (1 * ln),
-               [=] (RasterView &r, Size) {
-                 render_span (r, Pos::origin (), Span{ s, style });
-               });
+               [=] (RasterView &r, Size)
+                 { render_span (r, Pos::origin (), Span{ s, style }); });
 }
 
 // Styled text: multiple spans on a single line
@@ -279,16 +281,19 @@ styled_text (Spans &&...spans)
   // Capture spans in a tuple
   auto span_tuple = std::tuple{ std::forward<Spans> (spans)... };
 
-  return leaf (WidthHint::fixed (total_w), HeightHint::fixed (1 * ln),
-               [=] (RasterView &r, Size) {
-                 col_t col = Pos::origin ().x;
-                 std::apply (
-                     [&] (const auto &...s) {
-                       ((col = render_span (r, Pos{ col, Pos::origin ().y }, s)),
-                        ...);
-                     },
-                     span_tuple);
-               });
+  return leaf (
+      WidthHint::fixed (total_w), HeightHint::fixed (1 * ln),
+      [=] (RasterView &r, Size)
+        {
+          col_t col = Pos::origin ().x;
+          std::apply (
+              [&] (const auto &...s)
+                {
+                  ((col = render_span (r, Pos{ col, Pos::origin ().y }, s)),
+                   ...);
+                },
+              span_tuple);
+        });
 }
 
 // Fill: solid color rectangle (grows in both dimensions)
@@ -296,9 +301,8 @@ inline auto
 fill (Rgba8 color = Rgba8 (60, 60, 60))
 {
   return leaf (WidthHint::grow (), HeightHint::grow (),
-               [=] (RasterView &r, Size) {
-                 std::ranges::fill (r.bgs (), color);
-               });
+               [=] (RasterView &r, Size)
+                 { std::ranges::fill (r.bgs (), color); });
 }
 
 // Horizontal rule: box drawing character repeated
@@ -306,9 +310,8 @@ inline auto
 hrule ()
 {
   return leaf (WidthHint::grow (), HeightHint::fixed (1 * ln),
-               [=] (RasterView &r, Size size) {
-                 write_text (r, Pos::origin (), repeat ("─", size.w));
-               });
+               [=] (RasterView &r, Size size)
+                 { write_text (r, Pos::origin (), repeat ("─", size.w)); });
 }
 
 // Bar string: pure function (percent, width) → string of filled blocks
@@ -341,11 +344,12 @@ progress_bar (percent_t pct, Rgba8 fg = Rgba8 (100, 180, 255),
               Rgba8 bg = Rgba8 (50, 50, 50))
 {
   return leaf (WidthHint::grow (), HeightHint::fixed (1 * ln),
-               [=] (RasterView &r, Size) {
-                 std::ranges::fill (r.bgs (), bg);
-                 std::ranges::fill (r.fgs (), fg);
-                 r.write_text (Pos::origin (), bar_string (pct, r.width ()));
-               });
+               [=] (RasterView &r, Size)
+                 {
+                   std::ranges::fill (r.bgs (), bg);
+                   std::ranges::fill (r.fgs (), fg);
+                   r.write_text (Pos::origin (), bar_string (pct, r.width ()));
+                 });
 }
 
 // ============================================================================
@@ -362,11 +366,12 @@ template <Layout... Children> struct Row
     width_t total_min = 0 * ch;
     ratio_t total_flex = 0.0 * one;
     std::apply (
-        [&] (const auto &...c) {
-          ((total_min += c.width_hint ().min,
-            total_flex += c.width_hint ().flex),
-           ...);
-        },
+        [&] (const auto &...c)
+          {
+            ((total_min += c.width_hint ().min,
+              total_flex += c.width_hint ().flex),
+             ...);
+          },
         children);
     return { total_min, total_flex };
   }
@@ -376,9 +381,8 @@ template <Layout... Children> struct Row
   {
     height_t max_min = 0 * ln;
     std::apply (
-        [&] (const auto &...c) {
-          ((max_min = std::max (max_min, c.height_hint ().min)), ...);
-        },
+        [&] (const auto &...c)
+          { ((max_min = std::max (max_min, c.height_hint ().min)), ...); },
         children);
     return HeightHint::fixed (
         max_min.numerical_value_in (ln) > 0 ? max_min : height_t{ 1 * ln });
@@ -394,9 +398,8 @@ template <Layout... Children> struct Row
     // Collect hints
     std::array<WidthHint, N> hints;
     std::size_t i = 0;
-    std::apply (
-        [&] (const auto &...c) { ((hints[i++] = c.width_hint ()), ...); },
-        children);
+    std::apply ([&] (const auto &...c)
+                  { ((hints[i++] = c.width_hint ()), ...); }, children);
 
     // Calculate widths
     auto widths = flex_distribute (size.w, hints);
@@ -405,20 +408,22 @@ template <Layout... Children> struct Row
     Pos cursor = Pos::origin ();
     i = 0;
     std::apply (
-        [&] (const auto &...c) {
-          (
-              [&] {
-                auto child_size = Size{ widths[i], size.h };
-                if (widths[i].numerical_value_in (ch) > 0)
+        [&] (const auto &...c)
+          {
+            (
+                [&]
                   {
-                    auto sub = subraster (raster, cursor, child_size);
-                    c.render (sub, child_size);
-                    cursor += widths[i];
-                  }
-                ++i;
-              }(),
-              ...);
-        },
+                    auto child_size = Size{ widths[i], size.h };
+                    if (widths[i].numerical_value_in (ch) > 0)
+                      {
+                        auto sub = subraster (raster, cursor, child_size);
+                        c.render (sub, child_size);
+                        cursor += widths[i];
+                      }
+                    ++i;
+                  }(),
+                ...);
+          },
         children);
   }
 
@@ -475,9 +480,8 @@ template <Layout... Children> struct Column
   {
     width_t max_min = 0 * ch;
     std::apply (
-        [&] (const auto &...c) {
-          ((max_min = std::max (max_min, c.width_hint ().min)), ...);
-        },
+        [&] (const auto &...c)
+          { ((max_min = std::max (max_min, c.width_hint ().min)), ...); },
         children);
     return { max_min, 1.0 * one };
   }
@@ -488,11 +492,12 @@ template <Layout... Children> struct Column
     height_t total_min = 0 * ln;
     ratio_t total_flex = 0.0 * one;
     std::apply (
-        [&] (const auto &...c) {
-          ((total_min += c.height_hint ().min,
-            total_flex += c.height_hint ().flex),
-           ...);
-        },
+        [&] (const auto &...c)
+          {
+            ((total_min += c.height_hint ().min,
+              total_flex += c.height_hint ().flex),
+             ...);
+          },
         children);
     return { total_min, total_flex };
   }
@@ -506,9 +511,8 @@ template <Layout... Children> struct Column
 
     std::array<HeightHint, N> hints;
     std::size_t i = 0;
-    std::apply (
-        [&] (const auto &...c) { ((hints[i++] = c.height_hint ()), ...); },
-        children);
+    std::apply ([&] (const auto &...c)
+                  { ((hints[i++] = c.height_hint ()), ...); }, children);
 
     auto heights = flex_distribute (size.h, hints);
 
@@ -516,20 +520,22 @@ template <Layout... Children> struct Column
     Pos cursor = Pos::origin ();
     i = 0;
     std::apply (
-        [&] (const auto &...c) {
-          (
-              [&] {
-                auto child_size = Size{ size.w, heights[i] };
-                if (heights[i].numerical_value_in (ln) > 0)
+        [&] (const auto &...c)
+          {
+            (
+                [&]
                   {
-                    auto sub = subraster (raster, cursor, child_size);
-                    c.render (sub, child_size);
-                    cursor = cursor + heights[i]; // point + vector = point
-                  }
-                ++i;
-              }(),
-              ...);
-        },
+                    auto child_size = Size{ size.w, heights[i] };
+                    if (heights[i].numerical_value_in (ln) > 0)
+                      {
+                        auto sub = subraster (raster, cursor, child_size);
+                        c.render (sub, child_size);
+                        cursor = cursor + heights[i]; // point + vector = point
+                      }
+                    ++i;
+                  }(),
+                ...);
+          },
         children);
   }
 

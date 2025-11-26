@@ -24,10 +24,15 @@ Writer::csi (std::string_view params, char final_byte)
 Writer &
 Writer::move_to (const ansi_row_t row, const ansi_col_t col)
 {
+  // ANSI coordinates are 1-based. ansi_row_t/ansi_col_t use ansi_origin
+  // which is offset by 1 from terminal_origin.
+  // ansi_origin = terminal_origin + 1, so to get 1-based number:
+  // terminal position 0 -> ansi position 1
+  // (pos - terminal_origin) + 1 = ansi 1-based number
   const auto row_num
-      = static_cast<std::size_t> ((row - terminal_origin_v).numerical_value_in (ln));
+      = (row.quantity_from (terminal_origin_v)).numerical_value_in (ln) + 1;
   const auto col_num
-      = static_cast<std::size_t> ((col - terminal_origin).numerical_value_in (ch));
+      = (col.quantity_from (terminal_origin)).numerical_value_in (ch) + 1;
   csi (fmt::format ("{};{}", row_num, col_num), 'H');
   return *this;
 }
@@ -85,8 +90,8 @@ Writer::move (const Size delta)
 Writer &
 Writer::move_to_column (const ansi_col_t col)
 {
-  const auto col_num
-      = static_cast<std::size_t> ((col - terminal_origin).numerical_value_in (ch));
+  const auto col_num = static_cast<std::size_t> (
+      (col - terminal_origin).numerical_value_in (ch));
   csi (fmt::format ("{}", col_num), 'G');
   return *this;
 }
@@ -136,10 +141,10 @@ Writer::clear_line_to_cursor ()
 Writer &
 Writer::set_scroll_region (const row_t top, const row_t bottom)
 {
-  const auto top_row
-      = static_cast<std::size_t> ((to_ansi (top) - terminal_origin_v).numerical_value_in (ln));
-  const auto bottom_row
-      = static_cast<std::size_t> ((to_ansi (bottom) - terminal_origin_v).numerical_value_in (ln));
+  const auto top_row = static_cast<std::size_t> (
+      (to_ansi (top) - terminal_origin_v).numerical_value_in (ln));
+  const auto bottom_row = static_cast<std::size_t> (
+      (to_ansi (bottom) - terminal_origin_v).numerical_value_in (ln));
   csi (fmt::format ("{};{}", top_row, bottom_row), 'r');
   return *this;
 }
@@ -251,6 +256,20 @@ Writer::bg (terminal_color c)
 }
 
 Writer &
+Writer::fg_palette (std::uint8_t index)
+{
+  csi (fmt::format ("38;5;{}", index), 'm');
+  return *this;
+}
+
+Writer &
+Writer::bg_palette (std::uint8_t index)
+{
+  csi (fmt::format ("48;5;{}", index), 'm');
+  return *this;
+}
+
+Writer &
 Writer::fg_default ()
 {
   csi ("39", 'm');
@@ -355,9 +374,9 @@ void
 move_to (const ansi_row_t row, const ansi_col_t col)
 {
   const auto row_num
-      = static_cast<std::size_t> ((row - terminal_origin_v).numerical_value_in (ln));
+      = (row.quantity_from (terminal_origin_v)).numerical_value_in (ln) + 1;
   const auto col_num
-      = static_cast<std::size_t> ((col - terminal_origin).numerical_value_in (ch));
+      = (col.quantity_from (terminal_origin)).numerical_value_in (ch) + 1;
   fmt::print ("{}{};{}H", CSI, row_num, col_num);
 }
 
@@ -394,10 +413,10 @@ show_cursor ()
 void
 set_scroll_region (const row_t top, const row_t bottom)
 {
-  const auto top_row
-      = static_cast<std::size_t> ((to_ansi (top) - terminal_origin_v).numerical_value_in (ln));
-  const auto bottom_row
-      = static_cast<std::size_t> ((to_ansi (bottom) - terminal_origin_v).numerical_value_in (ln));
+  const auto top_row = static_cast<std::size_t> (
+      (to_ansi (top) - terminal_origin_v).numerical_value_in (ln));
+  const auto bottom_row = static_cast<std::size_t> (
+      (to_ansi (bottom) - terminal_origin_v).numerical_value_in (ln));
   fmt::print ("{}{};{}r", CSI, top_row, bottom_row);
 }
 

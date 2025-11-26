@@ -6,16 +6,13 @@
 #include "tty/units.hpp"
 
 #include <atomic>
+#include <chrono>
 #include <coro/coro.hpp>
 #include <coro/event.hpp>
+#include <coro/io_scheduler.hpp>
 #include <coro/queue.hpp>
 #include <coro/task.hpp>
 #include <iosfwd>
-
-namespace coro
-{
-class io_scheduler;
-}
 
 namespace nxb::ui
 {
@@ -37,16 +34,18 @@ struct TerminalGuard
   ~TerminalGuard ();
 };
 
+// Forward declaration
+class TerminalCompositor;
+
 /// Runtime state for the UI system.
-/// Encapsulates signal handling, terminal size tracking, and event
-/// coordination.
+/// Owns scheduler, glyph table, compositor, and coordinates signals/events.
 class UIRuntime
 {
 public:
-  explicit UIRuntime (coro::io_scheduler &scheduler);
-  ~UIRuntime () = default;
+  UIRuntime ();
+  ~UIRuntime ();
 
-  // Non-copyable, non-moveable (owns signal state)
+  // Non-copyable, non-moveable (owns resources)
   UIRuntime (const UIRuntime &) = delete;
   UIRuntime &operator= (const UIRuntime &) = delete;
   UIRuntime (UIRuntime &&) = delete;
@@ -54,9 +53,16 @@ public:
 
   /// Access the scheduler.
   [[nodiscard]] coro::io_scheduler &
-  scheduler () const noexcept
+  scheduler () noexcept
   {
     return *scheduler_;
+  }
+
+  /// Access the glyph table.
+  [[nodiscard]] GlyphTable &
+  glyphs () noexcept
+  {
+    return glyphs_;
   }
 
   /// Check if shutdown has been requested.
@@ -88,6 +94,48 @@ public:
   [[nodiscard]] width_t terminal_width () const noexcept;
   [[nodiscard]] height_t terminal_height () const noexcept;
 
+  // =========================================================================
+  // Render loop helpers
+  // =========================================================================
+
+  /// Wait for next frame. Handles resize, yields for frame_time.
+  /// Returns false when shutdown is requested.
+  /// Call this at the start of your render loop.
+  coro::task<bool> next_frame (std::chrono::milliseconds frame_time);
+
+  /// Render a layout to the screen.
+  /// Clears back buffer, renders layout, presents frame.
+  template <typename Layout>
+  void
+  render (const Layout &layout)
+  {
+    render_impl ([&layout] (RasterView &view, Size size)
+                   { layout.render (view, size); });
+  }
+
+  /// Run a render loop until shutdown.
+  /// BuildUI is called each frame to produce the layout.
+  /// Note: pass by value to avoid dangling references in coroutine.
+  template <typename BuildUI>
+  coro::task<>
+  run_render_loop (BuildUI build_ui, std::chrono::milliseconds frame_time)
+  {
+    co_await scheduler_->schedule ();
+
+    while (co_await next_frame (frame_time))
+      {
+        render (build_ui ());
+      }
+  }
+
+  /// Coroutine that handles signals from the pipe.
+  /// Should be run as part of the main task group.
+  coro::task<> signal_loop ();
+
+  // =========================================================================
+  // Low-level access (for advanced use)
+  // =========================================================================
+
   /// Channel for resize notifications.
   coro::queue<TermSize> &
   resize_channel () noexcept
@@ -102,14 +150,16 @@ public:
     return damage_event_;
   }
 
-  /// Coroutine that handles signals from the pipe.
-  /// Should be run as part of the main task group.
-  coro::task<> signal_loop ();
+  /// Direct access to compositor (for testing or advanced use).
+  [[nodiscard]] TerminalCompositor &compositor () noexcept;
 
 private:
   void refresh_terminal_size () noexcept;
+  void render_impl (std::function<void (RasterView &, Size)> render_fn);
 
-  coro::io_scheduler *scheduler_;
+  std::shared_ptr<coro::io_scheduler> scheduler_;
+  GlyphTable glyphs_;
+  std::unique_ptr<TerminalCompositor> compositor_;
   SignalPipe signals_;
 
   coro::event damage_event_;
@@ -129,6 +179,7 @@ public:
 
   Raster &back_buffer () noexcept;
   GlyphTable &glyphs () const noexcept;
+  nxb::Size size () const noexcept;
 
   /// Present loop that waits for damage events and renders frames.
   coro::task<> present_loop (UIRuntime &runtime);
@@ -142,5 +193,56 @@ private:
   Raster back_;
   GlyphTable &glyphs_;
 };
+
+// ============================================================================
+// Convenient app runner
+// ============================================================================
+
+/// Run a TUI application.
+/// - initial_state: the starting state
+/// - build_ui: (const State&) → Layout
+/// - update: (UIRuntime&, State&) → coro::task<> (should call
+/// request_shutdown)
+/// - frame_time: how long between frames (default 16ms ≈ 60fps)
+template <typename State, typename BuildUI, typename Update>
+int
+run (State initial_state, BuildUI build_ui, Update update,
+     std::chrono::milliseconds frame_time = std::chrono::milliseconds{ 16 })
+{
+  UIRuntime runtime;
+  State state = std::move (initial_state);
+
+  try
+    {
+      TerminalGuard guard;
+      std::vector<coro::task<>> tasks;
+
+      tasks.push_back (runtime.signal_loop ());
+
+      tasks.push_back (runtime.run_render_loop (
+          [&state, build_ui] { return build_ui (state); }, frame_time));
+
+      auto task = [] (UIRuntime &runtime, State &state,
+                      Update update) -> coro::task<>
+        {
+          co_await runtime.scheduler ().schedule ();
+          co_await update (runtime, state);
+          runtime.request_shutdown ();
+        };
+
+      tasks.push_back (task (runtime, state, update));
+
+      coro::sync_wait (coro::when_all (std::move (tasks)));
+
+      runtime.request_shutdown ();
+    }
+  catch (const std::exception &e)
+    {
+      fmt::print (stderr, "Error: {}\n", e.what ());
+      return 1;
+    }
+
+  return 0;
+}
 
 } // namespace nxb::ui

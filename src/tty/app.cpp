@@ -27,11 +27,19 @@ TerminalGuard::~TerminalGuard ()
   std::cout << "\033[0m" << std::flush; // Reset SGR
 }
 
-UIRuntime::UIRuntime (coro::io_scheduler &scheduler) : scheduler_ (&scheduler)
+UIRuntime::UIRuntime ()
+    : scheduler_ (
+          coro::io_scheduler::make_shared (coro::io_scheduler::options{}))
 {
   signals_.watch (SIGINT, SIGTERM, SIGWINCH);
   refresh_terminal_size ();
+
+  // Create compositor with initial terminal size
+  compositor_
+      = std::make_unique<TerminalCompositor> (terminal_size (), glyphs_);
 }
+
+UIRuntime::~UIRuntime () = default;
 
 void
 UIRuntime::refresh_terminal_size () noexcept
@@ -92,6 +100,39 @@ nxb::height_t
 UIRuntime::terminal_height () const noexcept
 {
   return term_height_.load (std::memory_order_acquire);
+}
+
+coro::task<bool>
+UIRuntime::next_frame (std::chrono::milliseconds frame_time)
+{
+  if (shutdown_requested ())
+    co_return false;
+
+  // Process any pending resize events
+  while (auto sz = resize_queue_.try_pop ())
+    compositor_->resize (sz.value ());
+
+  // Yield for frame time
+  co_await scheduler_->yield_for (frame_time);
+
+  co_return !shutdown_requested ();
+}
+
+void
+UIRuntime::render_impl (std::function<void (RasterView &, Size)> render_fn)
+{
+  auto &buffer = compositor_->back_buffer ();
+  buffer.clear ();
+  auto view = buffer.view ();
+  auto size = compositor_->size ();
+  render_fn (view, size);
+  compositor_->present_frame ();
+}
+
+TerminalCompositor &
+UIRuntime::compositor () noexcept
+{
+  return *compositor_;
 }
 
 coro::task<>
@@ -160,6 +201,12 @@ TerminalCompositor::glyphs () const noexcept
   return glyphs_;
 }
 
+nxb::Size
+TerminalCompositor::size () const noexcept
+{
+  return { back_.width (), back_.height () };
+}
+
 void
 TerminalCompositor::present_frame ()
 {
@@ -177,55 +224,71 @@ TerminalCompositor::present_frame (std::ostream &out)
   std::optional<Rgba8> current_fg;
   std::optional<Rgba8> current_bg;
 
+  // Helper to emit color (palette or true color)
+  auto emit_fg = [&w] (const Rgba8 &c) {
+    if (c.is_palette ())
+      w.fg_palette (c.palette_index ());
+    else
+      w.fg (c.to_rgb ());
+  };
+
+  auto emit_bg = [&w] (const Rgba8 &c) {
+    if (c.is_palette ())
+      w.bg_palette (c.palette_index ());
+    else
+      w.bg (c.to_rgb ());
+  };
+
   diff_rasters (front_, back_,
-                [&] (const ChangeRun &run) {
-                  w.move_to (run.origin);
+                [&] (const ChangeRun &run)
+                  {
+                    w.move_to (run.origin);
 
-                  // Handle emphasis reset first (SGR 0 resets everything)
-                  if (run.em_reset)
-                    {
-                      w.reset ();
-                      // Re-emit colors after reset
-                      if (current_fg)
-                        w.fg (current_fg->to_rgb ());
-                      if (current_bg)
-                        w.bg (current_bg->to_rgb ());
-                    }
+                    // Handle emphasis reset first (SGR 0 resets everything)
+                    if (run.em_reset)
+                      {
+                        w.reset ();
+                        // Re-emit colors after reset
+                        if (current_fg)
+                          emit_fg (*current_fg);
+                        if (current_bg)
+                          emit_bg (*current_bg);
+                      }
 
-                  // Update background
-                  if (run.bg_reset)
-                    {
-                      w.bg_default ();
-                      current_bg = std::nullopt;
-                    }
-                  else if (run.bg_change)
-                    {
-                      w.bg (run.bg_change->to_rgb ());
-                      current_bg = run.bg_change;
-                    }
+                    // Update background
+                    if (run.bg_reset)
+                      {
+                        w.bg_default ();
+                        current_bg = std::nullopt;
+                      }
+                    else if (run.bg_change)
+                      {
+                        emit_bg (*run.bg_change);
+                        current_bg = run.bg_change;
+                      }
 
-                  // Update foreground
-                  if (run.fg_reset)
-                    {
-                      w.fg_default ();
-                      current_fg = std::nullopt;
-                    }
-                  else if (run.fg_change)
-                    {
-                      w.fg (run.fg_change->to_rgb ());
-                      current_fg = run.fg_change;
-                    }
+                    // Update foreground
+                    if (run.fg_reset)
+                      {
+                        w.fg_default ();
+                        current_fg = std::nullopt;
+                      }
+                    else if (run.fg_change)
+                      {
+                        emit_fg (*run.fg_change);
+                        current_fg = run.fg_change;
+                      }
 
-                  // Apply new emphasis (cast to fmt::emphasis)
-                  if (run.em_change)
-                    w.style (static_cast<ansi::emphasis> (*run.em_change));
+                    // Apply new emphasis (cast to fmt::emphasis)
+                    if (run.em_change)
+                      w.style (static_cast<ansi::emphasis> (*run.em_change));
 
-                  for (const auto gid : run.glyphs)
-                    {
-                      if (auto text = glyphs_.get (gid))
-                        w.text (*text);
-                    }
-                });
+                    for (const auto gid : run.glyphs)
+                      {
+                        if (auto text = glyphs_.get (gid))
+                          w.text (*text);
+                      }
+                  });
 
   out.write (buf.data (), static_cast<std::streamsize> (buf.size ()));
   out.flush ();
