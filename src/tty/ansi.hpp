@@ -2,6 +2,7 @@
 
 #include <fmt/color.h>
 #include <fmt/format.h>
+#include <optional>
 #include <string_view>
 
 #include "units.hpp"
@@ -68,6 +69,9 @@ public:
   /// Save/restore cursor position
   Writer &save_cursor ();
   Writer &restore_cursor ();
+
+  /// Request cursor position report (DSR 6). Response comes via stdin.
+  Writer &request_cursor_position ();
 
   /// Colors (24-bit RGB)
   Writer &fg (rgb color);
@@ -140,6 +144,12 @@ void set_scroll_region (row_t top, row_t bottom);
 void reset_scroll_region ();
 void scroll_up (height_t n = 1 * ln);
 void scroll_down (height_t n = 1 * ln);
+
+/// Query current cursor position (blocking).
+/// Sends DSR 6 and reads CPR response from stdin.
+/// Returns nullopt if query fails (not a TTY, timeout, parse error).
+/// Requires terminal to be in raw mode for reliable response reading.
+[[nodiscard]] std::optional<Pos> query_cursor_position ();
 
 /// RAII guard that hides cursor on construction, restores terminal state on
 /// destruction. Resets scroll region, shows cursor, clears screen.

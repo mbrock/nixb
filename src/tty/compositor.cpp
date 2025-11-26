@@ -23,25 +23,29 @@ TerminalCompositor::resize (nxb::Size size)
   front_ = Raster (size.w, raster_h, glyphs_);
   back_ = Raster (size.w, raster_h, glyphs_);
 
-  // Clear only the HUD region
+  // Clear only the HUD region, preserving cursor position
+  fmt::memory_buffer buf;
+  ansi::Writer w (buf);
+  w.save_cursor ();
+
   if (hud_height_ > 0 * ln && hud_height_ < size.h)
     {
       // Clear HUD area
-      fmt::memory_buffer buf;
-      ansi::Writer w (buf);
       auto end_row = terminal_origin_v + size.h;
       for (auto row = hud_start_row_; row < end_row; row += 1 * ln)
         {
           w.move_to (Pos{ terminal_origin + 0 * ch, row });
           w.clear_line ();
         }
-      std::cout.write (buf.data (), static_cast<std::streamsize> (buf.size ()));
-      std::cout.flush ();
     }
   else
     {
-      ansi::clear_screen ();
+      w.clear_screen ();
     }
+
+  w.restore_cursor ();
+  std::cout.write (buf.data (), static_cast<std::streamsize> (buf.size ()));
+  std::cout.flush ();
 }
 
 void
@@ -53,26 +57,38 @@ TerminalCompositor::set_hud_height (height_t hud_height, height_t term_height)
   hud_height_ = hud_height;
 
   // Calculate where the HUD starts
-  if (hud_height >= term_height)
-    {
-      // Full-screen mode
-      hud_start_row_ = terminal_origin_v + 0 * ln;
-      ansi::reset_scroll_region ();
-    }
-  else
-    {
-      // HUD mode: scroll region above, HUD at bottom
-      // e.g., 24-row term, 2-row HUD: HUD starts at row 22, scroll region is rows 0-21
-      hud_start_row_ = terminal_origin_v + (term_height - hud_height);
-      auto scroll_top = terminal_origin_v + 0 * ln;
-      auto scroll_bottom = hud_start_row_ - 1 * ln;
-      ansi::set_scroll_region (scroll_top, scroll_bottom);
-    }
+  // Note: DECSTBM (set scroll region) moves cursor to home, so save/restore
+  {
+    fmt::memory_buffer buf;
+    ansi::Writer wr (buf);
+    wr.save_cursor ();
+
+    if (hud_height >= term_height)
+      {
+        // Full-screen mode
+        hud_start_row_ = terminal_origin_v + 0 * ln;
+        wr.reset_scroll_region ();
+      }
+    else
+      {
+        // HUD mode: scroll region above, HUD at bottom
+        // e.g., 24-row term, 2-row HUD: HUD starts at row 22, scroll region is
+        // rows 0-21
+        hud_start_row_ = terminal_origin_v + (term_height - hud_height);
+        auto scroll_top = terminal_origin_v + 0 * ln;
+        auto scroll_bottom = hud_start_row_ - 1 * ln;
+        wr.set_scroll_region (scroll_top, scroll_bottom);
+      }
+
+    wr.restore_cursor ();
+    std::cout.write (buf.data (), static_cast<std::streamsize> (buf.size ()));
+    std::cout.flush ();
+  }
 
   // Resize rasters to match HUD height
-  auto w = front_.width ();
-  front_ = Raster (w, hud_height, glyphs_);
-  back_ = Raster (w, hud_height, glyphs_);
+  auto raster_w = front_.width ();
+  front_ = Raster (raster_w, hud_height, glyphs_);
+  back_ = Raster (raster_w, hud_height, glyphs_);
 }
 
 height_t
@@ -110,6 +126,9 @@ TerminalCompositor::present_frame (std::ostream &out)
 {
   fmt::memory_buffer buf;
   ansi::Writer w (buf);
+
+  // Save cursor so HUD rendering doesn't disturb log output position
+  w.save_cursor ();
 
   // Offset for HUD mode: raster row 0 maps to hud_start_row_ on terminal
   // hud_start_row_ is a row_t (point), subtract origin to get quantity offset
@@ -186,6 +205,9 @@ TerminalCompositor::present_frame (std::ostream &out)
                           w.text (*text);
                       }
                   });
+
+  // Restore cursor to where it was before HUD render
+  w.restore_cursor ();
 
   out.write (buf.data (), static_cast<std::streamsize> (buf.size ()));
   out.flush ();

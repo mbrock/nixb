@@ -213,8 +213,6 @@ replay_file (coro::io_scheduler &sched, const std::string &path,
 
   co_await replay_file (sched, input, queue, std::move (stop), realtime,
                         speed);
-
-  input.close ();
 }
 
 } // namespace nixb::replay

@@ -305,13 +305,20 @@ fill (Rgba8 color = Rgba8 (60, 60, 60))
                  { std::ranges::fill (r.bgs (), color); });
 }
 
+// Horizontal rule string (for direct output)
+inline std::string
+hrule_string (width_t w)
+{
+  return repeat ("─", w);
+}
+
 // Horizontal rule: box drawing character repeated
 inline auto
 hrule ()
 {
   return leaf (WidthHint::grow (), HeightHint::fixed (1 * ln),
                [=] (RasterView &r, Size size)
-                 { write_text (r, Pos::origin (), repeat ("─", size.w)); });
+                 { write_text (r, Pos::origin (), hrule_string (size.w)); });
 }
 
 // Bar string: pure function (percent, width) → string of filled blocks

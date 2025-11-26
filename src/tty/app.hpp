@@ -21,13 +21,6 @@ namespace nxb::ui
 
 using TermSize = nxb::Size;
 
-/// Reason for shutdown.
-enum class ShutdownReason : std::uint8_t
-{
-  Running,    ///< Not shutting down
-  Completed,  ///< Normal completion requested by application
-  Interrupted ///< User interrupt (SIGINT/SIGTERM)
-};
 
 // Re-export TerminalGuard for convenience
 using ansi::TerminalGuard;
@@ -64,22 +57,11 @@ public:
   [[nodiscard]] bool
   shutdown_requested () const noexcept
   {
-    return shutdown_reason_.load (std::memory_order_acquire)
-           != ShutdownReason::Running;
+    return stop_source_.stop_requested ();
   }
 
-  /// Get the reason for shutdown.
-  [[nodiscard]] ShutdownReason
-  shutdown_reason () const noexcept
-  {
-    return shutdown_reason_.load (std::memory_order_acquire);
-  }
-
-  /// Request graceful shutdown (normal completion).
+  /// Request shutdown.
   void request_shutdown ();
-
-  /// Request shutdown due to signal (called from signal_loop).
-  void request_interrupt ();
 
   /// Signal that the view has been damaged and needs redraw.
   void signal_damage ();
@@ -99,11 +81,6 @@ public:
   // =========================================================================
   // Render loop helpers
   // =========================================================================
-
-  /// Wait for next frame. Handles resize, yields for frame_time.
-  /// Returns false when shutdown is requested.
-  /// Call this at the start of your render loop.
-  coro::task<bool> next_frame (std::chrono::milliseconds frame_time);
 
   /// Render a layout to the screen.
   /// Computes HUD height from layout hint, sets up scroll region, renders.
@@ -130,28 +107,53 @@ public:
   /// terminal). In full-screen mode, this is a no-op.
   void println (std::string_view line);
 
+  /// Clean up before exit - clears HUD region.
+  void cleanup ();
+
   /// Run a render loop until shutdown.
   /// BuildUI is called each frame to produce the layout.
+  /// Waits for damage signal, but rate-limits to frame_time.
   /// Note: pass by value to avoid dangling references in coroutine.
   template <typename BuildUI>
   coro::task<>
-  run_render_loop (BuildUI build_ui, std::chrono::milliseconds frame_time)
+  run_render_loop (BuildUI build_ui,
+                   std::chrono::milliseconds frame_time
+                   = std::chrono::milliseconds{ 16 })
   {
     co_await scheduler_->schedule ();
 
-    while (co_await next_frame (frame_time))
+    // Initial render
+    render (build_ui ());
+    auto last_render = std::chrono::steady_clock::now ();
+
+    while (!shutdown_requested ())
       {
+        // Wait for damage
+        damage_event_.reset ();
+        co_await damage_event_;
+
+        if (shutdown_requested ())
+          break;
+
+        // Rate limit: wait until frame_time has passed since last render
+        auto now = std::chrono::steady_clock::now ();
+        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds> (
+            now - last_render);
+        if (elapsed < frame_time)
+          co_await scheduler_->yield_for (frame_time - elapsed);
+
+        // Process any pending resizes
+        while (auto sz = resize_queue_.try_pop ())
+          compositor_->resize (*sz);
+
         render (build_ui ());
+        last_render = std::chrono::steady_clock::now ();
       }
   }
 
   /// Coroutine that handles signals from the pipe.
   /// Should be run as part of the main task group.
   coro::task<> signal_loop ();
-
-  /// Present loop that waits for damage events and renders frames.
-  /// Used internally by run_render_loop, but can also be used standalone.
-  coro::task<> present_loop ();
 
   // =========================================================================
   // Low-level access (for advanced use)
@@ -189,7 +191,6 @@ private:
 
   std::atomic<nxb::width_t> term_width_{ 80 * ch };
   std::atomic<nxb::height_t> term_height_{ 24 * ln };
-  std::atomic<ShutdownReason> shutdown_reason_{ ShutdownReason::Running };
   std::atomic<std::uint64_t> damage_counter_{ 0 };
 
   std::stop_source stop_source_;
@@ -204,11 +205,9 @@ private:
 /// - build_ui: (const State&) → Layout
 /// - update: (UIRuntime&, State&) → coro::task<> (should call
 /// request_shutdown)
-/// - frame_time: how long between frames (default 16ms ≈ 60fps)
 template <typename State, typename BuildUI, typename Update>
 int
-run (State initial_state, BuildUI build_ui, Update update,
-     std::chrono::milliseconds frame_time = std::chrono::milliseconds{ 16 })
+run (State initial_state, BuildUI build_ui, Update update)
 {
   UIRuntime runtime;
   State state = std::move (initial_state);
@@ -221,7 +220,7 @@ run (State initial_state, BuildUI build_ui, Update update,
       tasks.push_back (runtime.signal_loop ());
 
       tasks.push_back (runtime.run_render_loop (
-          [&state, build_ui] { return build_ui (state); }, frame_time));
+          [&state, build_ui] { return build_ui (state); }));
 
       auto task = [] (UIRuntime &runtime, State &state,
                       Update update) -> coro::task<> {
@@ -234,12 +233,18 @@ run (State initial_state, BuildUI build_ui, Update update,
 
       coro::sync_wait (coro::when_all (std::move (tasks)));
 
-      runtime.request_shutdown ();
+      runtime.cleanup ();
     }
   catch (const std::exception &e)
     {
+      runtime.cleanup ();
       fmt::print (stderr, "Error: {}\n", e.what ());
       return 1;
+    }
+  catch (...)
+    {
+      runtime.cleanup ();
+      throw;
     }
 
   return 0;

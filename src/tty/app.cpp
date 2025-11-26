@@ -40,27 +40,12 @@ UIRuntime::refresh_terminal_size () noexcept
 void
 UIRuntime::request_shutdown ()
 {
-  auto expected = ShutdownReason::Running;
-  if (!shutdown_reason_.compare_exchange_strong (
-          expected, ShutdownReason::Completed, std::memory_order_acq_rel))
+  if (stop_source_.stop_requested ())
     return; // Already shutting down
-
-  damage_event_.set (); // Wake present_loop
-  // Write to signal pipe to wake signal_loop
-  SignalPipe::notify (0); // Signal 0 = shutdown request
-}
-
-void
-UIRuntime::request_interrupt ()
-{
-  auto expected = ShutdownReason::Running;
-  if (!shutdown_reason_.compare_exchange_strong (
-          expected, ShutdownReason::Interrupted, std::memory_order_acq_rel))
-    return; // Already shutting down
-
-  damage_event_.set ();
 
   stop_source_.request_stop ();
+  damage_event_.set (); // Wake present_loop
+  SignalPipe::notify (0); // Wake signal_loop
 }
 
 void
@@ -86,22 +71,6 @@ nxb::height_t
 UIRuntime::terminal_height () const noexcept
 {
   return term_height_.load (std::memory_order_acquire);
-}
-
-coro::task<bool>
-UIRuntime::next_frame (std::chrono::milliseconds frame_time)
-{
-  if (shutdown_requested ())
-    co_return false;
-
-  // Process any pending resize events
-  while (auto sz = resize_queue_.try_pop ())
-    compositor_->resize (sz.value ());
-
-  // Yield for frame time
-  co_await scheduler_->yield_for (frame_time);
-
-  co_return !shutdown_requested ();
 }
 
 void
@@ -131,20 +100,47 @@ UIRuntime::println (std::string_view line)
   if (hud_h >= term_h)
     return;
 
+  // Just print - cursor is already in the scroll region.
+  // The scroll region handles scrolling automatically when we hit the bottom.
   fmt::memory_buffer buf;
   ansi::Writer w (buf);
-
-  // Move to bottom of scroll region (one row above HUD) and print with
-  // trailing newline. The newline causes the scroll region to scroll up.
-  // Reset SGR first to avoid HUD styling leaking into log output.
-  auto scroll_bottom = terminal_origin_v + (term_h - hud_h) - 1 * ln;
-  w.move_to (Pos{ terminal_origin + 0 * ch, scroll_bottom });
-  w.reset ();
+  w.reset (); // Avoid HUD styling leaking into log output
   w.text (line);
-  //  w.text (fmt::format ("{}", hud_h.numerical_value_in (ln)));
   w.clear_line_from_cursor ();
   w.text ("\n");
 
+  std::cout.write (buf.data (), static_cast<std::streamsize> (buf.size ()));
+  std::cout.flush ();
+}
+
+void
+UIRuntime::cleanup ()
+{
+  auto hud_h = compositor_->hud_height ();
+  auto term_h = terminal_height ();
+
+  // Nothing to clear in full-screen mode
+  if (hud_h >= term_h)
+    return;
+
+  // Clear HUD region plus spacer row above, preserving cursor position
+  fmt::memory_buffer buf;
+  ansi::Writer w (buf);
+  w.save_cursor ();
+
+  // Clear from HUD area to bottom using raw row numbers to avoid coord issues
+  auto term_rows = static_cast<int> (term_h.numerical_value_in (ln));
+  auto hud_rows = static_cast<int> (hud_h.numerical_value_in (ln));
+  auto start_row
+      = std::max (0, term_rows - hud_rows - 1); // extra row for spacer
+  // Clear rows start_row through term_rows-1 (0-indexed)
+  for (int r = start_row; r < term_rows; ++r)
+    {
+      w.move_to (Pos::at (0 * ch, r * ln));
+      w.clear_line ();
+    }
+
+  w.restore_cursor ();
   std::cout.write (buf.data (), static_cast<std::streamsize> (buf.size ()));
   std::cout.flush ();
 }
@@ -176,7 +172,7 @@ UIRuntime::signal_loop ()
 
             case SIGINT:
             case SIGTERM:
-              request_interrupt ();
+              request_shutdown ();
               co_return;
 
             case SIGWINCH:
@@ -189,31 +185,6 @@ UIRuntime::signal_loop ()
               break;
             }
         }
-    }
-
-  co_return;
-}
-
-coro::task<>
-UIRuntime::present_loop ()
-{
-  co_await scheduler_->schedule ();
-  co_await resize_queue_.push (terminal_size ());
-
-  while (!shutdown_requested ())
-    {
-      // Check for resize events
-      while (auto value = resize_queue_.try_pop ())
-        compositor_->resize (*value);
-
-      // Wait for damage
-      damage_event_.reset ();
-      co_await damage_event_;
-
-      if (shutdown_requested ())
-        break;
-
-      compositor_->present_frame ();
     }
 
   co_return;

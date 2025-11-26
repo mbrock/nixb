@@ -105,8 +105,7 @@ cmd_play (const std::string &file, double speed)
       tasks.push_back (runtime.signal_loop ());
 
       tasks.push_back (
-          runtime.run_render_loop ([&state] { return build_ui (state); },
-                                   std::chrono::milliseconds{ 16 }));
+          runtime.run_render_loop ([&state] { return build_ui (state); }));
 
       tasks.push_back (event_consumer (runtime, queue));
 
@@ -118,18 +117,20 @@ cmd_play (const std::string &file, double speed)
         co_await nixb::replay::replay_file (runtime.scheduler (), path, queue,
                                             stoken, true, spd);
         state.done = true;
-
         runtime.request_shutdown ();
+        co_await queue.shutdown ();
       };
 
       tasks.push_back (replay_task (runtime, state, file, queue,
                                     runtime.get_stop_token (), speed));
       coro::sync_wait (coro::when_all (std::move (tasks)));
 
+      runtime.cleanup ();
       runtime.request_shutdown ();
     }
   catch (const std::exception &e)
     {
+      runtime.cleanup ();
       fmt::print (stderr, "Error: {}\n", e.what ());
       return 1;
     }

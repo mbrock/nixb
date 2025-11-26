@@ -1,6 +1,13 @@
 #include "ansi.hpp"
+#include "tty/units.hpp"
+#include "tui.hpp"
 
+#include <cstdio>
+#include <iostream>
 #include <iterator>
+#include <poll.h>
+#include <sys/ioctl.h>
+#include <termios.h>
 #include <unistd.h>
 
 namespace nxb::ansi
@@ -165,7 +172,7 @@ Writer::set_scroll_region (const row_t top, const row_t bottom)
 Writer &
 Writer::reset_scroll_region ()
 {
-  csi ("", 'r');
+  set_scroll_region (ansi_origin_v - 1 * ln, ansi_origin_v - 1 * ln);
   return *this;
 }
 
@@ -212,6 +219,14 @@ Writer &
 Writer::restore_cursor ()
 {
   fmt::format_to (std::back_inserter (buf_), "{}u", CSI);
+  return *this;
+}
+
+Writer &
+Writer::request_cursor_position ()
+{
+  // DSR 6 - Device Status Report (cursor position)
+  fmt::format_to (std::back_inserter (buf_), "{}6n", CSI);
   return *this;
 }
 
@@ -453,7 +468,7 @@ set_scroll_region (const row_t top, const row_t bottom)
 void
 reset_scroll_region ()
 {
-  print_csi ("r");
+  set_scroll_region (ansi_origin_v - 1 * ln, ansi_origin_v - 1 * ln);
 }
 
 void
@@ -472,16 +487,115 @@ scroll_down (const height_t n)
     print_csi ("{}T", rows);
 }
 
+std::optional<Pos>
+query_cursor_position ()
+{
+  if (!is_tty ())
+    return std::nullopt;
+
+  // Save current terminal settings
+  struct termios old_term{};
+  struct termios new_term{};
+  if (tcgetattr (STDIN_FILENO, &old_term) < 0)
+    return std::nullopt;
+
+  // Set raw mode temporarily (disable canonical mode and echo)
+  new_term = old_term;
+  new_term.c_lflag &= ~static_cast<tcflag_t> (ICANON | ECHO);
+  new_term.c_cc[VMIN] = 0;
+  new_term.c_cc[VTIME] = 1; // 100ms timeout per read
+  if (tcsetattr (STDIN_FILENO, TCSANOW, &new_term) < 0)
+    return std::nullopt;
+
+  // Send DSR 6 query
+  fmt::print ("{}6n", CSI);
+  std::fflush (stdout);
+
+  // Read response: ESC [ row ; col R
+  char buf[32];
+  int i = 0;
+  bool got_esc = false;
+  bool got_csi = false;
+
+  // Use poll to wait for response with timeout
+  struct pollfd pfd{};
+  pfd.fd = STDIN_FILENO;
+  pfd.events = POLLIN;
+
+  while (i < 31)
+    {
+      // Wait up to 100ms for data
+      int ret = poll (&pfd, 1, 100);
+      if (ret <= 0)
+        break; // Timeout or error
+
+      char c;
+      if (read (STDIN_FILENO, &c, 1) != 1)
+        break;
+
+      if (!got_esc && c == '\x1b')
+        {
+          got_esc = true;
+          continue;
+        }
+      if (got_esc && !got_csi && c == '[')
+        {
+          got_csi = true;
+          continue;
+        }
+      if (got_csi)
+        {
+          if (c == 'R')
+            {
+              buf[i] = '\0';
+              break;
+            }
+          buf[i++] = c;
+        }
+    }
+
+  // Restore terminal settings
+  tcsetattr (STDIN_FILENO, TCSANOW, &old_term);
+
+  if (!got_csi || i == 0)
+    return std::nullopt;
+
+  // Parse "row;col"
+  int row = 0;
+  int col = 0;
+  if (std::sscanf (buf, "%d;%d", &row, &col) != 2)
+    return std::nullopt;
+
+  // Convert from 1-based ANSI to our coordinate system
+  // ansi_origin is at -1, so ANSI position 1 = terminal_origin (0)
+  return Pos{ terminal_origin + (col - 1) * ch,
+              terminal_origin_v + (row - 1) * ln };
+}
+
 TerminalGuard::TerminalGuard () { hide_cursor (); }
 
 TerminalGuard::~TerminalGuard ()
 {
-  reset_scroll_region ();
-  show_cursor ();
-  clear_screen ();
-  move_to (Pos::origin ());
-  print_csi ("0m"); // Reset SGR
-  std::fflush (stdout);
+  // Get terminal width for ruler
+  struct winsize ws{};
+  width_t term_width = 80 * ch;
+  if (ioctl (STDOUT_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_col > 0)
+    term_width = ws.ws_col * ch;
+
+  // Save cursor before scroll region reset (which moves to home)
+  fmt::memory_buffer buf;
+  Writer w (buf);
+  w.save_cursor ();
+  w.reset_scroll_region ();
+  w.restore_cursor ();
+  w.reset ();
+  w.show_cursor ();
+  //  w.text ("\n");
+  // w.text ("\n");
+  // w.text (tui::hrule_string (term_width));
+  // w.text ("\n");
+  std::cout.write (buf.data (), static_cast<std::streamsize> (buf.size ()));
+  std::cout.flush ();
 }
 
 } // namespace nxb::ansi
