@@ -13,7 +13,7 @@ endif()
 include(cmake/CPM.cmake)
 
 cmake_policy(SET CMP0167 NEW)
-find_package(Boost REQUIRED)
+find_package(Boost REQUIRED COMPONENTS stacktrace_basic stacktrace_addr2line stacktrace_from_exception)
 find_package(PkgConfig REQUIRED)
 
 pkg_check_modules(NIX REQUIRED IMPORTED_TARGET
@@ -147,7 +147,17 @@ target_link_libraries(nxb
         PkgConfig::NIX
         simdjson::simdjson
         CLI11::CLI11
+        Boost::stacktrace_addr2line
+        Boost::stacktrace_from_exception
+        ${CMAKE_DL_LIBS}
 )
+target_compile_definitions(nxb PRIVATE
+    BOOST_STACKTRACE_LINK
+    BOOST_STACKTRACE_USE_ADDR2LINE
+    BOOST_STACKTRACE_ADDR2LINE_LOCATION="/usr/bin/addr2line"
+)
+target_compile_options(nxb PRIVATE -g -fno-omit-frame-pointer)
+target_link_options(nxb PRIVATE -rdynamic -no-pie)
 
 # Test executables
 add_executable(raster-test src/test/raster-test.cpp)

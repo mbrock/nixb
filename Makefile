@@ -13,10 +13,6 @@ watch:; find src -name '*.cpp' -o -name '*.hpp' | entr -cs 'make && ./build/nxbc
 
 # Run all tests with nice colorful output
 test: build
-	@echo ""
-	@echo "\033[1;36m━━━ raster-test ━━━\033[0m"
-	@./build/default/raster-test || true
-	@echo ""
-	@echo "\033[1;36m━━━ terminal-test ━━━\033[0m"
-	@./build/default/terminal-test || true
-	@echo ""
+	./build/default/raster-test || true
+	./build/default/terminal-test || true
+
