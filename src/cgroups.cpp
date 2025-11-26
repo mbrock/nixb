@@ -196,26 +196,28 @@ namespace nxb::cgroups
                 field_info::unit_type::count },
   };
 
-  // pressure stat field encyclopedia (for cpu.pressure, io.pressure,
-  // memory.pressure)
-  constexpr std::array pressure_fields = {
-    field_info{ "some avg10", "some tasks stalled ten second average",
-                field_info::unit_type::percent },
-    field_info{ "some avg60", "some tasks stalled sixty second average",
-                field_info::unit_type::percent },
-    field_info{ "some avg300", "some tasks stalled five minute average",
-                field_info::unit_type::percent },
-    field_info{ "some total", "some tasks stalled total time",
-                field_info::unit_type::microseconds },
-    field_info{ "full avg10", "all tasks stalled ten second average",
-                field_info::unit_type::percent },
-    field_info{ "full avg60", "all tasks stalled sixty second average",
-                field_info::unit_type::percent },
-    field_info{ "full avg300", "all tasks stalled five minute average",
-                field_info::unit_type::percent },
-    field_info{ "full total", "all tasks stalled total time",
-                field_info::unit_type::microseconds },
-  };
+  // // pressure stat field encyclopedia (for cpu.pressure, io.pressure,
+  // // memory.pressure)
+  // constexpr std::array pressure_fields = {
+  //   field_info{ "some avg10", "some tasks stalled ten second average",
+  //               field_info::unit_type::percent },
+  //   field_info{ "some avg60", "some tasks stalled sixty second
+  //   average",
+  //               field_info::unit_type::percent },
+  //   field_info{ "some avg300", "some tasks stalled five minute
+  //   average",
+  //               field_info::unit_type::percent },
+  //   field_info{ "some total", "some tasks stalled total time",
+  //               field_info::unit_type::microseconds },
+  //   field_info{ "full avg10", "all tasks stalled ten second average",
+  //               field_info::unit_type::percent },
+  //   field_info{ "full avg60", "all tasks stalled sixty second average",
+  //               field_info::unit_type::percent },
+  //   field_info{ "full avg300", "all tasks stalled five minute average",
+  //               field_info::unit_type::percent },
+  //   field_info{ "full total", "all tasks stalled total time",
+  //               field_info::unit_type::microseconds },
+  // };
 
   // Parse value based on unit type
   stat_value
@@ -242,59 +244,54 @@ namespace nxb::cgroups
   format_value (const stat_value &value)
   {
     return std::visit (
-        [] (auto &&val) -> std::string
-          {
-            using T = std::decay_t<decltype (val)>;
-            if constexpr (std::is_same_v<T, std::uint64_t>)
-              {
-                return fmt::format ("{}", val);
-              }
-            else if constexpr (requires { val.in (GiB); })
-              {
-                // Byte/page quantities - convert to bytes first for
-                // comparison
-                auto val_in_bytes = val.in (B);
-                auto val_numeric
-                    = val_in_bytes.numerical_value_ref_in (B);
-                constexpr auto GiB_in_bytes = 1073741824.0; // 2^30
-                constexpr auto MiB_in_bytes = 1048576.0;    // 2^20
-                constexpr auto KiB_in_bytes = 1024.0;       // 2^10
+        [] (auto &&val) -> std::string {
+          using T = std::decay_t<decltype (val)>;
+          if constexpr (std::is_same_v<T, std::uint64_t>)
+            {
+              return fmt::format ("{}", val);
+            }
+          else if constexpr (requires { val.in (GiB); })
+            {
+              // Byte/page quantities - convert to bytes first for
+              // comparison
+              auto val_in_bytes = val.in (B);
+              auto val_numeric = val_in_bytes.numerical_value_ref_in (B);
+              constexpr auto GiB_in_bytes = 1073741824.0; // 2^30
+              constexpr auto MiB_in_bytes = 1048576.0;    // 2^20
+              constexpr auto KiB_in_bytes = 1024.0;       // 2^10
 
-                if (val_numeric >= GiB_in_bytes)
-                  return fmt::format ("{::N[.2f]}",
-                                      val_in_bytes.in (GiB));
-                else if (val_numeric >= MiB_in_bytes)
-                  return fmt::format ("{::N[.2f]}",
-                                      val_in_bytes.in (MiB));
-                else if (val_numeric >= KiB_in_bytes)
-                  return fmt::format ("{::N[.2f]}",
-                                      val_in_bytes.in (KiB));
-                else
-                  return fmt::format ("{::N[.0f]}", val_in_bytes);
-              }
-            else if constexpr (requires { val.in (h); })
-              {
-                // // Time quantities - smart formatting using mp-units
-                auto val_numeric = val.numerical_value_ref_in (us);
+              if (val_numeric >= GiB_in_bytes)
+                return fmt::format ("{::N[.2f]}", val_in_bytes.in (GiB));
+              else if (val_numeric >= MiB_in_bytes)
+                return fmt::format ("{::N[.2f]}", val_in_bytes.in (MiB));
+              else if (val_numeric >= KiB_in_bytes)
+                return fmt::format ("{::N[.2f]}", val_in_bytes.in (KiB));
+              else
+                return fmt::format ("{::N[.0f]}", val_in_bytes);
+            }
+          else if constexpr (requires { val.in (h); })
+            {
+              // // Time quantities - smart formatting using mp-units
+              auto val_numeric = val.numerical_value_ref_in (us);
 
-                if (val_numeric >= 3600000000UL) // 1 hour in microseconds
-                  return fmt::format ("{::N[.2f]}", val.in (h));
-                else if (val_numeric
-                         >= 60000000UL) // 1 minute in microseconds
-                  return fmt::format ("{::N[.2f]}", val.in (min));
-                else if (val_numeric
-                         >= 1000000UL) // 1 second in microseconds
-                  return fmt::format ("{::N[.2f]}", val.in (s));
-                else if (val_numeric >= 1000UL) // 1 ms in microseconds
-                  return fmt::format ("{::N[.2f]}", val.in (ms));
-                else
-                  return fmt::format ("{}", val);
-              }
-            else
-              {
+              if (val_numeric >= 3600000000UL) // 1 hour in microseconds
+                return fmt::format ("{::N[.2f]}", val.in (h));
+              else if (val_numeric
+                       >= 60000000UL) // 1 minute in microseconds
+                return fmt::format ("{::N[.2f]}", val.in (min));
+              else if (val_numeric
+                       >= 1000000UL) // 1 second in microseconds
+                return fmt::format ("{::N[.2f]}", val.in (s));
+              else if (val_numeric >= 1000UL) // 1 ms in microseconds
+                return fmt::format ("{::N[.2f]}", val.in (ms));
+              else
                 return fmt::format ("{}", val);
-              }
-          },
+            }
+          else
+            {
+              return fmt::format ("{}", val);
+            }
+        },
         value);
   }
 
@@ -426,9 +423,10 @@ namespace nxb::cgroups
           }
       }
 
-    std::sort (rows.begin (), rows.end (),
-               [] (const auto &a, const auto &b)
-                 { return std::get<0> (a) < std::get<0> (b); });
+    std::sort (
+        rows.begin (), rows.end (), [] (const auto &a, const auto &b) {
+          return std::get<0> (a) < std::get<0> (b);
+        });
 
     size_t max_label = 0;
     for (const auto &[label, value] : rows)
@@ -495,9 +493,9 @@ namespace nxb::cgroups
           {
             print ("  {} {}\n",
                    fmt::styled ("device", fmt::fg (fmt::color::orchid)),
-                   fmt::styled (device.device_id,
-                                fmt::fg (fmt::color::sky_blue)
-                                    | fmt::emphasis::bold));
+                   fmt::styled (
+                       device.device_id, fmt::fg (fmt::color::sky_blue)
+                                             | fmt::emphasis::bold));
             print_field_rows (io_stat_fields, device.stats, 4);
             print ("\n");
           }
@@ -521,8 +519,8 @@ namespace nxb::cgroups
         if (content.is_open ())
           {
             print ("{}\n",
-                   fmt::styled (filename,
-                                fmt::fg (fmt::color::light_steel_blue)));
+                   fmt::styled (
+                       filename, fmt::fg (fmt::color::light_steel_blue)));
             std::string line;
             while (std::getline (content, line))
               {
