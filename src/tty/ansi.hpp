@@ -9,6 +9,18 @@
 namespace nxb::ansi
 {
 
+/// When true, print escape sequences in readable debug format instead of
+/// actual control characters. Automatically set by init() when stdout is
+/// not a TTY.
+extern bool debug_mode;
+
+/// Initialize the ANSI module. Detects if stdout is a TTY and sets debug_mode
+/// accordingly. Call this early in main().
+void init ();
+
+/// Check if stdout is connected to a real TTY
+[[nodiscard]] bool is_tty ();
+
 // Re-export fmt's types for convenience
 using rgb = fmt::rgb;
 using color = fmt::color;

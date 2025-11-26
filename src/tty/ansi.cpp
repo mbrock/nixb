@@ -1,13 +1,29 @@
 #include "ansi.hpp"
 
 #include <iterator>
+#include <unistd.h>
 
 namespace nxb::ansi
 {
 
+bool debug_mode = false;
+
+bool
+is_tty ()
+{
+  return isatty (STDOUT_FILENO) != 0;
+}
+
+void
+init ()
+{
+  debug_mode = !is_tty ();
+}
+
 namespace
 {
 constexpr std::string_view CSI = "\x1b[";
+constexpr std::string_view CSI_DEBUG = "⟨CSI:";
 }
 
 // ============================================================================
@@ -17,22 +33,21 @@ constexpr std::string_view CSI = "\x1b[";
 void
 Writer::csi (std::string_view params, char final_byte)
 {
-  fmt::format_to (std::back_inserter (buf_), "{}{}{}", CSI, params,
-                  final_byte);
+  if (debug_mode)
+    fmt::format_to (std::back_inserter (buf_), "{}{}{}⟩", CSI_DEBUG, params,
+                    final_byte);
+  else
+    fmt::format_to (std::back_inserter (buf_), "{}{}{}", CSI, params,
+                    final_byte);
 }
 
 Writer &
 Writer::move_to (const ansi_row_t row, const ansi_col_t col)
 {
-  // ANSI coordinates are 1-based. ansi_row_t/ansi_col_t use ansi_origin
-  // which is offset by 1 from terminal_origin.
-  // ansi_origin = terminal_origin + 1, so to get 1-based number:
-  // terminal position 0 -> ansi position 1
-  // (pos - terminal_origin) + 1 = ansi 1-based number
-  const auto row_num
-      = (row.quantity_from (terminal_origin_v)).numerical_value_in (ln) + 1;
-  const auto col_num
-      = (col.quantity_from (terminal_origin)).numerical_value_in (ch) + 1;
+  // ansi_origin is at terminal position -1, so the offset from ansi_origin
+  // directly gives us the 1-based ANSI coordinate.
+  const auto row_num = (row - ansi_origin_v).numerical_value_in (ln);
+  const auto col_num = (col - ansi_origin).numerical_value_in (ch);
   csi (fmt::format ("{};{}", row_num, col_num), 'H');
   return *this;
 }
@@ -90,8 +105,7 @@ Writer::move (const Size delta)
 Writer &
 Writer::move_to_column (const ansi_col_t col)
 {
-  const auto col_num = static_cast<std::size_t> (
-      (col - terminal_origin).numerical_value_in (ch));
+  const auto col_num = (col - ansi_origin).numerical_value_in (ch);
   csi (fmt::format ("{}", col_num), 'G');
   return *this;
 }
@@ -141,10 +155,9 @@ Writer::clear_line_to_cursor ()
 Writer &
 Writer::set_scroll_region (const row_t top, const row_t bottom)
 {
-  // Convert 0-indexed row_t to 1-indexed ANSI row numbers
-  const auto top_row = (top - terminal_origin_v).numerical_value_in (ln) + 1;
-  const auto bottom_row
-      = (bottom - terminal_origin_v).numerical_value_in (ln) + 1;
+  // Convert terminal row_t to 1-based ANSI row via ansi_origin_v
+  const auto top_row = (top - ansi_origin_v).numerical_value_in (ln);
+  const auto bottom_row = (bottom - ansi_origin_v).numerical_value_in (ln);
   csi (fmt::format ("{};{}", top_row, bottom_row), 'r');
   return *this;
 }
@@ -370,14 +383,33 @@ Writer::text (std::string_view str)
 // Standalone functions (immediate output to stdout)
 // ============================================================================
 
+namespace
+{
+/// Print a CSI sequence, using debug format if debug_mode is set
+template <typename... Args>
+void
+print_csi (fmt::format_string<Args...> fmt_str, Args &&...args)
+{
+  if (debug_mode)
+    {
+      fmt::print ("{}", CSI_DEBUG);
+      fmt::print (fmt_str, std::forward<Args> (args)...);
+      fmt::print ("⟩");
+    }
+  else
+    {
+      fmt::print ("{}", CSI);
+      fmt::print (fmt_str, std::forward<Args> (args)...);
+    }
+}
+} // namespace
+
 void
 move_to (const ansi_row_t row, const ansi_col_t col)
 {
-  const auto row_num
-      = (row.quantity_from (terminal_origin_v)).numerical_value_in (ln) + 1;
-  const auto col_num
-      = (col.quantity_from (terminal_origin)).numerical_value_in (ch) + 1;
-  fmt::print ("{}{};{}H", CSI, row_num, col_num);
+  const auto row_num = (row - ansi_origin_v).numerical_value_in (ln);
+  const auto col_num = (col - ansi_origin).numerical_value_in (ch);
+  print_csi ("{};{}H", row_num, col_num);
 }
 
 void
@@ -389,41 +421,39 @@ move_to (const Pos pos)
 void
 clear_screen ()
 {
-  fmt::print ("{}2J", CSI);
+  print_csi ("2J");
 }
 
 void
 clear_line ()
 {
-  fmt::print ("{}2K", CSI);
+  print_csi ("2K");
 }
 
 void
 hide_cursor ()
 {
-  fmt::print ("{}?25l", CSI);
+  print_csi ("?25l");
 }
 
 void
 show_cursor ()
 {
-  fmt::print ("{}?25h", CSI);
+  print_csi ("?25h");
 }
 
 void
 set_scroll_region (const row_t top, const row_t bottom)
 {
-  // Convert 0-indexed row_t to 1-indexed ANSI row numbers
-  const auto top_row = (top - terminal_origin_v).numerical_value_in (ln) + 1;
-  const auto bottom_row
-      = (bottom - terminal_origin_v).numerical_value_in (ln) + 1;
-  fmt::print ("{}{};{}r", CSI, top_row, bottom_row);
+  const auto top_row = (top - ansi_origin_v).numerical_value_in (ln);
+  const auto bottom_row = (bottom - ansi_origin_v).numerical_value_in (ln);
+  print_csi ("{};{}r", top_row, bottom_row);
 }
 
 void
 reset_scroll_region ()
 {
-  fmt::print ("{}r", CSI);
+  print_csi ("r");
 }
 
 void
@@ -431,7 +461,7 @@ scroll_up (const height_t n)
 {
   const auto rows = n.numerical_value_in (ln);
   if (rows > 0)
-    fmt::print ("{}{}S", CSI, rows);
+    print_csi ("{}S", rows);
 }
 
 void
@@ -439,7 +469,7 @@ scroll_down (const height_t n)
 {
   const auto rows = n.numerical_value_in (ln);
   if (rows > 0)
-    fmt::print ("{}{}T", CSI, rows);
+    print_csi ("{}T", rows);
 }
 
 TerminalGuard::TerminalGuard () { hide_cursor (); }
@@ -450,7 +480,7 @@ TerminalGuard::~TerminalGuard ()
   show_cursor ();
   clear_screen ();
   move_to (Pos::origin ());
-  fmt::print ("{}0m", CSI); // Reset SGR
+  print_csi ("0m"); // Reset SGR
   std::fflush (stdout);
 }
 

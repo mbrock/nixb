@@ -85,15 +85,16 @@ inline constexpr struct terminal_origin_v final
 {
 } terminal_origin_v;
 
-// ANSI cursor positioning is 1-based. Define relative origins that start at
-// (1,1) to keep terminal math type-safe.
+// ANSI cursor positioning is 1-based. Define relative origins at the
+// "imaginary" ANSI position 0 (terminal position -1), so that terminal
+// position 0 naturally maps to ANSI position 1.
 inline constexpr struct ansi_origin final
-    : relative_point_origin<terminal_origin + 1 * ch>
+    : relative_point_origin<terminal_origin - 1 * ch>
 {
 } ansi_origin;
 
 inline constexpr struct ansi_origin_v final
-    : relative_point_origin<terminal_origin_v + 1 * ln>
+    : relative_point_origin<terminal_origin_v - 1 * ln>
 {
 } ansi_origin_v;
 

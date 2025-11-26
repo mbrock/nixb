@@ -1,3 +1,4 @@
+#include "../tty/ansi.hpp"
 #include "../tty/raster-diff.hpp"
 #include "../tty/tui.hpp"
 #include "../tty/units.hpp"
@@ -286,6 +287,136 @@ suite diff_tests = []
         expect (runs[0].origin == Pos::at (0 * ch, 0 * ln));
         expect (runs[1].origin == Pos::at (2 * ch, 1 * ln));
         expect (runs[2].origin == Pos::at (3 * ch, 2 * ln));
+      };
+  };
+
+suite ansi_debug_tests = []
+  {
+    "debug_mode outputs readable escape sequences"_test = []
+      {
+        // Save and set debug mode
+        bool saved = ansi::debug_mode;
+        ansi::debug_mode = true;
+
+        fmt::memory_buffer buf;
+        ansi::Writer w (buf);
+        w.move_to (Pos::at (5 * ch, 3 * ln));
+        w.fg (255, 0, 0);
+        w.text ("Hi");
+        w.reset ();
+
+        std::string_view out (buf.data (), buf.size ());
+
+        // Should contain readable CSI markers, not raw escape chars
+        expect (out.find ("⟨CSI:") != std::string_view::npos)
+            << "contains debug CSI marker";
+        expect (out.find ("\x1b[") == std::string_view::npos)
+            << "no raw escape sequences";
+        expect (out.find ("4;6H") != std::string_view::npos)
+            << "contains move coords (row 4, col 6)";
+        expect (out.find ("38;2;255;0;0") != std::string_view::npos)
+            << "contains RGB color";
+        expect (out.find ("Hi") != std::string_view::npos) << "contains text";
+
+        ansi::debug_mode = saved;
+      };
+
+    "normal mode outputs raw escape sequences"_test = []
+      {
+        bool saved = ansi::debug_mode;
+        ansi::debug_mode = false;
+
+        fmt::memory_buffer buf;
+        ansi::Writer w (buf);
+        w.move_to (Pos::at (0 * ch, 0 * ln));
+
+        std::string_view out (buf.data (), buf.size ());
+
+        expect (out.find ("\x1b[") != std::string_view::npos)
+            << "contains raw CSI";
+        expect (out.find ("⟨CSI:") == std::string_view::npos)
+            << "no debug markers";
+
+        ansi::debug_mode = saved;
+      };
+  };
+
+suite origin_tests = []
+  {
+    "ansi_origin gives correct 1-based coordinates"_test = []
+      {
+        // ansi_origin = terminal_origin - 1 * ch
+        // This places the origin at the "imaginary" ANSI column 0, so
+        // terminal column 0 is at offset +1 from ansi_origin = ANSI column 1
+
+        col_t term_col0 = terminal_origin + 0 * ch;
+        col_t term_col1 = terminal_origin + 1 * ch;
+        col_t term_col5 = terminal_origin + 5 * ch;
+
+        // Convert to ANSI space via point_for
+        ansi_col_t ansi_col0 = term_col0.point_for (ansi_origin);
+        ansi_col_t ansi_col1 = term_col1.point_for (ansi_origin);
+        ansi_col_t ansi_col5 = term_col5.point_for (ansi_origin);
+
+        // Get the ANSI column numbers (offset from ansi_origin)
+        auto val0 = (ansi_col0 - ansi_origin).numerical_value_in (ch);
+        auto val1 = (ansi_col1 - ansi_origin).numerical_value_in (ch);
+        auto val5 = (ansi_col5 - ansi_origin).numerical_value_in (ch);
+
+        // Terminal 0 -> ANSI 1, Terminal 1 -> ANSI 2, etc.
+        expect (val0 == 1_i) << "term 0 -> ansi " << val0 << " (expect 1)";
+        expect (val1 == 2_i) << "term 1 -> ansi " << val1 << " (expect 2)";
+        expect (val5 == 6_i) << "term 5 -> ansi " << val5 << " (expect 6)";
+      };
+
+    "to_ansi helper gives 1-based coordinates"_test = []
+      {
+        col_t term_col0 = terminal_origin + 0 * ch;
+        col_t term_col5 = terminal_origin + 5 * ch;
+
+        ansi_col_t ansi0 = to_ansi (term_col0);
+        ansi_col_t ansi5 = to_ansi (term_col5);
+
+        auto val0 = (ansi0 - ansi_origin).numerical_value_in (ch);
+        auto val5 = (ansi5 - ansi_origin).numerical_value_in (ch);
+
+        expect (val0 == 1_i) << "to_ansi(term 0) = " << val0;
+        expect (val5 == 6_i) << "to_ansi(term 5) = " << val5;
+      };
+
+    "row conversion also works correctly"_test = []
+      {
+        row_t term_row0 = terminal_origin_v + 0 * ln;
+        row_t term_row5 = terminal_origin_v + 5 * ln;
+
+        ansi_row_t ansi0 = to_ansi (term_row0);
+        ansi_row_t ansi5 = to_ansi (term_row5);
+
+        auto val0 = (ansi0 - ansi_origin_v).numerical_value_in (ln);
+        auto val5 = (ansi5 - ansi_origin_v).numerical_value_in (ln);
+
+        expect (val0 == 1_i) << "to_ansi(term row 0) = " << val0;
+        expect (val5 == 6_i) << "to_ansi(term row 5) = " << val5;
+      };
+
+    "Pos conversion gives correct ANSI coordinates"_test = []
+      {
+        Pos pos = Pos::at (0 * ch, 0 * ln);
+        ansi_col_t ansi_x = to_ansi_x (pos);
+        ansi_row_t ansi_y = to_ansi_y (pos);
+
+        auto x = (ansi_x - ansi_origin).numerical_value_in (ch);
+        auto y = (ansi_y - ansi_origin_v).numerical_value_in (ln);
+
+        expect (x == 1_i) << "Pos(0,0) -> ANSI col " << x;
+        expect (y == 1_i) << "Pos(0,0) -> ANSI row " << y;
+
+        Pos pos2 = Pos::at (9 * ch, 4 * ln);
+        auto x2 = (to_ansi_x (pos2) - ansi_origin).numerical_value_in (ch);
+        auto y2 = (to_ansi_y (pos2) - ansi_origin_v).numerical_value_in (ln);
+
+        expect (x2 == 10_i) << "Pos(9,4) -> ANSI col " << x2;
+        expect (y2 == 5_i) << "Pos(9,4) -> ANSI row " << y2;
       };
   };
 

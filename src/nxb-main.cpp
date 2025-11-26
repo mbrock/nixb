@@ -1,5 +1,6 @@
 #include "log-replay.hpp"
 #include "nix-log-adapter.hpp"
+#include "tty/ansi.hpp"
 #include "tty/app.hpp"
 #include "tty/tui.hpp"
 
@@ -154,6 +155,8 @@ main (int argc, char **argv)
       ->default_val (1.0);
 
   CLI11_PARSE (app, argc, argv);
+
+  nxb::ansi::init ();
 
   if (play_cmd->parsed ())
     return cmd_play (play_file, speed);
