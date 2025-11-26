@@ -151,6 +151,23 @@ add_custom_command(TARGET nxb-tui-tests POST_BUILD
     COMMENT "Running tui tests..."
 )
 
+add_executable(nxb-app-tests src/test/app-ut-main.cpp)
+target_include_directories(nxb-app-tests PRIVATE src/test)
+target_link_libraries(nxb-app-tests
+    PRIVATE
+        nixb_ui
+        libvterm::libvterm
+        Boost::ut
+)
+
+add_test(NAME app-tests COMMAND nxb-app-tests)
+
+add_custom_command(TARGET nxb-app-tests POST_BUILD
+    COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure -R app-tests
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+    COMMENT "Running app tests..."
+)
+
 install(TARGETS nxbcg RUNTIME DESTINATION bin)
 
 add_executable(tui-example src/tty/tui_example.cpp)

@@ -141,10 +141,11 @@ Writer::clear_line_to_cursor ()
 Writer &
 Writer::set_scroll_region (const row_t top, const row_t bottom)
 {
-  const auto top_row = static_cast<std::size_t> (
-      (to_ansi (top) - terminal_origin_v).numerical_value_in (ln));
-  const auto bottom_row = static_cast<std::size_t> (
-      (to_ansi (bottom) - terminal_origin_v).numerical_value_in (ln));
+  // Convert 0-indexed row_t to 1-indexed ANSI row numbers
+  const auto top_row
+      = (top - terminal_origin_v).numerical_value_in (ln) + 1;
+  const auto bottom_row
+      = (bottom - terminal_origin_v).numerical_value_in (ln) + 1;
   csi (fmt::format ("{};{}", top_row, bottom_row), 'r');
   return *this;
 }
@@ -413,10 +414,11 @@ show_cursor ()
 void
 set_scroll_region (const row_t top, const row_t bottom)
 {
-  const auto top_row = static_cast<std::size_t> (
-      (to_ansi (top) - terminal_origin_v).numerical_value_in (ln));
-  const auto bottom_row = static_cast<std::size_t> (
-      (to_ansi (bottom) - terminal_origin_v).numerical_value_in (ln));
+  // Convert 0-indexed row_t to 1-indexed ANSI row numbers
+  const auto top_row
+      = (top - terminal_origin_v).numerical_value_in (ln) + 1;
+  const auto bottom_row
+      = (bottom - terminal_origin_v).numerical_value_in (ln) + 1;
   fmt::print ("{}{};{}r", CSI, top_row, bottom_row);
 }
 

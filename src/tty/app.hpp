@@ -27,7 +27,8 @@ enum class ShutdownReason : std::uint8_t
   Interrupted ///< User interrupt (SIGINT/SIGTERM)
 };
 
-/// Guard that hides cursor/clears screen on scope entry, restores on exit.
+/// Guard that hides cursor on scope entry, restores terminal state on exit.
+/// Resets scroll region and shows cursor on destruction.
 struct TerminalGuard
 {
   TerminalGuard ();
@@ -104,14 +105,28 @@ public:
   coro::task<bool> next_frame (std::chrono::milliseconds frame_time);
 
   /// Render a layout to the screen.
-  /// Clears back buffer, renders layout, presents frame.
+  /// Computes HUD height from layout hint, sets up scroll region, renders.
   template <typename Layout>
   void
   render (const Layout &layout)
   {
+    // Compute HUD height from layout
+    auto hint = layout.height_hint ();
+    auto term_h = terminal_height ();
+
+    // If layout wants to grow, use full screen; otherwise use min height
+    height_t hud_h = hint.flex > 0 * one ? term_h : hint.min;
+    hud_h = std::min (hud_h, term_h); // Clamp to terminal
+
+    update_hud_height (hud_h);
+
     render_impl ([&layout] (RasterView &view, Size size)
                    { layout.render (view, size); });
   }
+
+  /// Print a line to the scroll region (only works when HUD height < terminal).
+  /// In full-screen mode, this is a no-op.
+  void println (std::string_view line);
 
   /// Run a render loop until shutdown.
   /// BuildUI is called each frame to produce the layout.
@@ -156,6 +171,7 @@ public:
 private:
   void refresh_terminal_size () noexcept;
   void render_impl (std::function<void (RasterView &, Size)> render_fn);
+  void update_hud_height (height_t hud_h);
 
   std::shared_ptr<coro::io_scheduler> scheduler_;
   GlyphTable glyphs_;
@@ -181,6 +197,12 @@ public:
   GlyphTable &glyphs () const noexcept;
   nxb::Size size () const noexcept;
 
+  /// Set HUD height. Raster covers only the bottom hud_height rows.
+  /// The scroll region is set to rows above the HUD.
+  /// If hud_height >= terminal height, no scroll region (full-screen mode).
+  void set_hud_height (height_t hud_height, height_t term_height);
+  [[nodiscard]] height_t hud_height () const noexcept;
+
   /// Present loop that waits for damage events and renders frames.
   coro::task<> present_loop (UIRuntime &runtime);
 
@@ -192,6 +214,8 @@ private:
   Raster front_;
   Raster back_;
   GlyphTable &glyphs_;
+  height_t hud_height_{ 0 * ln };                        // 0 = full-screen mode
+  row_t hud_start_row_{ terminal_origin_v + 0 * ln };    // row where HUD starts
 };
 
 // ============================================================================

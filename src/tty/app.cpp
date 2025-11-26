@@ -16,11 +16,11 @@ namespace nxb::ui
 TerminalGuard::TerminalGuard ()
 {
   ansi::hide_cursor ();
-  ansi::clear_screen ();
 }
 
 TerminalGuard::~TerminalGuard ()
 {
+  ansi::reset_scroll_region ();
   ansi::show_cursor ();
   ansi::clear_screen ();
   ansi::move_to (Pos::origin ());
@@ -129,6 +129,41 @@ UIRuntime::render_impl (std::function<void (RasterView &, Size)> render_fn)
   compositor_->present_frame ();
 }
 
+void
+UIRuntime::update_hud_height (height_t hud_h)
+{
+  compositor_->set_hud_height (hud_h, terminal_height ());
+}
+
+void
+UIRuntime::println (std::string_view line)
+{
+  auto hud_h = compositor_->hud_height ();
+  auto term_h = terminal_height ();
+
+  // No scroll region in full-screen mode
+  if (hud_h >= term_h)
+    return;
+
+  // Save cursor, move to bottom of scroll region, print, restore
+  fmt::memory_buffer buf;
+  ansi::Writer w (buf);
+
+  // Move to bottom of scroll region and print with trailing newline.
+  // The newline causes the scroll region to scroll up, like the old code.
+  // Reset SGR first to avoid HUD styling leaking into log output.
+  auto scroll_bottom_pos = Pos{ terminal_origin + 0 * ch,
+                                terminal_origin_v + (term_h - hud_h) };
+  w.move_to (scroll_bottom_pos);
+  w.reset ();
+  w.text (line);
+  w.clear_line_from_cursor ();
+  w.text ("\n");
+
+  std::cout.write (buf.data (), static_cast<std::streamsize> (buf.size ()));
+  std::cout.flush ();
+}
+
 TerminalCompositor &
 UIRuntime::compositor () noexcept
 {
@@ -177,16 +212,74 @@ UIRuntime::signal_loop ()
 TerminalCompositor::TerminalCompositor (const nxb::Size size,
                                         GlyphTable &glyphs)
     : front_ (size.w, size.h, glyphs), back_ (size.w, size.h, glyphs),
-      glyphs_ (glyphs)
+      glyphs_ (glyphs), hud_height_ (size.h),
+      hud_start_row_ (terminal_origin_v + 0 * ln)
 {
 }
 
 void
 TerminalCompositor::resize (nxb::Size size)
 {
-  front_ = Raster (size.w, size.h, glyphs_);
-  back_ = Raster (size.w, size.h, glyphs_);
-  ansi::clear_screen ();
+  // In HUD mode, only resize to HUD height
+  auto raster_h = hud_height_ > 0 * ln ? hud_height_ : size.h;
+  front_ = Raster (size.w, raster_h, glyphs_);
+  back_ = Raster (size.w, raster_h, glyphs_);
+
+  // Clear only the HUD region
+  if (hud_height_ > 0 * ln && hud_height_ < size.h)
+    {
+      // Clear HUD area
+      fmt::memory_buffer buf;
+      ansi::Writer w (buf);
+      auto end_row = terminal_origin_v + size.h;
+      for (auto row = hud_start_row_; row < end_row; row += 1 * ln)
+        {
+          w.move_to (Pos{ terminal_origin + 0 * ch, row });
+          w.clear_line ();
+        }
+      std::cout.write (buf.data (), static_cast<std::streamsize> (buf.size ()));
+      std::cout.flush ();
+    }
+  else
+    {
+      ansi::clear_screen ();
+    }
+}
+
+void
+TerminalCompositor::set_hud_height (height_t hud_height, height_t term_height)
+{
+  if (hud_height == hud_height_)
+    return;
+
+  hud_height_ = hud_height;
+
+  // Calculate where the HUD starts
+  if (hud_height >= term_height)
+    {
+      // Full-screen mode
+      hud_start_row_ = terminal_origin_v + 0 * ln;
+      ansi::reset_scroll_region ();
+    }
+  else
+    {
+      // HUD mode: scroll region above, HUD at bottom
+      hud_start_row_ = terminal_origin_v + (term_height - hud_height);
+      auto scroll_top = terminal_origin_v + 0 * ln;
+      auto scroll_bottom = terminal_origin_v + (term_height - hud_height);
+      ansi::set_scroll_region (scroll_top, scroll_bottom);
+    }
+
+  // Resize rasters to match HUD height
+  auto w = front_.width ();
+  front_ = Raster (w, hud_height, glyphs_);
+  back_ = Raster (w, hud_height, glyphs_);
+}
+
+height_t
+TerminalCompositor::hud_height () const noexcept
+{
+  return hud_height_;
 }
 
 Raster &
@@ -218,7 +311,10 @@ TerminalCompositor::present_frame (std::ostream &out)
 {
   fmt::memory_buffer buf;
   ansi::Writer w (buf);
-  w.move_to (Pos::origin ());
+
+  // Offset for HUD mode: raster row 0 maps to hud_start_row_ on terminal
+  // hud_start_row_ is a row_t (point), subtract origin to get quantity offset
+  auto row_offset = hud_start_row_ - terminal_origin_v;
 
   // Track current colors to re-emit after SGR reset
   std::optional<Rgba8> current_fg;
@@ -242,7 +338,9 @@ TerminalCompositor::present_frame (std::ostream &out)
   diff_rasters (front_, back_,
                 [&] (const ChangeRun &run)
                   {
-                    w.move_to (run.origin);
+                    // Offset position to HUD region
+                    auto pos = Pos{ run.origin.x, run.origin.y + row_offset };
+                    w.move_to (pos);
 
                     // Handle emphasis reset first (SGR 0 resets everything)
                     if (run.em_reset)

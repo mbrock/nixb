@@ -4,6 +4,7 @@
 
 #include <coro/coro.hpp>
 #include <fmt/core.h>
+#include <random>
 #include <vector>
 
 namespace nxb::tui_example
@@ -17,6 +18,30 @@ struct Activity
   percent_t progress{ 0.0 * percent };
 };
 
+// Fake log messages for demo
+const std::vector<std::string> fake_logs = {
+  "Fetching source from cache.nixos.org...",
+  "Unpacking source archive...",
+  "Patching sources...",
+  "Running configure phase...",
+  "Compiling src/main.cpp",
+  "Compiling src/parser.cpp",
+  "Compiling src/codegen.cpp",
+  "Linking libfoo.so",
+  "Running test suite...",
+  "Installing to /nix/store/...",
+  "Registering outputs...",
+  "Build completed successfully",
+  "Checking derivation inputs...",
+  "Downloading https://github.com/...",
+  "Verifying SHA256 hash...",
+  "Extracting archive...",
+  "Applying patch fix-build.patch",
+  "Configuring with cmake...",
+  "Building target: all",
+  "Post-install fixup phase...",
+};
+
 int
 example (int argc, char *argv[])
 {
@@ -24,7 +49,7 @@ example (int argc, char *argv[])
   using namespace nxb::tui_example;
   using nxb::percent;
 
-  int steps = 10;
+  int steps = 100;
   if (argc > 1 && std::string_view (argv[1]) == "--steps")
     steps = std::stoi (argv[2]);
 
@@ -35,6 +60,8 @@ example (int argc, char *argv[])
           { "llvm-17.src.tar.xz" },
       }),
       [] (auto &state) {
+        // Fixed-height HUD: header + hrule + 3 activities + hrule = 6 rows
+        // No flex-grow means scroll region above for logs
         return column (
             styled_text (span ("Build ", fg (Rgba8::magenta ()) | bold),
                          span ("Progress", fg (Rgba8::blue ()) | italic)),
@@ -60,8 +87,11 @@ example (int argc, char *argv[])
             hrule ());
       },
       [n = steps] (nxb::ui::UIRuntime &runtime,
-
                    std::vector<Activity> &state) -> coro::task<> {
+        std::mt19937 rng (42);
+        std::uniform_int_distribution<std::size_t> log_dist (
+            0, fake_logs.size () - 1);
+
         for (int frame = 0; frame <= n; ++frame)
           {
             if (runtime.shutdown_requested ())
@@ -73,9 +103,17 @@ example (int argc, char *argv[])
             state[1].progress = std::min (x / 0.6, 100.0 * percent);
             state[2].progress = std::min (x / 0.4, 100.0 * percent);
 
-            co_await runtime.scheduler ().yield_for (16ms);
+            // Print a fake log message every few frames
+            if (frame % 5 == 0)
+              {
+                auto &msg = fake_logs[log_dist (rng)];
+                runtime.println (fmt::format ("[{:3}] {}", frame, msg));
+              }
+
+            co_await runtime.scheduler ().yield_for (32ms);
           }
 
+        runtime.println ("All builds completed!");
         co_await runtime.scheduler ().yield_for (1s);
       });
 }
