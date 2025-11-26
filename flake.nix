@@ -49,6 +49,7 @@
               treefmt
               cmake-language-server
               ccache
+              mold
             ];
           };
         }

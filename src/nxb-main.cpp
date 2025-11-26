@@ -3,6 +3,10 @@
 #include "nix-log-adapter.hpp"
 
 #include <exception>
+#include <fmt/base.h>
+#include <fmt/color.h>
+#include <future>
+#include <nix/util/error.hh>
 #include <nxt/ansi.hpp>
 #include <nxt/app.hpp>
 #include <nxt/async.hpp>
@@ -12,6 +16,7 @@
 #include <fmt/core.h>
 
 #include <boost/stacktrace.hpp>
+#include <sys/stat.h>
 
 void my_terminate_handler() {
   try {
@@ -45,7 +50,14 @@ struct EventHandler {
   nxb::ui::UIRuntime &runtime;
 
   // Top-level event handlers
-  void operator()(const nix_event::LogLine &ev) { runtime.println(ev.text); }
+  void operator()(const nix_event::LogLine &ev) {
+    auto x = (1.0 - static_cast<float>(ev.level) /
+                        static_cast<float>(nix::Verbosity::lvlVomit) * 200.0);
+    fmt::println(
+        "{} {}",
+        fmt::styled(static_cast<int>(ev.level), fmt::fg(fmt::color::gray)),
+        fmt::styled(ev.text, fmt::fg(fmt::rgb(x, x, x))));
+  }
 
   void operator()(const nix_event::ActivityStarted &ev) {
     std::visit(*this, ev.kind);
@@ -138,45 +150,75 @@ int cmd_play(const std::string &file, double speed) {
                       build_play_ui, update_play);
 }
 
-int cmd_derive(const std::string &installable) {
-  nxb::NixContext ctx;
+struct DeriveState {
+  std::string installable;
+  bool done = false;
+  std::string result_path;
+  std::string error_msg;
+};
+
+auto build_derive_ui(const DeriveState &state) {
+  return column(
+      hrule(),
+      text(fmt::format("Deriving: {}", state.installable),
+           fg(nxb::Rgba8::cyan())),
+      text(state.done ? (state.error_msg.empty() ? "Done" : "Error")
+                      : "Evaluating...",
+           fg(state.done && state.error_msg.empty() ? nxb::Rgba8::green()
+                                                    : nxb::Rgba8::yellow())));
+}
+
+nxb::task<> run_derive(nxb::ui::UIRuntime &runtime, DeriveState &state,
+                       nxb::queue<NixLogEvent> &events) {
+  // Set up our logger to capture Nix logs
+  auto adapter = std::make_unique<nixb::coro_adapter::NixLogAdapter>(events);
+  nix::logger = std::move(adapter);
+
+  // // Enable verbose logging to get evaluation output
+  nix::verbosity = nix::lvlDebug;
+  //  nix::loggerSettings.showTrace = true;
+
+  runtime.println("Starting evaluation...");
 
   try {
-    auto drv_paths = nxb::resolve_installable(ctx, installable);
+    nxb::NixContext ctx;
+    runtime.println("Context created, resolving installable...");
+    auto drv_paths = nxb::resolve_installable(ctx, state.installable);
 
-    for (const auto &path : drv_paths) {
-      fmt::print("{}\n", ctx.store()->printStorePath(path));
-      auto info = read_derivation_info(ctx, path);
+    if (!drv_paths.empty()) {
+      state.result_path = ctx.store()->printStorePath(drv_paths[0]);
+      runtime.println(fmt::format("Result: {}", state.result_path));
+
+      auto info = read_derivation_info(ctx, drv_paths[0]);
       if (info) {
-        fmt::print("name: {}\n", info->name);
-        fmt::print("system: {}\n", info->system);
-        fmt::print("input_drvs: {}\n", info->input_drvs.size());
-        for (const auto &drv : info->input_drvs) {
-          fmt::print("  {}\n", ctx.store()->printStorePath(drv));
-          auto drv_info = read_derivation_info(ctx, drv);
-          if (drv_info) {
-            for (const auto &dep : drv_info->input_drvs) {
-              fmt::print("    {}\n", dep.name());
-            }
-          }
-        }
-        fmt::print("output_paths: {}\n", info->output_paths.size());
-        for (const auto &path : info->output_paths)
-          fmt::print("  {}\n", ctx.store()->printStorePath(path));
-        // fmt::print("env:\n");
-        // for (const auto &[key, value] : info->env)
-        //   if (!value.empty())
-        //     fmt::print("  {}={}\n", key, value);
+        runtime.println(fmt::format("name: {}", info->name));
+        runtime.println(fmt::format("system: {}", info->system));
+        runtime.println(fmt::format("input_drvs: {}", info->input_drvs.size()));
       }
     }
 
+    co_await runtime.sleep(std::chrono::seconds(1));
   } catch (std::exception &e) {
-    boost::stacktrace::stacktrace trace =
-        boost::stacktrace::stacktrace::from_current_exception(); // <---
-    std::cerr << "Caught exception: " << e.what() << ", trace:\n" << trace;
+    state.error_msg = e.what();
+    runtime.println(fmt::format("error: {}", e.what()));
   }
 
-  return 0;
+  state.done = true;
+  runtime.signal_damage();
+  co_await events.shutdown();
+}
+
+nxb::task<> update_derive(nxb::ui::UIRuntime &runtime, DeriveState &state) {
+  nxb::queue<NixLogEvent> events;
+
+  co_await runtime.run(consume_events(runtime, events),
+                       run_derive(runtime, state, events));
+}
+
+int cmd_derive(const std::string &installable) {
+  nxb::ansi::init();
+  return nxb::ui::run(DeriveState{.installable = installable}, build_derive_ui,
+                      update_derive);
 }
 
 } // anonymous namespace

@@ -6,6 +6,8 @@ set(CMAKE_CXX_EXTENSIONS ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_COLOR_DIAGNOSTICS ON)
 
+set(CMAKE_LINKER_TYPE "GOLD")
+
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Debug)
 endif()
@@ -101,7 +103,7 @@ foreach(target IN ITEMS simdjson CLI11 mp-units fmt libcoro)
     endif()
 endforeach()
 
-add_library(libnxt
+add_library(libnxt STATIC
     src/nxt/app.cpp
     src/nxt/ansi.cpp
     src/nxt/compositor.cpp
@@ -113,29 +115,16 @@ add_library(libnxt
 target_include_directories(libnxt PUBLIC src)
 target_link_libraries(libnxt
     PUBLIC
-        libcoro          # Coroutine functionality exposed in headers
-        fmt::fmt         # Formatting used in public interface
-        mdspan           # Multidimensional spans in public interface
-        mp-units::mp-units # Units library for tui.hpp
-        Boost::headers   # Boost headers used in public interface (header-only)
+        libcoro
+        fmt::fmt
+        mdspan
+        mp-units::mp-units
+        Boost::headers
 )
 target_compile_definitions(libnxt PUBLIC
     MDSPAN_USE_BRACKET_OPERATOR=1
     MDSPAN_USE_PAREN_OPERATOR=0
 )
-
-add_executable(nxbcg
-    src/cgroups.cpp
-    src/nix-log-adapter.cpp
-    src/log-replay.cpp
-)
-target_link_libraries(nxbcg
-    PRIVATE
-        libnxt
-        PkgConfig::NIX
-        simdjson::simdjson
-)
-
 add_executable(nxb
     src/nxb-main.cpp
     src/nix-log-adapter.cpp
@@ -156,8 +145,8 @@ target_compile_definitions(nxb PRIVATE
     BOOST_STACKTRACE_USE_ADDR2LINE
     BOOST_STACKTRACE_ADDR2LINE_LOCATION="/usr/bin/addr2line"
 )
-target_compile_options(nxb PRIVATE -g -fno-omit-frame-pointer)
-target_link_options(nxb PRIVATE -rdynamic -no-pie)
+# target_compile_options(nxb PRIVATE -g -fno-omit-frame-pointer)
+# target_link_options(nxb PRIVATE -rdynamic -no-pie)
 
 # Test executables
 add_executable(raster-test src/test/raster-test.cpp)
@@ -169,10 +158,5 @@ target_link_libraries(terminal-test PRIVATE libnxt libvterm::libvterm Boost::ut)
 enable_testing()
 add_test(NAME raster-test COMMAND raster-test)
 add_test(NAME terminal-test COMMAND terminal-test)
-
-install(TARGETS nxbcg RUNTIME DESTINATION bin)
-
-add_executable(tui-example src/nxt/tui_example.cpp)
-target_link_libraries(tui-example PRIVATE libnxt)
 
 

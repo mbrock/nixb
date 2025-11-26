@@ -86,8 +86,8 @@ inline std::string format_phase_name(std::string_view phase) {
 class NixContext {
 public:
   NixContext() : eval_settings_(read_only_mode_) {
-    fetch_settings_.allowDirty = true;
-    fetch_settings_.warnDirty = false;
+    // fetch_settings_.allowDirty = true;
+    // fetch_settings_.warnDirty = false;
 
     nix::initGC();
     nix::initLibUtil();
@@ -105,7 +105,10 @@ public:
           lookup_path_, store(), fetch_settings_, eval_settings_);
 
       nix::flakeSettings.configureEvalSettings(eval_settings_);
-      fmt::println("flake settings: {}", nix::flakeSettings.toKeyValue());
+      eval_settings_.evalCores.override(0);
+      eval_settings_.lazyTrees.override(true);
+      eval_settings_.traceVerbose.override(true);
+      eval_settings_.useEvalCache.override(true);
     }
 
     return nix::ref<nix::EvalState>(eval_state_);
@@ -116,7 +119,7 @@ private:
   std::shared_ptr<nix::EvalState> eval_state_;
 
   nix::LookupPath lookup_path_{};
-  bool read_only_mode_ = false;
+  bool read_only_mode_ = true;
   nix::fetchers::Settings fetch_settings_;
   nix::EvalSettings eval_settings_;
 };
@@ -132,8 +135,8 @@ struct DerivationInfo {
   std::string system;
   std::vector<nix::StorePath> input_drvs;
   std::vector<nix::StorePath> output_paths;
-  std::map<std::string, std::string, std::less<>> env;
-  nlohmann::json attrs;
+  //  std::map<std::string, std::string, std::less<>> env;
+  //  nlohmann::json attrs;
 
   DerivationInfo(nix::StorePath p) : path(std::move(p)) {}
 };
@@ -147,8 +150,8 @@ read_derivation_info(NixContext &ctx, const nix::StorePath &drv_path) {
     DerivationInfo info{drv_path};
     info.name = drv.name;
     info.system = drv.platform;
-    info.attrs = drv.structuredAttrs->structuredAttrs;
-    info.env = drv.env;
+    // info.attrs = drv.structuredAttrs->structuredAttrs;
+    // info.env = drv.env;
 
     for (const auto &[input_drv, _] : drv.inputDrvs.map)
       info.input_drvs.push_back(input_drv);
