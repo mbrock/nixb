@@ -37,6 +37,7 @@
               pcre2.dev
               lowdown.dev
               editline.dev
+              liburing.dev
 
               c-ares.dev
               boost

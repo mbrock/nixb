@@ -1,24 +1,14 @@
 // cgroups v2 parser and scanner
 
-#include "uring.hpp"
-
 #include <algorithm>
 #include <cerrno>
 #include <cstdio>
 #include <fcntl.h>
 #include <filesystem>
-#include <fmt/base.h>
-#include <fmt/color.h>
 #include <fstream>
 #include <map>
-#include <mp-units/format.h>
-#include <mp-units/math.h>
-#include <mp-units/ostream.h>
-#include <mp-units/systems/iec.h>
-#include <mp-units/systems/si.h>
 #include <span>
 #include <sstream>
-#include <stdexec/execution.hpp>
 #include <string>
 #include <string_view>
 #include <tuple>
@@ -27,12 +17,18 @@
 #include <variant>
 #include <vector>
 
+#include <fmt/base.h>
+#include <fmt/color.h>
+
+#include <mp-units/format.h>
+#include <mp-units/math.h>
+#include <mp-units/ostream.h>
+#include <mp-units/systems/iec.h>
+#include <mp-units/systems/si.h>
+
 namespace nxb::cgroups
 {
-namespace uring = nxb::uring;
 using fmt::print;
-using uring::file_data;
-using uring::io_uring_runtime;
 using namespace mp_units;
 using namespace mp_units::iec::unit_symbols;
 using namespace mp_units::si::unit_symbols;
@@ -228,52 +224,51 @@ std::string
 format_value (const stat_value &value)
 {
   return std::visit (
-      [] (auto &&val) -> std::string
-        {
-          using T = std::decay_t<decltype (val)>;
-          if constexpr (std::is_same_v<T, std::uint64_t>)
-            {
-              return fmt::format ("{}", val);
-            }
-          else if constexpr (requires { val.in (GiB); })
-            {
-              // Byte/page quantities - convert to bytes first for comparison
-              auto val_in_bytes = val.in (B);
-              auto val_numeric = val_in_bytes.numerical_value_ref_in (B);
-              constexpr auto GiB_in_bytes = 1073741824.0; // 2^30
-              constexpr auto MiB_in_bytes = 1048576.0;    // 2^20
-              constexpr auto KiB_in_bytes = 1024.0;       // 2^10
+      [] (auto &&val) -> std::string {
+        using T = std::decay_t<decltype (val)>;
+        if constexpr (std::is_same_v<T, std::uint64_t>)
+          {
+            return fmt::format ("{}", val);
+          }
+        else if constexpr (requires { val.in (GiB); })
+          {
+            // Byte/page quantities - convert to bytes first for comparison
+            auto val_in_bytes = val.in (B);
+            auto val_numeric = val_in_bytes.numerical_value_ref_in (B);
+            constexpr auto GiB_in_bytes = 1073741824.0; // 2^30
+            constexpr auto MiB_in_bytes = 1048576.0;    // 2^20
+            constexpr auto KiB_in_bytes = 1024.0;       // 2^10
 
-              if (val_numeric >= GiB_in_bytes)
-                return fmt::format ("{::N[.2f]}", val_in_bytes.in (GiB));
-              else if (val_numeric >= MiB_in_bytes)
-                return fmt::format ("{::N[.2f]}", val_in_bytes.in (MiB));
-              else if (val_numeric >= KiB_in_bytes)
-                return fmt::format ("{::N[.2f]}", val_in_bytes.in (KiB));
-              else
-                return fmt::format ("{::N[.0f]}", val_in_bytes);
-            }
-          else if constexpr (requires { val.in (h); })
-            {
-              // // Time quantities - smart formatting using mp-units
-              auto val_numeric = val.numerical_value_ref_in (us);
+            if (val_numeric >= GiB_in_bytes)
+              return fmt::format ("{::N[.2f]}", val_in_bytes.in (GiB));
+            else if (val_numeric >= MiB_in_bytes)
+              return fmt::format ("{::N[.2f]}", val_in_bytes.in (MiB));
+            else if (val_numeric >= KiB_in_bytes)
+              return fmt::format ("{::N[.2f]}", val_in_bytes.in (KiB));
+            else
+              return fmt::format ("{::N[.0f]}", val_in_bytes);
+          }
+        else if constexpr (requires { val.in (h); })
+          {
+            // // Time quantities - smart formatting using mp-units
+            auto val_numeric = val.numerical_value_ref_in (us);
 
-              if (val_numeric >= 3600000000UL) // 1 hour in microseconds
-                return fmt::format ("{::N[.2f]}", val.in (h));
-              else if (val_numeric >= 60000000UL) // 1 minute in microseconds
-                return fmt::format ("{::N[.2f]}", val.in (min));
-              else if (val_numeric >= 1000000UL) // 1 second in microseconds
-                return fmt::format ("{::N[.2f]}", val.in (s));
-              else if (val_numeric >= 1000UL) // 1 ms in microseconds
-                return fmt::format ("{::N[.2f]}", val.in (ms));
-              else
-                return fmt::format ("{}", val);
-            }
-          else
-            {
+            if (val_numeric >= 3600000000UL) // 1 hour in microseconds
+              return fmt::format ("{::N[.2f]}", val.in (h));
+            else if (val_numeric >= 60000000UL) // 1 minute in microseconds
+              return fmt::format ("{::N[.2f]}", val.in (min));
+            else if (val_numeric >= 1000000UL) // 1 second in microseconds
+              return fmt::format ("{::N[.2f]}", val.in (s));
+            else if (val_numeric >= 1000UL) // 1 ms in microseconds
+              return fmt::format ("{::N[.2f]}", val.in (ms));
+            else
               return fmt::format ("{}", val);
-            }
-        },
+          }
+        else
+          {
+            return fmt::format ("{}", val);
+          }
+      },
       value);
 }
 
@@ -402,8 +397,9 @@ print_field_rows (std::span<const field_info> fields,
         }
     }
 
-  std::sort (rows.begin (), rows.end (), [] (const auto &a, const auto &b)
-               { return std::get<0> (a) < std::get<0> (b); });
+  std::sort (rows.begin (), rows.end (), [] (const auto &a, const auto &b) {
+    return std::get<0> (a) < std::get<0> (b);
+  });
 
   size_t max_label = 0;
   for (const auto &[label, value] : rows)
@@ -419,44 +415,15 @@ print_field_rows (std::span<const field_info> fields,
     }
 }
 
-template <class Parser, class Printer>
-auto
-make_file_graph (exec::io_uring_scheduler scheduler,
-                 std::filesystem::path path, Parser parser, Printer printer)
+std::string
+read_file (const std::filesystem::path &path)
 {
-  namespace sx = stdexec;
-  using parsed_t = std::decay_t<std::invoke_result_t<Parser, file_data>>;
-
-  return uring::async_read_file (scheduler, std::move (path))
-         | sx::then ([parser = std::move (parser)] (file_data data) mutable
-                       { return parser (std::move (data)); })
-         | sx::then (
-             [printer = std::move (printer)] (
-                 parsed_t parsed) mutable -> std::monostate
-               {
-                 printer (parsed);
-                 return {};
-               })
-         | sx::let_error (
-             [] (std::exception_ptr err)
-               {
-                 try
-                   {
-                     std::rethrow_exception (err);
-                   }
-                 catch (const std::exception &ex)
-                   {
-                     fmt::print (stderr, "warning: io_uring read failed: {}\n",
-                                 ex.what ());
-                   }
-                 catch (...)
-                   {
-                     fmt::print (stderr,
-                                 "warning: io_uring read failed: (unknown)\n");
-                   }
-                 return stdexec::just (std::monostate{});
-               })
-         | sx::let_stopped ([] { return stdexec::just (std::monostate{}); });
+  std::ifstream file (path);
+  if (!file.is_open ())
+    return {};
+  std::ostringstream ss;
+  ss << file.rdbuf ();
+  return ss.str ();
 }
 
 void
@@ -465,60 +432,43 @@ scan ()
   std::filesystem::path cgroup_path
       = "/sys/fs/cgroup/system.slice/nix-daemon.service";
 
-  {
-    io_uring_runtime runtime;
-    auto scheduler = runtime.scheduler ();
+  if (auto content = read_file (cgroup_path / "memory.stat"); !content.empty ())
+    {
+      auto stats = parse_memory_stat (content);
+      print ("{}\n", fmt::styled ("memory.stat",
+                                  fmt::fg (fmt::color::light_steel_blue)
+                                      | fmt::emphasis::bold));
+      print_field_rows (memory_stat_fields, stats, 2);
+      print ("\n");
+    }
 
-    auto memory_sender = make_file_graph (
-        scheduler, cgroup_path / "memory.stat",
-        [] (file_data data) { return parse_memory_stat (data.buffer); },
-        [&] (const auto &stats)
-          {
-            print ("{}\n", fmt::styled ("memory.stat",
-                                        fmt::fg (fmt::color::light_steel_blue)
-                                            | fmt::emphasis::bold));
-            print_field_rows (memory_stat_fields, stats, 2);
-            print ("\n");
-          });
+  if (auto content = read_file (cgroup_path / "cpu.stat"); !content.empty ())
+    {
+      auto stats = parse_cpu_stat (content);
+      print ("{}\n", fmt::styled ("cpu.stat",
+                                  fmt::fg (fmt::color::light_steel_blue)
+                                      | fmt::emphasis::bold));
+      print_field_rows (cpu_stat_fields, stats, 2);
+      print ("\n");
+    }
 
-    auto cpu_sender = make_file_graph (
-        scheduler, cgroup_path / "cpu.stat",
-        [] (file_data data) { return parse_cpu_stat (data.buffer); },
-        [&] (const auto &stats)
-          {
-            print ("{}\n", fmt::styled ("cpu.stat",
-                                        fmt::fg (fmt::color::light_steel_blue)
-                                            | fmt::emphasis::bold));
-            print_field_rows (cpu_stat_fields, stats, 2);
-            print ("\n");
-          });
-
-    auto io_sender = make_file_graph (
-        scheduler, cgroup_path / "io.stat",
-        [] (file_data data) { return parse_io_stat (data.buffer); },
-        [&] (const auto &devices)
-          {
-            print ("{}\n", fmt::styled ("io.stat",
-                                        fmt::fg (fmt::color::light_steel_blue)
-                                            | fmt::emphasis::bold));
-            for (const auto &device : devices)
-              {
-                print ("  {} {}\n",
-                       fmt::styled ("device", fmt::fg (fmt::color::orchid)),
-                       fmt::styled (device.device_id,
-                                    fmt::fg (fmt::color::sky_blue)
-                                        | fmt::emphasis::bold));
-                print_field_rows (io_stat_fields, device.stats, 4);
-                print ("\n");
-              }
-          });
-
-    stdexec::sync_wait (stdexec::when_all (std::move (memory_sender),
-                                           std::move (cpu_sender),
-                                           std::move (io_sender)));
-
-    runtime.stop ();
-  }
+  if (auto content = read_file (cgroup_path / "io.stat"); !content.empty ())
+    {
+      auto devices = parse_io_stat (content);
+      print ("{}\n", fmt::styled ("io.stat",
+                                  fmt::fg (fmt::color::light_steel_blue)
+                                      | fmt::emphasis::bold));
+      for (const auto &device : devices)
+        {
+          print ("  {} {}\n",
+                 fmt::styled ("device", fmt::fg (fmt::color::orchid)),
+                 fmt::styled (device.device_id,
+                              fmt::fg (fmt::color::sky_blue)
+                                  | fmt::emphasis::bold));
+          print_field_rows (io_stat_fields, device.stats, 4);
+          print ("\n");
+        }
+    }
 
   // Display other files without parsing
   constexpr std::array other_files = {

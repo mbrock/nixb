@@ -32,7 +32,7 @@ set(CMAKE_C_IMPLICIT_INCLUDE_DIRECTORIES "")
 CPMAddPackage("gh:boost-ext/ut#v2.3.1")
 CPMAddPackage("gh:simdjson/simdjson#v3.10.1")
 CPMAddPackage("gh:CLIUtils/CLI11#v2.6.1")
-CPMAddPackage("gh:NVIDIA/stdexec#nvhpc-25.09")
+
 
 CPMAddPackage(
     NAME mdspan
@@ -90,7 +90,7 @@ CPMAddPackage(
 
 add_subdirectory(subprojects/libvterm EXCLUDE_FROM_ALL)
 
-foreach(target IN ITEMS simdjson CLI11 mp-units stdexec fmt libcoro)
+foreach(target IN ITEMS simdjson CLI11 mp-units fmt libcoro)
     if(TARGET ${target})
         get_target_property(inc_dirs ${target} INTERFACE_INCLUDE_DIRECTORIES)
         if(inc_dirs)
@@ -126,13 +126,11 @@ target_compile_definitions(libnxt PUBLIC
 
 add_executable(nxbcg
     src/cgroups.cpp
-    src/uring.cpp
     src/nix-log-adapter.cpp
     src/log-replay.cpp
 )
 target_link_libraries(nxbcg
     PRIVATE
-        STDEXEC::stdexec
         libnxt
         PkgConfig::NIX
         simdjson::simdjson
@@ -191,27 +189,4 @@ install(TARGETS nxbcg RUNTIME DESTINATION bin)
 add_executable(tui-example src/nxt/tui_example.cpp)
 target_link_libraries(tui-example PRIVATE libnxt)
 
-add_executable(stdexec-example
-    src/nxt/stdexec_example.cpp
-    src/nxt/signal-pipe.cpp
-    src/uring.cpp
-)
-target_include_directories(stdexec-example PRIVATE src)
-target_link_libraries(stdexec-example
-    PRIVATE
-        STDEXEC::stdexec
-        fmt::fmt
-)
 
-add_executable(replay-stdexec
-    src/replay-stdexec.cpp
-    src/uring.cpp
-)
-target_include_directories(replay-stdexec PRIVATE src)
-target_link_libraries(replay-stdexec
-    PRIVATE
-        STDEXEC::stdexec
-        PkgConfig::NIX
-        simdjson::simdjson
-        fmt::fmt
-)
