@@ -73,7 +73,7 @@ struct TrivialStore : virtual nix::Store {
                                     nix::HashAlgorithm hashAlgo,
                                     const nix::StorePathSet &refs,
                                     nix::RepairFlag) override {
-    fmt::print("DUMP {} {} {} {} ({} refs)\n",
+    fmt::print("dump {} {} {} {} ({} refs)\n",
                fmt::styled(name, fmt::fg(fmt::color::yellow)),
                dumpMethod == nix::FileSerialisationMethod::NixArchive ? "nar "
                                                                       : "flat",
@@ -81,7 +81,7 @@ struct TrivialStore : virtual nix::Store {
 
     auto counter = nix::LengthSink();
     source.drainInto(counter);
-    fmt::print("{}: read {} bytes\n",
+    fmt::print("read {}, {} bytes\n",
                fmt::styled(name, fmt::fg(fmt::color::yellow)), counter.length);
 
     unsupported("addToStoreFromDump");

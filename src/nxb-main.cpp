@@ -255,7 +255,7 @@ nxb::task<> run_build(nxb::ui::UIRuntime &runtime, BuildState &state,
                       nxb::queue<NixLogEvent> &events) {
   auto adapter = std::make_unique<nixb::coro_adapter::NixLogAdapter>(events);
   nix::logger = std::move(adapter);
-  nix::verbosity = nix::lvlDebug;
+  nix::verbosity = nix::lvlChatty;
 
   runtime.println(
       fmt::format("Building {} with TrivialStore...", state.installable));
