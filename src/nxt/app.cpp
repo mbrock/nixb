@@ -1,8 +1,8 @@
 #include "nxt/app.hpp"
 #include "nxt/ansi.hpp"
+#include "nxt/async.hpp"
 #include "nxt/units.hpp"
 
-#include <coro/io_scheduler.hpp>
 #include <csignal>
 #include <iostream>
 #include <sys/ioctl.h>
@@ -13,7 +13,7 @@ namespace nxb::ui
 
 UIRuntime::UIRuntime ()
     : scheduler_ (
-          coro::io_scheduler::make_shared (coro::io_scheduler::options{}))
+          nxb::io_scheduler::make_shared (nxb::io_scheduler::options{}))
 {
   signals_.watch (SIGINT, SIGTERM, SIGWINCH);
   refresh_terminal_size ();
@@ -151,15 +151,13 @@ UIRuntime::compositor () noexcept
   return *compositor_;
 }
 
-coro::task<>
+nxb::task<>
 UIRuntime::signal_loop ()
 {
-  co_await scheduler_->schedule ();
-
   while (!shutdown_requested ())
     {
       // Poll the signal pipe for readability
-      co_await scheduler_->poll (signals_.read_fd (), coro::poll_op::read);
+      co_await scheduler_->poll (signals_.read_fd (), nxb::poll_op::read);
 
       // Drain all pending signals
       while (auto sig = signals_.try_read ())

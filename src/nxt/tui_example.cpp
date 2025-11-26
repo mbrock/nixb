@@ -1,8 +1,8 @@
 #include "nxt/app.hpp"
-#include "nxt/units.hpp"
+#include "nxt/async.hpp"
 #include "nxt/tui.hpp"
+#include "nxt/units.hpp"
 
-#include <coro/coro.hpp>
 #include <fmt/core.h>
 #include <random>
 #include <vector>
@@ -87,7 +87,7 @@ example (int argc, char *argv[])
             hrule ());
       },
       [n = steps] (nxb::ui::UIRuntime &runtime,
-                   std::vector<Activity> &state) -> coro::task<> {
+                   std::vector<Activity> &state) -> nxb::task<> {
         std::mt19937 rng (42);
         std::uniform_int_distribution<std::size_t> log_dist (
             0, fake_logs.size () - 1);

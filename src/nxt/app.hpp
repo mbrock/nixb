@@ -1,6 +1,7 @@
 #pragma once
 
 #include "nxt/ansi.hpp"
+#include "nxt/async.hpp"
 #include "nxt/compositor.hpp"
 #include "nxt/glyph-table.hpp"
 #include "nxt/raster.hpp"
@@ -9,18 +10,12 @@
 
 #include <atomic>
 #include <chrono>
-#include <coro/coro.hpp>
-#include <coro/event.hpp>
-#include <coro/io_scheduler.hpp>
-#include <coro/queue.hpp>
-#include <coro/task.hpp>
 #include <stop_token>
 
 namespace nxb::ui
 {
 
 using TermSize = nxb::Size;
-
 
 // Re-export TerminalGuard for convenience
 using ansi::TerminalGuard;
@@ -40,7 +35,7 @@ public:
   UIRuntime &operator= (UIRuntime &&) = delete;
 
   /// Access the scheduler.
-  [[nodiscard]] coro::io_scheduler &
+  [[nodiscard]] nxb::io_scheduler &
   scheduler () noexcept
   {
     return *scheduler_;
@@ -62,6 +57,14 @@ public:
 
   /// Request shutdown.
   void request_shutdown ();
+
+  /// Run a task, then request shutdown when it completes.
+  nxb::task<>
+  shutdown_after (nxb::task<> t)
+  {
+    co_await t;
+    request_shutdown ();
+  }
 
   /// Signal that the view has been damaged and needs redraw.
   void signal_damage ();
@@ -115,13 +118,10 @@ public:
   /// Waits for damage signal, but rate-limits to frame_time.
   /// Note: pass by value to avoid dangling references in coroutine.
   template <typename BuildUI>
-  coro::task<>
-  run_render_loop (BuildUI build_ui,
-                   std::chrono::milliseconds frame_time
-                   = std::chrono::milliseconds{ 16 })
+  nxb::task<>
+  run_render_loop (BuildUI build_ui, std::chrono::milliseconds frame_time
+                                     = std::chrono::milliseconds{ 16 })
   {
-    co_await scheduler_->schedule ();
-
     // Initial render
     render (build_ui ());
     auto last_render = std::chrono::steady_clock::now ();
@@ -153,21 +153,21 @@ public:
 
   /// Coroutine that handles signals from the pipe.
   /// Should be run as part of the main task group.
-  coro::task<> signal_loop ();
+  nxb::task<> signal_loop ();
 
   // =========================================================================
   // Low-level access (for advanced use)
   // =========================================================================
 
   /// Channel for resize notifications.
-  coro::queue<TermSize> &
+  nxb::queue<TermSize> &
   resize_channel () noexcept
   {
     return resize_queue_;
   }
 
   /// Event signaled when damage occurs.
-  coro::event &
+  nxb::event &
   damage_event () noexcept
   {
     return damage_event_;
@@ -181,13 +181,13 @@ private:
   void render_impl (std::function<void (RasterView &, Size)> render_fn);
   void update_hud_height (height_t hud_h);
 
-  std::shared_ptr<coro::io_scheduler> scheduler_;
+  std::shared_ptr<nxb::io_scheduler> scheduler_;
   GlyphTable glyphs_;
   std::unique_ptr<TerminalCompositor> compositor_;
   SignalPipe signals_;
 
-  coro::event damage_event_;
-  coro::queue<TermSize> resize_queue_;
+  nxb::event damage_event_;
+  nxb::queue<TermSize> resize_queue_;
 
   std::atomic<nxb::width_t> term_width_{ 80 * ch };
   std::atomic<nxb::height_t> term_height_{ 24 * ln };
@@ -203,7 +203,7 @@ private:
 /// Run a TUI application.
 /// - initial_state: the starting state
 /// - build_ui: (const State&) → Layout
-/// - update: (UIRuntime&, State&) → coro::task<> (should call
+/// - update: (UIRuntime&, State&) → nxb::task<> (should call
 /// request_shutdown)
 template <typename State, typename BuildUI, typename Update>
 int
@@ -215,24 +215,14 @@ run (State initial_state, BuildUI build_ui, Update update)
   try
     {
       TerminalGuard guard;
-      std::vector<coro::task<>> tasks;
+      nxb::task_group tasks (runtime.scheduler ());
 
-      tasks.push_back (runtime.signal_loop ());
+      tasks << runtime.signal_loop ()
+            << runtime.run_render_loop (
+                   [&state, build_ui] { return build_ui (state); })
+            << runtime.shutdown_after (update (runtime, state));
 
-      tasks.push_back (runtime.run_render_loop (
-          [&state, build_ui] { return build_ui (state); }));
-
-      auto task = [] (UIRuntime &runtime, State &state,
-                      Update update) -> coro::task<> {
-        co_await runtime.scheduler ().schedule ();
-        co_await update (runtime, state);
-        runtime.request_shutdown ();
-      };
-
-      tasks.push_back (task (runtime, state, update));
-
-      coro::sync_wait (coro::when_all (std::move (tasks)));
-
+      tasks.run_all ();
       runtime.cleanup ();
     }
   catch (const std::exception &e)
