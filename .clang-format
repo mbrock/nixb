@@ -129,7 +129,7 @@ ColumnLimit: 74
 CommentPragmas: "^ IWYU pragma:"
 CompactNamespaces: false
 ConstructorInitializerIndentWidth: 4
-ContinuationIndentWidth: 4
+ContinuationIndentWidth: 2
 Cpp11BracedListStyle: false
 DerivePointerAlignment: false
 DisableFormat: false

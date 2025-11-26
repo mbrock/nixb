@@ -300,20 +300,20 @@ namespace nxb
   // ============================================================================
 
   using mdspan_extents
-      = std::experimental::extents<std::size_t, std::dynamic_extent,
-                                   std::dynamic_extent>;
+    = std::experimental::extents<std::size_t, std::dynamic_extent,
+                                 std::dynamic_extent>;
   using glyph_view_t
-      = std::experimental::mdspan<GlyphTable::GlyphId, mdspan_extents>;
+    = std::experimental::mdspan<GlyphTable::GlyphId, mdspan_extents>;
   using const_glyph_view_t
-      = std::experimental::mdspan<const GlyphTable::GlyphId,
-                                  mdspan_extents>;
+    = std::experimental::mdspan<const GlyphTable::GlyphId,
+                                mdspan_extents>;
   using color_view_t = std::experimental::mdspan<Rgba8, mdspan_extents>;
   using const_color_view_t
-      = std::experimental::mdspan<const Rgba8, mdspan_extents>;
+    = std::experimental::mdspan<const Rgba8, mdspan_extents>;
   using emphasis_view_t
-      = std::experimental::mdspan<Emphasis, mdspan_extents>;
+    = std::experimental::mdspan<Emphasis, mdspan_extents>;
   using const_emphasis_view_t
-      = std::experimental::mdspan<const Emphasis, mdspan_extents>;
+    = std::experimental::mdspan<const Emphasis, mdspan_extents>;
 
   /// Default color for terminal cells (resets to terminal's configured
   /// color)
@@ -333,9 +333,8 @@ namespace nxb
     const auto rows = m.extent (0);
     const auto cols = m.extent (1);
     return std::views::iota (std::size_t{ 0 }, rows * cols)
-           | std::views::transform ([=] (std::size_t i) -> T & {
-               return m[i / cols, i % cols];
-             });
+           | std::views::transform ([=] (std::size_t i) -> T &
+                                      { return m[i / cols, i % cols]; });
   }
 
   /// Get a single row from a 2D mdspan as a range.
@@ -347,8 +346,8 @@ namespace nxb
   {
     const auto cols = m.extent (1);
     return std::views::iota (std::size_t{ 0 }, cols)
-           | std::views::transform (
-               [=] (std::size_t col) -> T & { return m[row_idx, col]; });
+           | std::views::transform ([=] (std::size_t col) -> T &
+                                      { return m[row_idx, col]; });
   }
 
   /// Get an indexed row range (pairs of column index and value
@@ -361,9 +360,12 @@ namespace nxb
   {
     const auto cols = m.extent (1);
     return std::views::iota (std::size_t{ 0 }, cols)
-           | std::views::transform ([=] (std::size_t col) {
-               return std::pair<std::size_t, T &>{ col, m[row_idx, col] };
-             });
+           | std::views::transform (
+             [=] (std::size_t col)
+               {
+                 return std::pair<std::size_t, T &>{ col,
+                                                     m[row_idx, col] };
+               });
   }
 
   /// A cell with its column position for iteration.
@@ -397,11 +399,13 @@ namespace nxb
   {
     const auto cols = glyphs.extent (1);
     return std::views::iota (std::size_t{ 0 }, cols)
-           | std::views::transform ([=] (std::size_t x) {
-               return IndexedCell{ x * ch, glyphs[row_idx, x],
-                                   fgs[row_idx, x], bgs[row_idx, x],
-                                   ems[row_idx, x] };
-             });
+           | std::views::transform (
+             [=] (std::size_t x)
+               {
+                 return IndexedCell{ x * ch, glyphs[row_idx, x],
+                                     fgs[row_idx, x], bgs[row_idx, x],
+                                     ems[row_idx, x] };
+               });
   }
 
   // ============================================================================
@@ -606,7 +610,7 @@ namespace nxb
     {
       const auto cols = width_.numerical_value_in (ch);
       const auto offset
-          = y.numerical_value_in (ln) * cols + x.numerical_value_in (ch);
+        = y.numerical_value_in (ln) * cols + x.numerical_value_in (ch);
       return std::span{ glyphs_storage_ }.subspan (offset, len);
     }
 
@@ -628,22 +632,24 @@ namespace nxb
     [[nodiscard]] auto
     rows () const
     {
-      return std::views::iota (std::size_t{ 0 },
-                               height_.numerical_value_in (ln))
-             | std::views::transform (
-                 [this] (std::size_t y) { return row (y * ln); });
+      return std::views::iota (
+               std::size_t{ 0 }, height_.numerical_value_in (ln))
+             | std::views::transform ([this] (std::size_t y)
+                                        { return row (y * ln); });
     }
 
     /// Iterate rows with their y coordinate: (height_t, row_range)
     [[nodiscard]] auto
     indexed_rows () const
     {
-      return std::views::iota (std::size_t{ 0 },
-                               height_.numerical_value_in (ln))
-             | std::views::transform ([this] (std::size_t yi) {
-                 const auto y = yi * ln;
-                 return std::pair{ y, row (y) };
-               });
+      return std::views::iota (
+               std::size_t{ 0 }, height_.numerical_value_in (ln))
+             | std::views::transform (
+               [this] (std::size_t yi)
+                 {
+                   const auto y = yi * ln;
+                   return std::pair{ y, row (y) };
+                 });
     }
 
     /// Access glyph table
@@ -673,13 +679,15 @@ namespace nxb
   inline auto
   zip_rows (const Raster &front, const Raster &back)
   {
-    return std::views::iota (std::size_t{ 0 },
-                             back.height ().numerical_value_in (ln))
-           | std::views::transform ([&] (std::size_t yi) {
-               const auto y = yi * ln;
-               return std::pair{ y, std::views::zip (front.row (y),
-                                                     back.row (y)) };
-             });
+    return std::views::iota (
+             std::size_t{ 0 }, back.height ().numerical_value_in (ln))
+           | std::views::transform (
+             [&] (std::size_t yi)
+               {
+                 const auto y = yi * ln;
+                 return std::pair{ y, std::views::zip (
+                                        front.row (y), back.row (y)) };
+               });
   }
 
 } // namespace nxb

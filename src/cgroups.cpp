@@ -41,9 +41,9 @@ namespace nxb::cgroups
 
   // Variant to hold different quantity types
   using stat_value
-      = std::variant<decltype (1.0 * B), decltype (1.0 * page),
-                     decltype (1.0 * us), decltype (1.0 * percent),
-                     std::uint64_t>; // dimensionless counts
+    = std::variant<decltype (1.0 * B), decltype (1.0 * page),
+                   decltype (1.0 * us), decltype (1.0 * percent),
+                   std::uint64_t>; // dimensionless counts
 
   // Field metadata with unit type
   struct field_info
@@ -244,7 +244,8 @@ namespace nxb::cgroups
   format_value (const stat_value &value)
   {
     return std::visit (
-        [] (auto &&val) -> std::string {
+      [] (auto &&val) -> std::string
+        {
           using T = std::decay_t<decltype (val)>;
           if constexpr (std::is_same_v<T, std::uint64_t>)
             {
@@ -292,7 +293,7 @@ namespace nxb::cgroups
               return fmt::format ("{}", val);
             }
         },
-        value);
+      value);
   }
 
   // Parse memory.stat file
@@ -387,7 +388,7 @@ namespace nxb::cgroups
               {
                 std::string key = pair.substr (0, eq_pos);
                 std::uint64_t value
-                    = std::stoull (pair.substr (eq_pos + 1));
+                  = std::stoull (pair.substr (eq_pos + 1));
 
                 // Find the field info
                 for (const auto &field : io_stat_fields)
@@ -395,7 +396,7 @@ namespace nxb::cgroups
                     if (field.name == key)
                       {
                         device.stats[key]
-                            = parse_value (value, field.unit);
+                          = parse_value (value, field.unit);
                         break;
                       }
                   }
@@ -423,10 +424,9 @@ namespace nxb::cgroups
           }
       }
 
-    std::sort (
-        rows.begin (), rows.end (), [] (const auto &a, const auto &b) {
-          return std::get<0> (a) < std::get<0> (b);
-        });
+    std::sort (rows.begin (), rows.end (),
+               [] (const auto &a, const auto &b)
+                 { return std::get<0> (a) < std::get<0> (b); });
 
     size_t max_label = 0;
     for (const auto &[label, value] : rows)
@@ -439,7 +439,7 @@ namespace nxb::cgroups
                fmt::styled (label, fmt::fg (fmt::color::lawn_green)),
                max_label,
                fmt::styled (value, fmt::fg (fmt::color::golden_rod)
-                                       | fmt::emphasis::bold));
+                                     | fmt::emphasis::bold));
       }
   }
 
@@ -458,7 +458,7 @@ namespace nxb::cgroups
   scan ()
   {
     std::filesystem::path cgroup_path
-        = "/sys/fs/cgroup/system.slice/nix-daemon.service";
+      = "/sys/fs/cgroup/system.slice/nix-daemon.service";
 
     if (auto content = read_file (cgroup_path / "memory.stat");
         !content.empty ())
@@ -466,7 +466,7 @@ namespace nxb::cgroups
         auto stats = parse_memory_stat (content);
         print ("{}\n", fmt::styled ("memory.stat",
                                     fmt::fg (fmt::color::light_steel_blue)
-                                        | fmt::emphasis::bold));
+                                      | fmt::emphasis::bold));
         print_field_rows (memory_stat_fields, stats, 2);
         print ("\n");
       }
@@ -477,7 +477,7 @@ namespace nxb::cgroups
         auto stats = parse_cpu_stat (content);
         print ("{}\n", fmt::styled ("cpu.stat",
                                     fmt::fg (fmt::color::light_steel_blue)
-                                        | fmt::emphasis::bold));
+                                      | fmt::emphasis::bold));
         print_field_rows (cpu_stat_fields, stats, 2);
         print ("\n");
       }
@@ -486,16 +486,16 @@ namespace nxb::cgroups
         !content.empty ())
       {
         auto devices = parse_io_stat (content);
-        print ("{}\n", fmt::styled ("io.stat",
-                                    fmt::fg (fmt::color::light_steel_blue)
-                                        | fmt::emphasis::bold));
+        print ("{}\n", fmt::styled (
+                         "io.stat", fmt::fg (fmt::color::light_steel_blue)
+                                      | fmt::emphasis::bold));
         for (const auto &device : devices)
           {
             print ("  {} {}\n",
                    fmt::styled ("device", fmt::fg (fmt::color::orchid)),
                    fmt::styled (
-                       device.device_id, fmt::fg (fmt::color::sky_blue)
-                                             | fmt::emphasis::bold));
+                     device.device_id, fmt::fg (fmt::color::sky_blue)
+                                         | fmt::emphasis::bold));
             print_field_rows (io_stat_fields, device.stats, 4);
             print ("\n");
           }
@@ -520,13 +520,13 @@ namespace nxb::cgroups
           {
             print ("{}\n",
                    fmt::styled (
-                       filename, fmt::fg (fmt::color::light_steel_blue)));
+                     filename, fmt::fg (fmt::color::light_steel_blue)));
             std::string line;
             while (std::getline (content, line))
               {
                 print ("  {}\n",
                        fmt::styled (line, fmt::fg (fmt::color::golden_rod)
-                                              | fmt::emphasis::faint));
+                                            | fmt::emphasis::faint));
               }
             print ("\n");
           }

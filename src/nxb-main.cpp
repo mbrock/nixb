@@ -31,51 +31,50 @@ namespace
           break;
 
         std::visit (
-            [&runtime] (auto &&ev)
-              {
-                using T = std::decay_t<decltype (ev)>;
+          [&runtime] (auto &&ev)
+            {
+              using T = std::decay_t<decltype (ev)>;
 
-                if constexpr (std::is_same_v<T, nix_event::LogLine>)
-                  {
-                    runtime.println (ev.text);
-                  }
-                else if constexpr (std::is_same_v<
-                                       T, nix_event::ActivityStarted>)
-                  {
-                    std::visit (
-                        [&runtime] (auto &&kind)
-                          {
-                            using K = std::decay_t<decltype (kind)>;
-                            if constexpr (std::is_same_v<
-                                              K,
-                                              nix_event::activity::Build>)
-                              runtime.println (fmt::format (
-                                  "building {}", kind.drv_path));
-                            else if constexpr (
-                                std::is_same_v<
-                                    K, nix_event::activity::Download>)
-                              runtime.println (fmt::format (
-                                  "downloading {}", kind.url));
-                            else if constexpr (std::is_same_v<
-                                                   K, nix_event::
-                                                          activity::Copy>)
-                              runtime.println (
-                                  fmt::format ("copying {}", kind.path));
-                            else if constexpr (
-                                std::is_same_v<
-                                    K, nix_event::activity::Substitute>)
-                              runtime.println (fmt::format (
-                                  "substituting {}", kind.path));
-                          },
-                        ev.kind);
-                  }
-                else if constexpr (std::is_same_v<T, nix_event::Error>)
-                  {
-                    runtime.println (
-                        fmt::format ("error: {}", ev.info.msg.str ()));
-                  }
-              },
-            *event);
+              if constexpr (std::is_same_v<T, nix_event::LogLine>)
+                {
+                  runtime.println (ev.text);
+                }
+              else if constexpr (std::is_same_v<
+                                   T, nix_event::ActivityStarted>)
+                {
+                  std::visit (
+                    [&runtime] (auto &&kind)
+                      {
+                        using K = std::decay_t<decltype (kind)>;
+                        if constexpr (std::is_same_v<
+                                        K, nix_event::activity::Build>)
+                          runtime.println (
+                            fmt::format ("building {}", kind.drv_path));
+                        else if constexpr (std::is_same_v<
+                                             K, nix_event::activity::
+                                                  Download>)
+                          runtime.println (
+                            fmt::format ("downloading {}", kind.url));
+                        else if constexpr (std::is_same_v<
+                                             K,
+                                             nix_event::activity::Copy>)
+                          runtime.println (
+                            fmt::format ("copying {}", kind.path));
+                        else if constexpr (std::is_same_v<
+                                             K, nix_event::activity::
+                                                  Substitute>)
+                          runtime.println (
+                            fmt::format ("substituting {}", kind.path));
+                      },
+                    ev.kind);
+                }
+              else if constexpr (std::is_same_v<T, nix_event::Error>)
+                {
+                  runtime.println (
+                    fmt::format ("error: {}", ev.info.msg.str ()));
+                }
+            },
+          *event);
 
         runtime.signal_damage ();
       }
@@ -114,26 +113,26 @@ namespace
         tasks.push_back (runtime.signal_loop ());
 
         tasks.push_back (runtime.run_render_loop (
-            [&state] { return build_ui (state); }));
+          [&state] { return build_ui (state); }));
 
         tasks.push_back (event_consumer (runtime, queue));
 
         auto replay_task
-            = [] (nxb::ui::UIRuntime &runtime, PlaybackState &state,
-                  const std::string &path,
-                  coro::queue<nix_event::Event> &queue,
-                  std::stop_token stoken, double spd) -> coro::task<>
+          = [] (nxb::ui::UIRuntime &runtime, PlaybackState &state,
+                const std::string &path,
+                coro::queue<nix_event::Event> &queue,
+                std::stop_token stoken, double spd) -> coro::task<>
           {
             co_await runtime.scheduler ().schedule ();
             co_await nixb::replay::replay_file (
-                runtime.scheduler (), path, queue, stoken, true, spd);
+              runtime.scheduler (), path, queue, stoken, true, spd);
             state.done = true;
             runtime.request_shutdown ();
             co_await queue.shutdown ();
           };
 
-        tasks.push_back (replay_task (runtime, state, file, queue,
-                                      runtime.get_stop_token (), speed));
+        tasks.push_back (replay_task (
+          runtime, state, file, queue, runtime.get_stop_token (), speed));
         coro::sync_wait (coro::when_all (std::move (tasks)));
 
         runtime.cleanup ();
@@ -160,12 +159,12 @@ main (int argc, char **argv)
   double speed = 1.0;
 
   auto *play_cmd
-      = app.add_subcommand ("play", "Replay a recorded nix build log");
+    = app.add_subcommand ("play", "Replay a recorded nix build log");
   play_cmd
-      ->add_option ("file", play_file, "Log file to replay (.tnixlog)")
-      ->required ();
+    ->add_option ("file", play_file, "Log file to replay (.tnixlog)")
+    ->required ();
   play_cmd->add_option ("-s,--speed", speed, "Playback speed multiplier")
-      ->default_val (1.0);
+    ->default_val (1.0);
 
   CLI11_PARSE (app, argc, argv);
 
