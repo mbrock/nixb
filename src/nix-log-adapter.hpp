@@ -1,7 +1,7 @@
 #pragma once
 
-// Undefine the 'unix' macro from libc to avoid conflict with nix::unix
-// namespace
+// Undefine the 'unix' macro from libc to avoid conflict with
+// nix::unix namespace
 #ifdef unix
 #undef unix
 #endif
@@ -16,8 +16,8 @@
 namespace nixb::nix_event
 {
 
-  /// Strong type for activity IDs to prevent mixing with other int64_t
-  /// values.
+  /// Strong type for activity IDs to prevent mixing with other
+  /// int64_t values.
   struct ActivityId
   {
     int64_t value;
@@ -80,9 +80,9 @@ namespace nixb::nix_event
       std::string text;
     };
 
-    using Kind = std::variant<Build, Download, Copy, Realise, Substitute,
-                              QueryPathInfo, PostBuildHook, BuildWaiting,
-                              Unknown>;
+    using Kind = std::variant<Build, Download, Copy, Realise,
+                              Substitute, QueryPathInfo,
+                              PostBuildHook, BuildWaiting, Unknown>;
 
   } // namespace activity
 
@@ -126,9 +126,9 @@ namespace nixb::nix_event
     nix::ErrorInfo info;
   };
 
-  using Event
-      = std::variant<ActivityStarted, ActivityProgress, ActivityPhase,
-                     ActivityFinished, LogLine, Error>;
+  using NixLogEvent
+    = std::variant<ActivityStarted, ActivityProgress, ActivityPhase,
+                   ActivityFinished, LogLine, Error>;
 
   // Parsing helpers - convert nix logger types to semantic events
   using Fields = nix::Logger::Fields;
@@ -140,19 +140,21 @@ namespace nixb::nix_event
                                       const std::string &text,
                                       const Fields &fields);
 
-  std::optional<Event> parse_result (ActivityId act, nix::ResultType type,
-                                     const Fields &fields);
+  std::optional<NixLogEvent> parse_result (ActivityId act,
+                                           nix::ResultType type,
+                                           const Fields &fields);
 
 } // namespace nixb::nix_event
 
 namespace nixb::coro_adapter
 {
 
-  using Event = nix_event::Event;
+  using Event = nix_event::NixLogEvent;
 
   /// Logger adapter that pushes semantic events to a queue.
-  /// Note: Uses sync_wait internally, so not suitable for async contexts.
-  /// For async replay, use nixb::replay functions instead.
+  /// Note: Uses sync_wait internally, so not suitable for async
+  /// contexts. For async replay, use nixb::replay functions
+  /// instead.
   class NixLogAdapter : public nix::Logger
   {
   public:
@@ -161,7 +163,8 @@ namespace nixb::coro_adapter
     void log (nix::Verbosity lvl, std::string_view s) override;
     void logEI (const nix::ErrorInfo &ei) override;
     void startActivity (nix::ActivityId act, nix::Verbosity lvl,
-                        nix::ActivityType type, const std::string &text,
+                        nix::ActivityType type,
+                        const std::string &text,
                         const Fields &fields,
                         nix::ActivityId parent) override;
     void stopActivity (nix::ActivityId act) override;

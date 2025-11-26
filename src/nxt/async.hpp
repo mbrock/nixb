@@ -23,7 +23,7 @@ namespace nxb
   sync_wait (auto &&awaitable)
   {
     return coro::sync_wait (
-        std::forward<decltype (awaitable)> (awaitable));
+      std::forward<decltype (awaitable)> (awaitable));
   }
 
   inline auto
@@ -33,8 +33,8 @@ namespace nxb
   }
 
   /// Schedule a task to run on the given scheduler.
-  /// Use this instead of co_await scheduler.schedule() at the top of
-  /// coroutines.
+  /// Use this instead of co_await scheduler.schedule() at the top
+  /// of coroutines.
   inline auto
   start (io_scheduler &sched, task<> t)
   {
@@ -49,10 +49,11 @@ namespace nxb
     explicit task_group (io_scheduler &sched) : sched_ (sched) {}
 
     template <typename... Tasks>
-    task_group (io_scheduler &sched, Tasks &&...tasks) : sched_ (sched)
+    task_group (io_scheduler &sched, Tasks &&...tasks)
+        : sched_ (sched)
     {
       (tasks_.push_back (
-           nxb::start (sched_, std::forward<Tasks> (tasks))),
+         nxb::start (sched_, std::forward<Tasks> (tasks))),
        ...);
     }
 
@@ -69,10 +70,19 @@ namespace nxb
       return *this;
     }
 
-    void
+    auto
     run_all ()
     {
-      nxb::sync_wait (nxb::when_all (std::move (tasks_)));
+      return nxb::when_all (std::move (tasks_));
+    }
+
+    template <typename... Tasks>
+    static auto
+    run (io_scheduler &sched, Tasks &&...tasks)
+    {
+      auto tg
+        = nxb::task_group (sched, std::forward<Tasks> (tasks)...);
+      return tg.run_all ();
     }
 
   private:

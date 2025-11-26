@@ -25,7 +25,8 @@ namespace nixb::nix_event
 
   activity::Kind
   parse_activity_kind (const nix::ActivityType type,
-                       const std::string &text, const Fields &fields)
+                       const std::string &text,
+                       const Fields &fields)
   {
     using namespace activity;
 
@@ -82,7 +83,7 @@ namespace nixb::nix_event
       }
   }
 
-  std::optional<Event>
+  std::optional<NixLogEvent>
   parse_result (const ActivityId id, const nix::ResultType type,
                 const Fields &fields)
   {
@@ -128,10 +129,11 @@ namespace nixb::coro_adapter
   }
 
   void
-  NixLogAdapter::log (const nix::Verbosity lvl, const std::string_view s)
+  NixLogAdapter::log (const nix::Verbosity lvl,
+                      const std::string_view s)
   {
     coro::sync_wait (queue_.push (
-        ev::LogLine{ .level = lvl, .text = std::string (s) }));
+      ev::LogLine{ .level = lvl, .text = std::string (s) }));
   }
 
   void
@@ -150,9 +152,9 @@ namespace nixb::coro_adapter
   {
     auto kind = ev::parse_activity_kind (type, text, fields);
     coro::sync_wait (queue_.push (ev::ActivityStarted{
-        .id = ev::ActivityId{ static_cast<int64_t> (act) },
-        .parent = ev::ActivityId{ static_cast<int64_t> (parent) },
-        .kind = std::move (kind),
+      .id = ev::ActivityId{ static_cast<int64_t> (act) },
+      .parent = ev::ActivityId{ static_cast<int64_t> (parent) },
+      .kind = std::move (kind),
     }));
   }
 
@@ -160,12 +162,13 @@ namespace nixb::coro_adapter
   NixLogAdapter::stopActivity (const nix::ActivityId act)
   {
     coro::sync_wait (queue_.push (ev::ActivityFinished{
-        .id = ev::ActivityId{ static_cast<int64_t> (act) } }));
+      .id = ev::ActivityId{ static_cast<int64_t> (act) } }));
   }
 
   void
   NixLogAdapter::result (const nix::ActivityId act,
-                         const nix::ResultType type, const Fields &fields)
+                         const nix::ResultType type,
+                         const Fields &fields)
   {
     auto id = ev::ActivityId{ static_cast<int64_t> (act) };
     if (auto event = ev::parse_result (id, type, fields))
