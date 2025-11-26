@@ -21,7 +21,7 @@
           pkgs = import nixpkgs { inherit system; };
         in
         {
-          default = pkgs.mkShell {
+          default = pkgs.mkShell.override { stdenv = pkgs.clangStdenv; } {
             hardeningDisable = [ "all" ];
             dontStrip = true;
             packages = with pkgs; [

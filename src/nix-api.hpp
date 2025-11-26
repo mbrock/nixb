@@ -87,18 +87,20 @@ inline std::string format_phase_name(std::string_view phase) {
 /// Creates a store connection and lazily initializes an EvalState.
 class NixContext {
 public:
-  NixContext(bool use_trivial_store = false) : eval_settings_(read_only_mode_) {
+  // Use default store (daemon)
+  NixContext() : eval_settings_(read_only_mode_) {
     nix::initGC();
     nix::initLibUtil();
     nix::initLibStore();
+    store_ = nix::openStore();
+  }
 
-    if (use_trivial_store) {
-      auto config =
-          std::make_shared<TrivialStoreConfig>(nix::StoreConfig::Params{});
-      store_ = std::make_shared<TrivialStore>(nix::ref<const TrivialStoreConfig>(config));
-    } else {
-      store_ = nix::openStore();
-    }
+  // Use TrivialStore with UI runtime for integration
+  NixContext(ui::UIRuntime &runtime) : eval_settings_(read_only_mode_) {
+    nix::initGC();
+    nix::initLibUtil();
+    nix::initLibStore();
+    store_ = makeTrivialStore(runtime);
   }
 
   // Constructor with explicit store
@@ -107,6 +109,11 @@ public:
     nix::initGC();
     nix::initLibUtil();
     nix::initLibStore();
+  }
+
+  // Get the TrivialStore if that's what we're using (for stats etc)
+  std::shared_ptr<TrivialStore> trivialStore() {
+    return std::dynamic_pointer_cast<TrivialStore>(store_);
   }
 
   std::shared_ptr<nix::Store> store_ptr() { return store_; }

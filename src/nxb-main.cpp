@@ -186,7 +186,8 @@ nxb::task<> run_derive(nxb::ui::UIRuntime &runtime, DeriveState &state,
   runtime.println("Starting evaluation with TrivialStore...");
 
   try {
-    nxb::NixContext ctx(true); // use trivial store!
+    // Create TrivialStore wired to the UI runtime
+    nxb::NixContext ctx(runtime);
     runtime.println(
         fmt::format("Store: {}", ctx.store()->config.getHumanReadableURI()));
     auto drv_paths = nxb::resolve_installable(ctx, state.installable);
@@ -261,7 +262,8 @@ nxb::task<> run_build(nxb::ui::UIRuntime &runtime, BuildState &state,
       fmt::format("Building {} with TrivialStore...", state.installable));
 
   try {
-    nxb::NixContext ctx(true); // use trivial store
+    // Create TrivialStore wired to the UI runtime for output
+    nxb::NixContext ctx(runtime);
     runtime.println(
         fmt::format("Store: {}", ctx.store()->config.getHumanReadableURI()));
 
@@ -300,16 +302,11 @@ nxb::task<> run_build(nxb::ui::UIRuntime &runtime, BuildState &state,
   } catch (std::exception &e) {
     state.error_msg = e.what();
     runtime.println(fmt::format("Error: {}", e.what()));
-    boost::stacktrace::stacktrace trace =
-        boost::stacktrace::stacktrace::from_current_exception();
-    for (const auto &frame : trace) {
-      runtime.println(
-          fmt::format("{}:{}", frame.source_file(), frame.source_line()));
-    }
   }
 
   state.done = true;
   runtime.signal_damage();
+  runtime.request_shutdown();
   co_await events.shutdown();
 }
 
