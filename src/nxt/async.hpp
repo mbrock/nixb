@@ -20,14 +20,16 @@ namespace nxb
   using poll_op = coro::poll_op;
 
   inline auto
-  sync_wait (auto &&awaitable)
+  sync_wait (
+    auto &&awaitable)
   {
     return coro::sync_wait (
       std::forward<decltype (awaitable)> (awaitable));
   }
 
   inline auto
-  when_all (auto &&tasks)
+  when_all (
+    auto &&tasks)
   {
     return coro::when_all (std::forward<decltype (tasks)> (tasks));
   }
@@ -36,7 +38,8 @@ namespace nxb
   /// Use this instead of co_await scheduler.schedule() at the top
   /// of coroutines.
   inline auto
-  start (io_scheduler &sched, task<> t)
+  start (
+    io_scheduler &sched, task<> t)
   {
     return sched.schedule (std::move (t));
   }
@@ -46,10 +49,15 @@ namespace nxb
   class task_group
   {
   public:
-    explicit task_group (io_scheduler &sched) : sched_ (sched) {}
+    explicit task_group (
+      io_scheduler &sched)
+        : sched_ (sched)
+    {
+    }
 
     template <typename... Tasks>
-    task_group (io_scheduler &sched, Tasks &&...tasks)
+    task_group (
+      io_scheduler &sched, Tasks &&...tasks)
         : sched_ (sched)
     {
       (tasks_.push_back (
@@ -58,13 +66,15 @@ namespace nxb
     }
 
     void
-    start (task<> t)
+    start (
+      task<> t)
     {
       tasks_.push_back (nxb::start (sched_, std::move (t)));
     }
 
     task_group &
-    operator<< (task<> t)
+    operator<< (
+      task<> t)
     {
       start (std::move (t));
       return *this;
@@ -78,7 +88,8 @@ namespace nxb
 
     template <typename... Tasks>
     static auto
-    run (io_scheduler &sched, Tasks &&...tasks)
+    run (
+      io_scheduler &sched, Tasks &&...tasks)
     {
       auto tg
         = nxb::task_group (sched, std::forward<Tasks> (tasks)...);

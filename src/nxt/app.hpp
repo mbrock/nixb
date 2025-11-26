@@ -10,6 +10,11 @@
 
 #include <atomic>
 #include <chrono>
+#include <mp-units/framework.h>
+#include <mp-units/framework/construction_helpers.h>
+#include <mp-units/systems/isq/base_quantities.h>
+#include <mp-units/systems/si/chrono.h>
+#include <mp-units/systems/si/units.h>
 #include <stop_token>
 
 namespace nxb::ui
@@ -61,10 +66,19 @@ namespace nxb::ui
 
     /// Run a task, then request shutdown when it completes.
     nxb::task<>
-    shutdown_after (nxb::task<> t)
+    shutdown_after (
+      nxb::task<> t)
     {
       co_await t;
       request_shutdown ();
+    }
+
+    template <class rep_type, class period_type>
+    nxb::task<>
+    sleep (
+      std::chrono::duration<rep_type, period_type> duration)
+    {
+      co_await scheduler ().yield_for (duration);
     }
 
     /// Signal that the view has been damaged and needs redraw.
@@ -82,6 +96,16 @@ namespace nxb::ui
     [[nodiscard]] width_t terminal_width () const noexcept;
     [[nodiscard]] height_t terminal_height () const noexcept;
 
+    template <typename... Tasks>
+    auto
+    run (
+      Tasks &&...tasks)
+    {
+      auto tg = nxb::task_group (
+        this->scheduler (), std::forward<Tasks> (tasks)...);
+      return tg.run_all ();
+    }
+
     // =========================================================================
     // Render loop helpers
     // =========================================================================
@@ -91,7 +115,8 @@ namespace nxb::ui
     /// renders.
     template <typename Layout>
     void
-    render (const Layout &layout)
+    render (
+      const Layout &layout)
     {
       // Compute HUD height from layout
       auto hint = layout.height_hint ();
@@ -104,12 +129,13 @@ namespace nxb::ui
 
       update_hud_height (hud_h);
 
-      render_impl ([&layout] (RasterView &view, Size size)
-                     { layout.render (view, size); });
+      render_impl ([&layout] (RasterView &view, Size size) {
+        layout.render (view, size);
+      });
     }
 
-    /// Print a line to the scroll region (only works when HUD height <
-    /// terminal). In full-screen mode, this is a no-op.
+    /// Print a line to the scroll region (only works when HUD
+    /// height < terminal). In full-screen mode, this is a no-op.
     void println (std::string_view line);
 
     /// Clean up before exit - clears HUD region.
@@ -118,12 +144,14 @@ namespace nxb::ui
     /// Run a render loop until shutdown.
     /// BuildUI is called each frame to produce the layout.
     /// Waits for damage signal, but rate-limits to frame_time.
-    /// Note: pass by value to avoid dangling references in coroutine.
+    /// Note: pass by value to avoid dangling references in
+    /// coroutine.
     template <typename BuildUI>
     nxb::task<>
-    run_render_loop (BuildUI build_ui,
-                     std::chrono::milliseconds frame_time
-                     = std::chrono::milliseconds{ 16 })
+    run_render_loop (
+      BuildUI build_ui,
+      std::chrono::milliseconds frame_time
+      = std::chrono::milliseconds{ 16 })
     {
       // Initial render
       render (build_ui ());
@@ -141,9 +169,8 @@ namespace nxb::ui
           // Rate limit: wait until frame_time has passed since last
           // render
           auto now = std::chrono::steady_clock::now ();
-          auto elapsed
-              = std::chrono::duration_cast<std::chrono::milliseconds> (
-                  now - last_render);
+          auto elapsed = std::chrono::duration_cast<
+            std::chrono::milliseconds> (now - last_render);
           if (elapsed < frame_time)
             co_await scheduler_->yield_for (frame_time - elapsed);
 
@@ -183,7 +210,8 @@ namespace nxb::ui
 
   private:
     void refresh_terminal_size () noexcept;
-    void render_impl (std::function<void (RasterView &, Size)> render_fn);
+    void render_impl (
+      std::function<void (RasterView &, Size)> render_fn);
     void update_hud_height (height_t hud_h);
 
     std::shared_ptr<nxb::io_scheduler> scheduler_;
@@ -212,7 +240,8 @@ namespace nxb::ui
   /// request_shutdown)
   template <typename State, typename BuildUI, typename Update>
   int
-  run (State initial_state, BuildUI build_ui, Update update)
+  run (
+    State initial_state, BuildUI build_ui, Update update)
   {
     UIRuntime runtime;
     State state = std::move (initial_state);
@@ -223,10 +252,10 @@ namespace nxb::ui
         nxb::task_group tasks (runtime.scheduler ());
 
         tasks
-            << runtime.signal_loop ()
-            << runtime.run_render_loop ([&state, build_ui]
-                                          { return build_ui (state); })
-            << runtime.shutdown_after (update (runtime, state));
+          << runtime.signal_loop ()
+          << runtime.run_render_loop (
+               [&state, build_ui] { return build_ui (state); })
+          << runtime.shutdown_after (update (runtime, state));
 
         tasks.run_all ();
         runtime.cleanup ();

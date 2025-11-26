@@ -88,9 +88,9 @@ namespace nxb
   {
   } terminal_origin_v;
 
-  // ANSI cursor positioning is 1-based. Define relative origins at the
-  // "imaginary" ANSI position 0 (terminal position -1), so that terminal
-  // position 0 naturally maps to ANSI position 1.
+  // ANSI cursor positioning is 1-based. Define relative origins at
+  // the "imaginary" ANSI position 0 (terminal position -1), so that
+  // terminal position 0 naturally maps to ANSI position 1.
   inline constexpr struct ansi_origin final
       : relative_point_origin<terminal_origin - 1 * ch>
   {
@@ -121,7 +121,11 @@ namespace nxb
     width_t w{ 0 * ch };
     height_t h{ 0 * ln };
 
-    constexpr Size (width_t w, height_t h) : w{ w }, h{ h } {}
+    constexpr Size (
+      width_t w, height_t h)
+        : w{ w }, h{ h }
+    {
+    }
     constexpr Size () = default;
   };
 
@@ -140,28 +144,32 @@ namespace nxb
 
     /// Create position from displacement offsets
     static constexpr Pos
-    at (width_t dx, height_t dy)
+    at (
+      width_t dx, height_t dy)
     {
       return { terminal_origin + dx, terminal_origin_v + dy };
     }
 
     /// Offset by horizontal displacement (point + vector = point)
     constexpr Pos
-    operator+ (width_t dx) const
+    operator+ (
+      width_t dx) const
     {
       return { x + dx, y };
     }
 
     /// Offset by vertical displacement (point + vector = point)
     constexpr Pos
-    operator+ (height_t dy) const
+    operator+ (
+      height_t dy) const
     {
       return { x, y + dy };
     }
 
     /// Offset by 2D displacement (point + vector = point)
     constexpr Pos
-    operator+ (Size delta) const
+    operator+ (
+      Size delta) const
     {
       return { x + delta.w, y + delta.h };
     }
@@ -169,7 +177,8 @@ namespace nxb
     /// Difference of positions gives displacement (point - point =
     /// vector)
     friend constexpr Size
-    operator- (Pos a, Pos b)
+    operator- (
+      Pos a, Pos b)
     {
       auto dx = (a.x - b.x).numerical_value_in (ch);
       auto dy = (a.y - b.y).numerical_value_in (ln);
@@ -179,7 +188,8 @@ namespace nxb
 
     /// +=
     constexpr Pos &
-    operator+= (Size delta)
+    operator+= (
+      Size delta)
     {
       x += delta.w;
       y += delta.h;
@@ -187,14 +197,16 @@ namespace nxb
     }
 
     constexpr Pos &
-    operator+= (width_t dx)
+    operator+= (
+      width_t dx)
     {
       x += dx;
       return *this;
     }
 
     constexpr Pos &
-    operator+= (height_t dy)
+    operator+= (
+      height_t dy)
     {
       y += dy;
       return *this;
@@ -212,7 +224,7 @@ namespace nxb
     col () const
     {
       return static_cast<std::size_t> (
-          (x - terminal_origin).numerical_value_in (ch));
+        (x - terminal_origin).numerical_value_in (ch));
     }
 
     /// Extract raw row index (for legacy API interop)
@@ -220,12 +232,13 @@ namespace nxb
     row () const
     {
       return static_cast<std::size_t> (
-          (y - terminal_origin_v).numerical_value_in (ln));
+        (y - terminal_origin_v).numerical_value_in (ln));
     }
 
     /// Equality comparison
     friend constexpr bool
-    operator== (Pos a, Pos b)
+    operator== (
+      Pos a, Pos b)
     {
       return a.x == b.x && a.y == b.y;
     }
@@ -233,25 +246,29 @@ namespace nxb
 
   // Convert zero-based terminal coordinates to ANSI 1-based points
   [[nodiscard]] constexpr ansi_col_t
-  to_ansi (col_t col)
+  to_ansi (
+    col_t col)
   {
     return col.point_for (ansi_origin);
   }
 
   [[nodiscard]] constexpr ansi_row_t
-  to_ansi (row_t row)
+  to_ansi (
+    row_t row)
   {
     return row.point_for (ansi_origin_v);
   }
 
   [[nodiscard]] constexpr ansi_col_t
-  to_ansi_x (Pos pos)
+  to_ansi_x (
+    Pos pos)
   {
     return to_ansi (pos.x);
   }
 
   [[nodiscard]] constexpr ansi_row_t
-  to_ansi_y (Pos pos)
+  to_ansi_y (
+    Pos pos)
   {
     return to_ansi (pos.y);
   }

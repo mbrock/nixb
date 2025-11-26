@@ -1,4 +1,5 @@
 #include "log-replay.hpp"
+#include "nxt/app.hpp"
 
 #include <charconv>
 #include <ext/stdio_filebuf.h>
@@ -17,7 +18,8 @@ namespace nixb::replay
 
     /// Parse JSON "fields" array into nix::Logger::Fields.
     ev::Fields
-    parse_json_fields (simdjson::ondemand::array &arr)
+    parse_json_fields (
+      simdjson::ondemand::array &arr)
     {
       ev::Fields fields;
       for (auto field : arr)
@@ -25,17 +27,18 @@ namespace nixb::replay
           auto type = field.type ().value ();
           if (type == simdjson::ondemand::json_type::string)
             fields.emplace_back (
-                std::string (field.get_string ().value ()));
+              std::string (field.get_string ().value ()));
           else if (type == simdjson::ondemand::json_type::number)
             fields.emplace_back (
-                static_cast<uint64_t> (field.get_uint64 ().value ()));
+              static_cast<uint64_t> (field.get_uint64 ().value ()));
         }
       return fields;
     }
 
     /// Parse a JSON log entry and return the semantic event.
     std::optional<Event>
-    parse_json_event (simdjson::ondemand::document &doc)
+    parse_json_event (
+      simdjson::ondemand::document &doc)
     {
       auto action = doc["action"].get_string ();
       if (action.error ())
@@ -77,8 +80,9 @@ namespace nixb::replay
             .id = ev::ActivityId{ id.value () },
             .parent = ev::ActivityId{ parent.value () },
             .kind = ev::parse_activity_kind (
-                static_cast<nix::ActivityType> (type.value ()),
-                std::string (text.value ()), fields),
+              static_cast<nix::ActivityType> (type.value ()),
+              std::string (text.value ()),
+              fields),
           };
         }
       else if (action_sv == "stop")
@@ -105,8 +109,9 @@ namespace nixb::replay
             fields = parse_json_fields (fields_arr.value ());
 
           return ev::parse_result (
-              ev::ActivityId{ id.value () },
-              static_cast<nix::ResultType> (type.value ()), fields);
+            ev::ActivityId{ id.value () },
+            static_cast<nix::ResultType> (type.value ()),
+            fields);
         }
 
       return std::nullopt;
@@ -120,7 +125,8 @@ namespace nixb::replay
     };
 
     ParsedLine
-    parse_line (std::string_view line, simdjson::ondemand::parser &parser)
+    parse_line (
+      std::string_view line, simdjson::ondemand::parser &parser)
     {
       ParsedLine result;
 
@@ -135,7 +141,7 @@ namespace nixb::replay
           int64_t ts_ms = 0;
           auto ts_str = line.substr (0, space_pos);
           auto [ptr, ec] = std::from_chars (
-              ts_str.data (), ts_str.data () + ts_str.size (), ts_ms);
+            ts_str.data (), ts_str.data () + ts_str.size (), ts_ms);
           if (ec == std::errc{})
             {
               result.timestamp = std::chrono::milliseconds{ ts_ms };
@@ -162,19 +168,23 @@ namespace nixb::replay
   } // anonymous namespace
 
   coro::task<>
-  replay_file (coro::io_scheduler &sched, std::istream &input,
-               coro::queue<Event> &queue, std::stop_token stop,
-               bool realtime, double speed)
+  replay_file (
+    nxb::ui::UIRuntime &runtime,
+    std::istream &input,
+    coro::queue<Event> &queue,
+    bool realtime,
+    double speed)
   {
     simdjson::ondemand::parser parser;
     std::string line;
     std::chrono::milliseconds last_ts{ 0 };
     bool first = true;
 
-    while (!stop.stop_requested ())
+    while (!runtime.shutdown_requested ())
       {
         // Wait for fd to be readable before doing blocking getline
-        // auto status = co_await sched.poll (fd, coro::poll_op::read,
+        // auto status = co_await sched.poll (fd,
+        // coro::poll_op::read,
         //                                    std::chrono::milliseconds{
         //                                    100 });
         // if (status == coro::poll_status::timeout)
@@ -198,7 +208,7 @@ namespace nixb::replay
                 auto scaled = std::chrono::milliseconds{
                   static_cast<int64_t> (delay.count () / speed)
                 };
-                co_await sched.yield_for (scaled);
+                co_await runtime.sleep (scaled);
               }
           }
 
@@ -214,14 +224,16 @@ namespace nixb::replay
   }
 
   coro::task<>
-  replay_file (coro::io_scheduler &sched, const std::string &path,
-               coro::queue<Event> &queue, std::stop_token stop,
-               bool realtime, double speed)
+  replay_file (
+    nxb::ui::UIRuntime &runtime,
+    const std::string &path,
+    coro::queue<Event> &queue,
+    bool realtime,
+    double speed)
   {
     std::ifstream input (path);
 
-    co_await replay_file (sched, input, queue, std::move (stop), realtime,
-                          speed);
+    co_await replay_file (runtime, input, queue, realtime, speed);
   }
 
 } // namespace nixb::replay
