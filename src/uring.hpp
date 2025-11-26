@@ -12,9 +12,12 @@
 
 #include <exec/linux/io_uring_context.hpp>
 #include <exec/linux/safe_file_descriptor.hpp>
+#include <exec/task.hpp>
 #include <fcntl.h>
 #include <fmt/format.h>
+#include <poll.h>
 #include <stdexec/execution.hpp>
+#include <sys/eventfd.h>
 #include <sys/uio.h>
 
 namespace nxb::uring
@@ -168,12 +171,148 @@ private:
   std::size_t buffer_bytes_;
 };
 
+template <class Receiver> struct poll_impl : __stoppable_op_base<Receiver>
+{
+  int fd_;
+  short events_;
+
+  poll_impl (__context &ctx, int fd, short events, Receiver &&receiver)
+      : __stoppable_op_base<Receiver>{ ctx,
+                                       static_cast<Receiver &&> (receiver) },
+        fd_{ fd }, events_{ events }
+  {
+  }
+
+  auto
+  ready () const noexcept -> bool
+  {
+    return false;
+  }
+
+  void
+  submit (::io_uring_sqe &sqe) noexcept
+  {
+    sqe = {};
+    sqe.opcode = IORING_OP_POLL_ADD;
+    sqe.fd = fd_;
+    sqe.poll_events = static_cast<__poll_t> (events_);
+  }
+
+  void
+  complete (const ::io_uring_cqe &cqe) noexcept
+  {
+    auto &receiver = this->receiver ();
+    if (cqe.res >= 0)
+      {
+        stdexec::set_value (static_cast<Receiver &&> (receiver),
+                            static_cast<short> (cqe.res));
+      }
+    else
+      {
+        auto err = std::make_exception_ptr (
+            std::system_error (-cqe.res, std::system_category (), "poll"));
+        stdexec::set_error (static_cast<Receiver &&> (receiver), err);
+      }
+  }
+};
+
+template <class Receiver>
+using poll_operation = __stoppable_task_facade_t<poll_impl<Receiver>>;
+
+class poll_sender
+{
+public:
+  using sender_concept = stdexec::sender_t;
+  using completion_signatures
+      = stdexec::completion_signatures<stdexec::set_value_t (short),
+                                       stdexec::set_error_t (std::exception_ptr),
+                                       stdexec::set_stopped_t ()>;
+
+  poll_sender (exec::io_uring_scheduler scheduler, int fd, short events)
+      : scheduler_{ scheduler }, fd_{ fd }, events_{ events }
+  {
+  }
+
+  template <stdexec::receiver_of<completion_signatures> Receiver>
+  friend auto
+  tag_invoke (stdexec::connect_t, poll_sender &&self, Receiver &&receiver)
+      -> poll_operation<Receiver>
+  {
+    auto *ctx = self.scheduler_.__context_;
+    STDEXEC_ASSERT (ctx != nullptr);
+    return poll_operation<Receiver> (std::in_place, *ctx, self.fd_,
+                                     self.events_,
+                                     static_cast<Receiver &&> (receiver));
+  }
+
+private:
+  exec::io_uring_scheduler scheduler_;
+  int fd_;
+  short events_;
+};
+
 } // namespace detail
 
 auto async_read_file (exec::io_uring_scheduler scheduler,
                       std::filesystem::path path,
                       std::size_t buffer_bytes = 64 * 1024)
     -> detail::io_uring_file_sender;
+
+/// Poll an fd for readability. Completes with the poll revents.
+inline auto
+async_poll (exec::io_uring_scheduler scheduler, int fd,
+            short events = POLLIN) -> detail::poll_sender
+{
+  return detail::poll_sender{ scheduler, fd, events };
+}
+
+/// An async event that can be signaled and awaited via io_uring.
+/// Uses eventfd under the hood.
+class async_event
+{
+public:
+  async_event ()
+  {
+    int fd = ::eventfd (0, EFD_NONBLOCK | EFD_CLOEXEC);
+    if (fd < 0)
+      throw std::system_error (errno, std::system_category (), "eventfd");
+    fd_.reset (fd);
+  }
+
+  /// Signal the event (wake up any waiters).
+  void
+  set () noexcept
+  {
+    std::uint64_t val = 1;
+    ::write (fd_.native_handle (), &val, sizeof (val));
+  }
+
+  /// Reset the event (drain the eventfd).
+  void
+  reset () noexcept
+  {
+    std::uint64_t val;
+    ::read (fd_.native_handle (), &val, sizeof (val));
+  }
+
+  /// Returns a sender that completes when the event is signaled.
+  auto
+  wait (exec::io_uring_scheduler scheduler)
+  {
+    namespace sx = stdexec;
+    return async_poll (scheduler, fd_.native_handle ())
+           | sx::then ([this] (short) { reset (); });
+  }
+
+  int
+  fd () const noexcept
+  {
+    return fd_.native_handle ();
+  }
+
+private:
+  exec::safe_file_descriptor fd_;
+};
 
 class io_uring_runtime
 {

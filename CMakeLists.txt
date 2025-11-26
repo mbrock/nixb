@@ -190,3 +190,28 @@ install(TARGETS nxbcg RUNTIME DESTINATION bin)
 
 add_executable(tui-example src/nxt/tui_example.cpp)
 target_link_libraries(tui-example PRIVATE libnxt)
+
+add_executable(stdexec-example
+    src/nxt/stdexec_example.cpp
+    src/nxt/signal-pipe.cpp
+    src/uring.cpp
+)
+target_include_directories(stdexec-example PRIVATE src)
+target_link_libraries(stdexec-example
+    PRIVATE
+        STDEXEC::stdexec
+        fmt::fmt
+)
+
+add_executable(replay-stdexec
+    src/replay-stdexec.cpp
+    src/uring.cpp
+)
+target_include_directories(replay-stdexec PRIVATE src)
+target_link_libraries(replay-stdexec
+    PRIVATE
+        STDEXEC::stdexec
+        PkgConfig::NIX
+        simdjson::simdjson
+        fmt::fmt
+)
