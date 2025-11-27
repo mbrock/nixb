@@ -145,19 +145,26 @@
         {
           shellHook = ''
             ${ccacheConfig}
+            export CC=clang
+            export CXX=clang++
           '';
-          default = pkgs.mkShell.override {
-            stdenv = pkgs.ccacheStdenv;
-          } {
+          default = pkgs.mkShellNoCC {
             inputsFrom = [ nixDevShell ];
             hardeningDisable = ["all"];
             packages = [
+              pkgs.lld
+
               libcoro
               mp-units
               mdspan
               fmt
               pkgs.cli11
+
               pkgs.nixd
+              pkgs.llvmPackages_20.clang
+              pkgs.nixfmt-rfc-style
+              pkgs.llvmPackages_20.clang-tools
+              pkgs.treefmt
             ];
           };
         }

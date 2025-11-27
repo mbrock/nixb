@@ -10,7 +10,7 @@
 
 # Exclude files or directories matching the specified globs
 # Env $TREEFMT_EXCLUDES
-# excludes = ["*.md", "*.gif"]
+excludes = ["nix-src", "subprojects"]
 
 # Exit with error if any changes were made during execution
 # Useful for CI
@@ -31,7 +31,7 @@
 # Defaults to the root of the current git worktree.
 # If not in a git repo, defaults to the directory containing the config file.
 # Env $TREEFMT_TREE_ROOT
-tree-root = "./src"
+#tree-root = "./src"
 
 # File to search for to find the tree root (if tree-root is not set)
 # Env $TREEFMT_TREE_ROOT_FILE

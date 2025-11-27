@@ -10,53 +10,41 @@ project('nixb', 'cpp', 'c',
   meson_version : '>= 1.1',
 )
 
-# Build nix libraries from source (via subprojects)
-subproject('libutil')
-subproject('libstore')
-subproject('libfetchers')
-subproject('libexpr')
-subproject('libflake')
-subproject('libmain')
-subproject('libcmd')
+nix_opts = ['warning_level=0']
+subproject('libutil', default_options : nix_opts)
+subproject('libstore', default_options : nix_opts)
+subproject('libfetchers', default_options : nix_opts)
+subproject('libexpr', default_options : nix_opts)
+subproject('libflake', default_options : nix_opts)
+subproject('libmain', default_options : nix_opts)
+subproject('libcmd', default_options : nix_opts)
 
-# Now get them as dependencies (they register via meson.override_dependency)
 nix_util_dep = dependency('nix-util')
 nix_store_dep = dependency('nix-store')
 nix_expr_dep = dependency('nix-expr')
 nix_flake_dep = dependency('nix-flake')
 nix_cmd_dep = dependency('nix-cmd')
 
-# System dependencies
 boost_dep = dependency('boost')
 fmt_dep = dependency('fmt')
 nlohmann_json_dep = dependency('nlohmann_json')
-
-# Custom dependencies (from our flake)
 libcoro_dep = dependency('libcoro')
+tbb_dep = dependency('tbb')
 
-# Header-only deps - use cmake to find them
-mpunits_dep = dependency('mp-units', method : 'cmake', modules : ['mp-units::mp-units'])
-mdspan_dep = dependency('mdspan', method : 'cmake', modules : ['std::mdspan'])
+mpunits_dep = dependency('mp-units',
+                         method : 'cmake',
+                         modules : ['mp-units::mp-units'])
+mdspan_dep = dependency('mdspan',
+                        method : 'cmake',
+                        modules : ['std::mdspan'])
 
-# Vendored libvterm - built directly
-perl = find_program('perl')
-tbl2inc = files('subprojects/libvterm/tbl2inc_c.pl')
+add_project_arguments('-ftime-trace', language : 'cpp')
 
-#decdrawing_inc = custom_target('DECdrawing.inc',
-#                               input : 'subprojects/libvterm/src/encoding/DECdrawing.tbl',
-#                               install_dir : 'subprojects/libvterm/include/encoding/',
-#                               output : 'DECdrawing.inc',
-#                               command : [perl, tbl2inc, '@INPUT@'],
-#                               capture : true,
-#                              )
-
-#uk_inc = custom_target('uk.inc',
-#                       input : 'subprojects/libvterm/src/encoding/uk.tbl',
-#                       install_dir : 'subprojects/libvterm/include/encoding/',                       
-#                       output : 'uk.inc',
-#                       command : [perl, tbl2inc, '@INPUT@'],
-#                       capture : true,
-#                      )
+mdspan_args = [
+  '-DMDSPAN_USE_BRACKET_OPERATOR=1',
+  '-DMDSPAN_USE_PAREN_OPERATOR=0',
+  '-DMDSPAN_HAS_CXX_17=1',
+]
 
 libvterm_sources = files(
   'subprojects/libvterm/src/encoding.c',
@@ -72,9 +60,11 @@ libvterm_sources = files(
 
 libvterm = static_library('vterm',
   libvterm_sources,
-  include_directories : include_directories('subprojects/libvterm/include', 'subprojects/libvterm/src'),
+  include_directories : include_directories(
+    'subprojects/libvterm/include',
+    'subprojects/libvterm/src'
+  ),
   c_args : ['-I' + meson.current_build_dir()],
-  link_args : ['-ltbb']
 )
 
 libvterm_dep = declare_dependency(
@@ -82,7 +72,6 @@ libvterm_dep = declare_dependency(
   include_directories : include_directories('subprojects/libvterm/include'),
 )
 
-# libnxt library
 libnxt_sources = files(
   'src/nxt/app.cpp',
   'src/nxt/ansi.cpp',
@@ -94,31 +83,23 @@ libnxt_sources = files(
 
 libnxt_inc = include_directories('src')
 
+libnxt_deps = [
+  libcoro_dep, fmt_dep, boost_dep, mpunits_dep, mdspan_dep, tbb_dep
+]
+
 libnxt = static_library('nxt',
   libnxt_sources,
   include_directories : libnxt_inc,
-  link_args : ['-ltbb'],
-  dependencies : [
-    libcoro_dep,
-    fmt_dep,
-    boost_dep,
-    mpunits_dep,
-    mdspan_dep,
-  ],
-  cpp_args : [
-    '-DMDSPAN_USE_BRACKET_OPERATOR=1',
-    '-DMDSPAN_USE_PAREN_OPERATOR=0',
-    '-DMDSPAN_HAS_CXX_17=1',
-  ],
+  dependencies : libnxt_deps,
+  cpp_args : mdspan_args,
 )
 
 libnxt_dep = declare_dependency(
   link_with : libnxt,
   include_directories : libnxt_inc,
-  dependencies : [libcoro_dep, fmt_dep, boost_dep, mpunits_dep, mdspan_dep],
+  dependencies : libnxt_deps,
 )
 
-# nxb executable
 nxb_sources = files(
   'src/nxb-main.cpp',
   'src/nix-log-adapter.cpp',
@@ -136,13 +117,8 @@ executable('nxb',
     nix_cmd_dep,
     nix_util_dep,
     nlohmann_json_dep,
-    boost_dep,
   ],
-  cpp_args : [
-    '-DMDSPAN_USE_BRACKET_OPERATOR=1',
-    '-DMDSPAN_USE_PAREN_OPERATOR=0',
-    '-DMDSPAN_HAS_CXX_17=1',
-  ],
-  link_args : ['-rdynamic', '-ltbb'],
+  cpp_args : mdspan_args,
+  link_args : ['-rdynamic'],
   install : true,
 )

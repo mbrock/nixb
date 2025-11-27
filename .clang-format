@@ -10,7 +10,6 @@ BraceWrapping:
 PointerAlignment: Middle
 FixNamespaceComments: true
 SortIncludes: Never
-#IndentPPDirectives: BeforeHash
 SpaceAfterCStyleCast: true
 SpaceAfterTemplateKeyword: false
 AccessModifierOffset: -4
@@ -23,9 +22,8 @@ AllowShortFunctionsOnASingleLine: Empty
 AlwaysBreakTemplateDeclarations: Yes
 BinPackParameters: false
 BreakConstructorInitializers: BeforeComma
-EmptyLineAfterAccessModifier: Leave # change to always/never later?
+EmptyLineAfterAccessModifier: Leave
 EmptyLineBeforeAccessModifier: Leave
-#PackConstructorInitializers: BinPack
 BreakBeforeBinaryOperators: NonAssignment
 AlwaysBreakBeforeMultilineStrings: true
 IndentPPDirectives: AfterHash
