@@ -2,7 +2,7 @@
 
 export CLICOLOR_FORCE=1
 
-all: setup build
+all: build
 
 setup:
 	meson setup build --wipe 2>/dev/null || meson setup build
