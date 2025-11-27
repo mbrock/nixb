@@ -1,9 +1,12 @@
-#include "nxt/raster.hpp"
-
 #include <algorithm>
+
 #include <experimental/mdspan>
+
 #include <fmt/core.h>
 #include <fmt/ostream.h>
+
+#include "nxt/raster.hpp"
+
 
 namespace nxb
 {
@@ -142,7 +145,7 @@ namespace nxb
   RasterView
   RasterView::subraster (const Pos origin, const Size size) const noexcept
   {
-    using std::submdspan;
+    using std::experimental::submdspan;
 
     const std::size_t x = origin.col ();
     const std::size_t y = origin.row ();

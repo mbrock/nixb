@@ -1,27 +1,5 @@
 {
   "nodes": {
-    "detnix": {
-      "inputs": {
-        "flake-parts": "flake-parts",
-        "git-hooks-nix": "git-hooks-nix",
-        "nixpkgs": "nixpkgs",
-        "nixpkgs-23-11": "nixpkgs-23-11",
-        "nixpkgs-regression": "nixpkgs-regression"
-      },
-      "locked": {
-        "lastModified": 1763581319,
-        "narHash": "sha256-WHSQO6qiDm2So6lwoms26Eco2AwJQ1RYGiYlVzLokdo=",
-        "owner": "DeterminateSystems",
-        "repo": "nix-src",
-        "rev": "e6812091825de6223ecaebcf5be531796857367b",
-        "type": "github"
-      },
-      "original": {
-        "owner": "DeterminateSystems",
-        "repo": "nix-src",
-        "type": "github"
-      }
-    },
     "flake-compat": {
       "flake": false,
       "locked": {
@@ -41,7 +19,7 @@
     "flake-parts": {
       "inputs": {
         "nixpkgs-lib": [
-          "detnix",
+          "nix-src",
           "nixpkgs"
         ]
       },
@@ -62,10 +40,10 @@
       "inputs": {
         "flake-compat": "flake-compat",
         "gitignore": [
-          "detnix"
+          "nix-src"
         ],
         "nixpkgs": [
-          "detnix",
+          "nix-src",
           "nixpkgs"
         ]
       },
@@ -81,6 +59,24 @@
         "type": "tarball",
         "url": "https://flakehub.com/f/cachix/git-hooks.nix/0.1.941"
       }
+    },
+    "nix-src": {
+      "inputs": {
+        "flake-parts": "flake-parts",
+        "git-hooks-nix": "git-hooks-nix",
+        "nixpkgs": "nixpkgs",
+        "nixpkgs-23-11": "nixpkgs-23-11",
+        "nixpkgs-regression": "nixpkgs-regression"
+      },
+      "locked": {
+        "path": "./nix-src",
+        "type": "path"
+      },
+      "original": {
+        "path": "./nix-src",
+        "type": "path"
+      },
+      "parent": []
     },
     "nixpkgs": {
       "locked": {
@@ -128,26 +124,13 @@
         "type": "github"
       }
     },
-    "nixpkgs_2": {
-      "locked": {
-        "lastModified": 1763421233,
-        "narHash": "sha256-Stk9ZYRkGrnnpyJ4eqt9eQtdFWRRIvMxpNRf4sIegnw=",
-        "owner": "NixOS",
-        "repo": "nixpkgs",
-        "rev": "89c2b2330e733d6cdb5eae7b899326930c2c0648",
-        "type": "github"
-      },
-      "original": {
-        "owner": "NixOS",
-        "ref": "nixos-unstable",
-        "repo": "nixpkgs",
-        "type": "github"
-      }
-    },
     "root": {
       "inputs": {
-        "detnix": "detnix",
-        "nixpkgs": "nixpkgs_2"
+        "nix-src": "nix-src",
+        "nixpkgs": [
+          "nix-src",
+          "nixpkgs"
+        ]
       }
     }
   },

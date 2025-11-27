@@ -186,14 +186,12 @@ struct TrivialStore : virtual nix::Store {
     nix::dumpPath(sourcePath, sink, nix::FileSerialisationMethod::NixArchive);
   }
 
-  // nix::ref<nix::SourceAccessor> getFSAccessor(bool) override {
-  //   std::vector<nix::ref<nix::SourceAccessor>> layers =
-  //       std::views::values(storage) | std::views::transform([](auto &p) {
-  //         return nix::make_ref(p.contents);
-  //       }) |
-  //       std::ranges::to<std::vector>();
-  //   return nix::makeUnionSourceAccessor(layers);
-  // }
+  nix::ref<nix::SourceAccessor> getFSAccessor(bool) override {
+    std::vector<nix::ref<nix::SourceAccessor>> layers;
+    for (auto &[_, p] : storage)
+      layers.push_back(nix::ref(p.contents));
+    return nix::ref(nix::makeUnionSourceAccessor(std::move(layers)));
+   }
 
   std::shared_ptr<nix::SourceAccessor> getFSAccessor(const nix::StorePath& path,
                                                      bool) override {

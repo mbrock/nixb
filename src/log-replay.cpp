@@ -5,102 +5,84 @@
 #include <ext/stdio_filebuf.h>
 #include <fcntl.h>
 #include <fstream>
-#include <simdjson.h>
+#include <nlohmann/json.hpp>
 #include <unistd.h>
 
 namespace nixb::replay {
 
 namespace ev = nix_event;
+using json = nlohmann::json;
 
 namespace {
 
     /// Parse JSON "fields" array into nix::Logger::Fields.
     ev::Fields
-    parse_json_fields(
-        simdjson::ondemand::array& arr)
+    parse_json_fields(const json& arr)
     {
         ev::Fields fields;
-        for (auto field : arr) {
-            auto type = field.type().value();
-            if (type == simdjson::ondemand::json_type::string)
-                fields.emplace_back(
-                    std::string(field.get_string().value()));
-            else if (type == simdjson::ondemand::json_type::number)
-                fields.emplace_back(
-                    static_cast<uint64_t>(field.get_uint64().value()));
+        for (const auto& field : arr) {
+            if (field.is_string())
+                fields.emplace_back(field.get<std::string>());
+            else if (field.is_number_unsigned())
+                fields.emplace_back(field.get<uint64_t>());
+            else if (field.is_number_integer())
+                fields.emplace_back(static_cast<uint64_t>(field.get<int64_t>()));
         }
         return fields;
     }
 
     /// Parse a JSON log entry and return the semantic event.
     std::optional<Event>
-    parse_json_event(
-        simdjson::ondemand::document& doc)
+    parse_json_event(const json& doc)
     {
-        auto action = doc["action"].get_string();
-        if (action.error())
+        if (!doc.contains("action") || !doc["action"].is_string())
             return std::nullopt;
 
-        std::string_view action_sv = action.value();
+        std::string action = doc["action"].get<std::string>();
 
-        if (action_sv == "msg") {
-            auto level = doc["level"].get_int64();
-            auto msg = doc["msg"].get_string();
-            if (level.error() || msg.error())
+        if (action == "msg") {
+            if (!doc.contains("level") || !doc.contains("msg"))
                 return std::nullopt;
 
             return ev::LogLine {
-                .level = static_cast<nix::Verbosity>(level.value()),
-                .text = std::string(msg.value()),
+                .level = static_cast<nix::Verbosity>(doc["level"].get<int64_t>()),
+                .text = doc["msg"].get<std::string>(),
             };
-        } else if (action_sv == "start") {
-            auto id = doc["id"].get_int64();
-            auto parent = doc["parent"].get_int64();
-            auto type = doc["type"].get_int64();
-            auto text = doc["text"].get_string();
-
-            if (id.error()
-                || parent.error()
-                || type.error()
-                || text.error())
+        } else if (action == "start") {
+            if (!doc.contains("id") || !doc.contains("parent")
+                || !doc.contains("type") || !doc.contains("text"))
                 return std::nullopt;
 
             ev::Fields fields;
-            auto fields_arr = doc["fields"].get_array();
-            if (!fields_arr.error())
-                fields = parse_json_fields(fields_arr.value());
+            if (doc.contains("fields") && doc["fields"].is_array())
+                fields = parse_json_fields(doc["fields"]);
 
             return ev::ActivityStarted {
-                .id = ev::ActivityId { id.value() },
-                .parent = ev::ActivityId { parent.value() },
+                .id = ev::ActivityId { doc["id"].get<int64_t>() },
+                .parent = ev::ActivityId { doc["parent"].get<int64_t>() },
                 .kind = ev::parse_activity_kind(
-                    static_cast<nix::ActivityType>(type.value()),
-                    std::string(text.value()),
+                    static_cast<nix::ActivityType>(doc["type"].get<int64_t>()),
+                    doc["text"].get<std::string>(),
                     fields),
             };
-        } else if (action_sv == "stop") {
-            auto id = doc["id"].get_int64();
-            if (id.error())
+        } else if (action == "stop") {
+            if (!doc.contains("id"))
                 return std::nullopt;
 
             return ev::ActivityFinished {
-                .id = ev::ActivityId { id.value() },
+                .id = ev::ActivityId { doc["id"].get<int64_t>() },
             };
-        } else if (action_sv == "result") {
-            auto id = doc["id"].get_int64();
-            auto type = doc["type"].get_int64();
-
-            if (id.error() || type.error())
+        } else if (action == "result") {
+            if (!doc.contains("id") || !doc.contains("type"))
                 return std::nullopt;
 
             ev::Fields fields;
-            auto fields_arr = doc["fields"].get_array();
-            if (!fields_arr.error())
-                fields = parse_json_fields(fields_arr.value());
+            if (doc.contains("fields") && doc["fields"].is_array())
+                fields = parse_json_fields(doc["fields"]);
 
             return ev::parse_result(
-                ev::ActivityId { id.value() },
-                static_cast<nix::ResultType>(type.value()),
+                ev::ActivityId { doc["id"].get<int64_t>() },
+                static_cast<nix::ResultType>(doc["type"].get<int64_t>()),
                 fields);
         }
 
@@ -114,17 +96,14 @@ namespace {
     };
 
     ParsedLine
-    parse_line(
-        std::string_view line, simdjson::ondemand::parser& parser)
+    parse_line(std::string_view line)
     {
         ParsedLine result;
 
         // Check for timestamp prefix: "<ms> @nix <json>"
         auto space_pos = line.find(' ');
-        if (space_pos
-                != std::string_view::npos
-            && space_pos
-                > 0
+        if (space_pos != std::string_view::npos
+            && space_pos > 0
             && std::isdigit(static_cast<unsigned char>(line[0]))) {
             int64_t ts_ms = 0;
             auto ts_str = line.substr(0, space_pos);
@@ -144,10 +123,12 @@ namespace {
         auto json_part = line.substr(nix_pos + 5);
 
         // Parse JSON
-        simdjson::padded_string padded(json_part);
-        auto doc = parser.iterate(padded);
-        if (!doc.error())
-            result.event = parse_json_event(doc.value());
+        try {
+            auto doc = json::parse(json_part);
+            result.event = parse_json_event(doc);
+        } catch (const json::exception&) {
+            // Parse error, ignore this line
+        }
 
         return result;
     }
@@ -162,7 +143,6 @@ replay_file(
     bool realtime,
     double speed)
 {
-    simdjson::ondemand::parser parser;
     std::string line;
     std::chrono::milliseconds last_ts { 0 };
     bool first = true;
@@ -174,7 +154,7 @@ replay_file(
         if (line.empty())
             continue;
 
-        auto parsed = parse_line(line, parser);
+        auto parsed = parse_line(line);
 
         if (parsed.timestamp && realtime && !first) {
             auto delay = *parsed.timestamp - last_ts;

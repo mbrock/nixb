@@ -1,15 +1,20 @@
 #pragma once
 
-#include "nxt/glyph-table.hpp"
-#include "nxt/units.hpp"
-
-#include <experimental/mdspan>
-#include <fmt/color.h>
 #include <optional>
 #include <ranges>
 #include <span>
 #include <string_view>
 #include <vector>
+
+#include <experimental/mdspan>
+
+#include <fmt/base.h>
+#include <fmt/color.h>
+
+#include "nxt/glyph-table.hpp"
+#include "nxt/units.hpp"
+
+
 
 namespace nxb
 {

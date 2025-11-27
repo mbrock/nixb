@@ -1,5 +1,9 @@
 #pragma once
 
+#include <stop_token>
+#include <atomic>
+#include <chrono>
+
 #include "nxt/ansi.hpp"
 #include "nxt/async.hpp"
 #include "nxt/compositor.hpp"
@@ -8,14 +12,11 @@
 #include "nxt/signal-pipe.hpp"
 #include "nxt/units.hpp"
 
-#include <atomic>
-#include <chrono>
 #include <mp-units/framework.h>
 #include <mp-units/framework/construction_helpers.h>
 #include <mp-units/systems/isq/base_quantities.h>
 #include <mp-units/systems/si/chrono.h>
 #include <mp-units/systems/si/units.h>
-#include <stop_token>
 
 namespace nxb::ui {
 

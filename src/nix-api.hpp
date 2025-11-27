@@ -23,16 +23,15 @@
 
 #include <array>
 #include <filesystem>
-#include <fmt/base.h>
 #include <map>
 #include <memory>
-#include <nix/cmd/common-eval-args.hh>
-#include <nix/util/util.hh>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
 
+#include <nix/cmd/common-eval-args.hh>
+#include <nix/util/util.hh>
 #include <nix/cmd/installable-flake.hh>
 #include <nix/cmd/installables.hh>
 #include <nix/expr/eval-gc.hh>
@@ -50,6 +49,7 @@
 #include <nix/store/store-open.hh>
 #include <nix/util/ref.hh>
 
+#include <fmt/base.h>
 #include "nxb-store.hpp"
 
 namespace nxb {

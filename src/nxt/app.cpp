@@ -1,12 +1,12 @@
+#include <sys/ioctl.h>
+#include <unistd.h>
+#include <csignal>
+#include <iostream>
+
 #include "nxt/app.hpp"
 #include "nxt/ansi.hpp"
 #include "nxt/async.hpp"
 #include "nxt/units.hpp"
-
-#include <csignal>
-#include <iostream>
-#include <sys/ioctl.h>
-#include <unistd.h>
 
 namespace nxb::ui
 {
