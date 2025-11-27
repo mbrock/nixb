@@ -15,7 +15,7 @@ SpaceAfterTemplateKeyword: false
 AccessModifierOffset: -4
 AlignAfterOpenBracket: AlwaysBreak
 AlignEscapedNewlines: Left
-ColumnLimit: 120
+ColumnLimit: 76
 BreakStringLiterals: false
 BitFieldColonSpacing: None
 AllowShortFunctionsOnASingleLine: Empty
