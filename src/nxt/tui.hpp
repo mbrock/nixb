@@ -238,6 +238,10 @@ inline auto text(std::string s)
         WidthHint::fixed(w),
         HeightHint::fixed(1 * ln),
         [=](RasterView & r, Size) {
+            std::ranges::fill(r.fgs(), DEFAULT_COLOR);
+            std::ranges::fill(r.bgs(), DEFAULT_COLOR);
+            std::ranges::fill(r.ems(), DEFAULT_EMPHASIS);
+            std::ranges::fill(r.glyphs(), 32);
             render_span(r, Pos::origin(), Span{s, {}});
         });
 }
@@ -247,9 +251,13 @@ inline auto text(std::string s, Style style)
 {
     auto w = utf8_width(s);
     return leaf(
-        WidthHint::fixed(w),
+        WidthHint::grow(1.0 * one),
         HeightHint::fixed(1 * ln),
         [=](RasterView & r, Size) {
+            std::ranges::fill(r.fgs(), style.fg);
+            std::ranges::fill(r.bgs(), style.bg);
+            std::ranges::fill(r.ems(), style.em);
+            std::ranges::fill(r.glyphs(), 32);
             render_span(r, Pos::origin(), Span{s, style});
         });
 }

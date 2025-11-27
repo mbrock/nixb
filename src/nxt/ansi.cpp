@@ -12,7 +12,7 @@
 
 namespace nxb::ansi {
 
-bool debug_mode = false;
+Mode mode = Mode::disabled;
 
 bool is_tty()
 {
@@ -21,7 +21,7 @@ bool is_tty()
 
 void init()
 {
-    debug_mode = !is_tty();
+    mode = is_tty() ? Mode::enabled : Mode::disabled;
 }
 
 namespace {
@@ -35,16 +35,23 @@ constexpr std::string_view CSI_DEBUG = "⟨CSI:";
 
 void Writer::csi(std::string_view params, char final_byte)
 {
-    if (debug_mode)
+    switch (mode) {
+    case Mode::disabled:
+        // No ANSI output
+        break;
+    case Mode::debug:
         fmt::format_to(
             std::back_inserter(buf_),
             "{}{}{}⟩",
             CSI_DEBUG,
             params,
             final_byte);
-    else
+        break;
+    case Mode::enabled:
         fmt::format_to(
             std::back_inserter(buf_), "{}{}{}", CSI, params, final_byte);
+        break;
+    }
 }
 
 Writer & Writer::move_to(const ansi_row_t row, const ansi_col_t col)
@@ -355,17 +362,23 @@ Writer & Writer::text(std::string_view str)
 // ============================================================================
 
 namespace {
-/// Print a CSI sequence, using debug format if debug_mode is set
+/// Print a CSI sequence based on current mode
 template<typename... Args>
 void print_csi(fmt::format_string<Args...> fmt_str, Args &&... args)
 {
-    if (debug_mode) {
+    switch (mode) {
+    case Mode::disabled:
+        // No ANSI output
+        break;
+    case Mode::debug:
         fmt::print("{}", CSI_DEBUG);
         fmt::print(fmt_str, std::forward<Args>(args)...);
         fmt::print("⟩");
-    } else {
+        break;
+    case Mode::enabled:
         fmt::print("{}", CSI);
         fmt::print(fmt_str, std::forward<Args>(args)...);
+        break;
     }
 }
 } // namespace

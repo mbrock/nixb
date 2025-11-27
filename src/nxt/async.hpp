@@ -2,8 +2,11 @@
 
 #include <coro/coro.hpp>
 #include <coro/event.hpp>
+#include <coro/generator.hpp>
 #include <coro/io_scheduler.hpp>
+#include <coro/latch.hpp>
 #include <coro/queue.hpp>
+#include <coro/semaphore.hpp>
 #include <coro/task.hpp>
 
 namespace nxb {
@@ -14,7 +17,17 @@ using task = coro::task<T>;
 template<typename T>
 using queue = coro::queue<T>;
 
+template<typename T>
+using generator = coro::generator<T>;
+
+// coro::semaphore<max_value> is a counting semaphore with compile-time max
+// Use directly when you know the max at compile time:
+//   nxb::semaphore<16> slots;
+template<std::ptrdiff_t max_value>
+using semaphore = coro::semaphore<max_value>;
+
 using event = coro::event;
+using latch = coro::latch;
 
 using io_scheduler = coro::io_scheduler;
 

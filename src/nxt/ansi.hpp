@@ -10,13 +10,18 @@
 
 namespace nxb::ansi {
 
-/// When true, print escape sequences in readable debug format instead
-/// of actual control characters. Automatically set by init() when
-/// stdout is not a TTY.
-extern bool debug_mode;
+/// ANSI output modes
+enum class Mode {
+    disabled,  // No ANSI output at all (default for non-TTY)
+    debug,     // Readable debug format like ⟨CSI:0m⟩
+    enabled    // Real ANSI escape sequences (default for TTY)
+};
 
-/// Initialize the ANSI module. Detects if stdout is a TTY and sets
-/// debug_mode accordingly. Call this early in main().
+/// Current ANSI output mode
+extern Mode mode;
+
+/// Initialize the ANSI module. Sets mode based on TTY detection.
+/// Call this early in main().
 void init();
 
 /// Check if stdout is connected to a real TTY
