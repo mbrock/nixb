@@ -181,46 +181,44 @@ void process_line(const std::string& line, BuildSummary& summary) {
     }
 }
 
-void output_markdown(const BuildSummary& summary, std::ostream& out) {
+// Extract the key error message (first error: line)
+std::string extract_key_error(const std::vector<std::string>& lines) {
+    for (const auto& line : lines) {
+        if (line.find("error:") != std::string::npos) {
+            // Truncate long lines
+            if (line.size() > 100) {
+                return line.substr(0, 100) + "...";
+            }
+            return line;
+        }
+    }
+    return "build failed";
+}
+
+void output_markdown(const BuildSummary& summary, std::ostream& out, bool use_details = true) {
     out << "# Nix Build Log\n\n";
 
     // Summary
     bool success = summary.failed_drvs.empty() && summary.errors.empty();
     out << "## Summary\n\n";
-    out << "- **Status:** " << (success ? "Success" : "Failed") << "\n";
+    out << "- **Status:** " << (success ? "✅ Success" : "❌ Failed") << "\n";
     if (summary.total_expected > 0) {
         out << "- **Progress:** " << summary.total_done << "/" << summary.total_expected << " derivations\n";
     }
     if (!summary.substituted.empty()) {
         out << "- **Substituted:** " << summary.substituted.size() << " paths\n";
     }
+    if (!summary.failed_drvs.empty()) {
+        out << "- **Failed:** " << summary.failed_drvs.size() << " derivations\n";
+    }
     out << "\n";
 
-    // Errors
-    if (!summary.errors.empty()) {
-        out << "## Errors\n\n";
-        for (const auto& err : summary.errors) {
-            // Check if it contains log lines
-            if (err.find("Last ") != std::string::npos && err.find("log lines") != std::string::npos) {
-                out << "```\n" << err << "\n```\n\n";
-            } else {
-                out << "- " << err << "\n";
-            }
-        }
-        out << "\n";
-    }
-
-    // Failed derivations
+    // Failed derivations with details
     if (!summary.failed_drvs.empty()) {
-        out << "## Failed Derivations\n\n";
-        for (const auto& drv : summary.failed_drvs) {
-            out << "- `" << drv << "`\n";
-        }
-        out << "\n";
+        out << "## Failed Builds\n\n";
     }
 
     // Build logs for failed activities
-    out << "## Build Logs\n\n";
     for (const auto& [id, act] : summary.activities) {
         if (act.type == ActivityType::Build && !act.log_lines.empty()) {
             auto name = drv_name(act.drv_path);
@@ -237,7 +235,16 @@ void output_markdown(const BuildSummary& summary, std::ostream& out) {
             }
 
             if (has_error || summary.failed_drvs.count(name)) {
-                out << "### " << name << "\n\n";
+                auto key_error = extract_key_error(act.log_lines);
+
+                if (use_details) {
+                    out << "<details>\n";
+                    out << "<summary><code>" << name << "</code>: " << key_error << "</summary>\n\n";
+                } else {
+                    out << "### " << name << "\n\n";
+                    out << "**Error:** " << key_error << "\n\n";
+                }
+
                 if (!act.phase.empty()) {
                     out << "Phase: `" << act.phase << "`\n\n";
                 }
@@ -248,42 +255,188 @@ void output_markdown(const BuildSummary& summary, std::ostream& out) {
                     out << act.log_lines[i] << "\n";
                 }
                 out << "```\n\n";
+
+                if (use_details) {
+                    out << "</details>\n\n";
+                }
             }
+        }
+    }
+
+    // Top-level errors (like "Cannot build" messages)
+    bool has_toplevel_errors = false;
+    for (const auto& err : summary.errors) {
+        if (err.find("Last ") != std::string::npos && err.find("log lines") != std::string::npos) {
+            has_toplevel_errors = true;
+            break;
+        }
+    }
+
+    if (has_toplevel_errors) {
+        if (use_details) {
+            out << "<details>\n";
+            out << "<summary><strong>Full Error Messages</strong></summary>\n\n";
+        } else {
+            out << "## Full Error Messages\n\n";
+        }
+
+        for (const auto& err : summary.errors) {
+            if (err.find("Last ") != std::string::npos && err.find("log lines") != std::string::npos) {
+                out << "```\n" << err << "\n```\n\n";
+            }
+        }
+
+        if (use_details) {
+            out << "</details>\n\n";
         }
     }
 
     // Warnings
     if (!summary.warnings.empty()) {
-        out << "## Warnings\n\n";
+        if (use_details) {
+            out << "<details>\n";
+            out << "<summary><strong>Warnings (" << summary.warnings.size() << ")</strong></summary>\n\n";
+        } else {
+            out << "## Warnings\n\n";
+        }
+
         for (const auto& warn : summary.warnings) {
             out << "- " << warn << "\n";
         }
         out << "\n";
+
+        if (use_details) {
+            out << "</details>\n\n";
+        }
     }
 }
 
-int main(int argc, char** argv) {
-    BuildSummary summary;
-
-    std::istream* input = &std::cin;
-    std::ifstream file;
-
-    if (argc > 1) {
-        file.open(argv[1]);
-        if (!file) {
-            std::cerr << "Error: Cannot open " << argv[1] << "\n";
-            return 1;
-        }
-        input = &file;
+void process_file(const std::string& path, BuildSummary& summary) {
+    std::ifstream file(path);
+    if (!file) {
+        std::cerr << "Warning: Cannot open " << path << "\n";
+        return;
     }
 
     std::string line;
-    while (std::getline(*input, line)) {
+    while (std::getline(file, line)) {
+        if (!line.empty()) {
+            process_line(line, summary);
+        }
+    }
+}
+
+// Process a single file and output as a section
+void process_file_standalone(const std::string& path, std::ostream& out) {
+    BuildSummary summary;
+
+    std::ifstream file(path);
+    if (!file) {
+        std::cerr << "Warning: Cannot open " << path << "\n";
+        return;
+    }
+
+    std::string line;
+    while (std::getline(file, line)) {
         if (!line.empty()) {
             process_line(line, summary);
         }
     }
 
-    output_markdown(summary, std::cout);
+    // Extract gem name from filename
+    auto basename = path.substr(path.find_last_of("/\\") + 1);
+    auto ext_pos = basename.find(".fail.log");
+    if (ext_pos == std::string::npos) ext_pos = basename.find(".ok.log");
+    if (ext_pos == std::string::npos) ext_pos = basename.find(".log");
+    std::string gem_name = (ext_pos != std::string::npos) ? basename.substr(0, ext_pos) : basename;
+
+    bool success = summary.failed_drvs.empty() && summary.errors.empty();
+    std::string status_icon = success ? "✅" : "❌";
+
+    // Extract key error
+    std::string key_error = success ? "build succeeded" : "build failed";
+    for (const auto& [id, act] : summary.activities) {
+        if (act.type == ActivityType::Build && !act.log_lines.empty()) {
+            key_error = extract_key_error(act.log_lines);
+            break;
+        }
+    }
+
+    out << "<details>\n";
+    out << "<summary>" << status_icon << " <strong>" << gem_name << "</strong>: " << key_error << "</summary>\n\n";
+
+    // Build logs
+    for (const auto& [id, act] : summary.activities) {
+        if (act.type == ActivityType::Build && !act.log_lines.empty()) {
+            if (!act.phase.empty()) {
+                out << "Phase: `" << act.phase << "`\n\n";
+            }
+            out << "```\n";
+            size_t start = act.log_lines.size() > 80 ? act.log_lines.size() - 80 : 0;
+            for (size_t i = start; i < act.log_lines.size(); ++i) {
+                out << act.log_lines[i] << "\n";
+            }
+            out << "```\n\n";
+        }
+    }
+
+    out << "</details>\n\n";
+}
+
+int main(int argc, char** argv) {
+    if (argc < 2) {
+        // Read from stdin
+        BuildSummary summary;
+        std::string line;
+        while (std::getline(std::cin, line)) {
+            if (!line.empty()) {
+                process_line(line, summary);
+            }
+        }
+        output_markdown(summary, std::cout);
+        return 0;
+    }
+
+    // Check for --multi flag
+    bool multi_mode = false;
+    std::vector<std::string> files;
+
+    for (int i = 1; i < argc; ++i) {
+        std::string arg = argv[i];
+        if (arg == "--multi" || arg == "-m") {
+            multi_mode = true;
+        } else {
+            files.push_back(arg);
+        }
+    }
+
+    if (multi_mode && files.size() > 1) {
+        // Multi-file mode: each file becomes a details section
+        std::cout << "# Ruby Gem Build Results (Fil-C)\n\n";
+
+        // Count successes and failures
+        int ok = 0, fail = 0;
+        for (const auto& f : files) {
+            if (f.find(".ok.log") != std::string::npos) ok++;
+            else if (f.find(".fail.log") != std::string::npos) fail++;
+        }
+
+        std::cout << "**" << ok << " succeeded**, **" << fail << " failed**\n\n";
+        std::cout << "---\n\n";
+
+        for (const auto& f : files) {
+            process_file_standalone(f, std::cout);
+        }
+    } else if (files.size() == 1) {
+        // Single file mode
+        BuildSummary summary;
+        process_file(files[0], summary);
+        output_markdown(summary, std::cout);
+    } else {
+        std::cerr << "Usage: nix-log-to-md [--multi] <file.log> [file2.log ...]\n";
+        std::cerr << "       nix-log-to-md < build.log\n";
+        return 1;
+    }
+
     return 0;
 }
