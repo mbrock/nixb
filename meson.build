@@ -38,7 +38,7 @@ mdspan_dep = dependency('mdspan',
                         method : 'cmake',
                         modules : ['std::mdspan'])
 
-add_project_arguments('-ftime-trace', language : 'cpp')
+#add_project_arguments('-ftime-trace', language : 'cpp')
 
 mdspan_args = [
   '-DMDSPAN_USE_BRACKET_OPERATOR=1',
@@ -106,6 +106,12 @@ nxb_sources = files(
   'src/log-replay.cpp',
 )
 
+# Suppress warnings from nix headers
+nix_warning_args = [
+  '-Wno-unused-parameter',
+  '-Wno-missing-designated-field-initializers',
+]
+
 executable('nxb',
   nxb_sources,
   include_directories : libnxt_inc,
@@ -118,7 +124,14 @@ executable('nxb',
     nix_util_dep,
     nlohmann_json_dep,
   ],
-  cpp_args : mdspan_args,
+  cpp_args : mdspan_args + nix_warning_args,
   link_args : ['-rdynamic'],
+  install : true,
+)
+
+# Standalone log converter (minimal dependencies)
+executable('nix-log-to-md',
+  'src/nix-log-to-md.cpp',
+  dependencies : [nlohmann_json_dep, fmt_dep],
   install : true,
 )
