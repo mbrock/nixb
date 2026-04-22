@@ -1,5 +1,6 @@
 #pragma once
 
+#include <coro/when_any.hpp>
 #include <stop_token>
 #include <atomic>
 #include <chrono>
@@ -91,9 +92,10 @@ public:
     template<typename... Tasks>
     auto run(Tasks &&... tasks)
     {
-        auto tg = nxb::task_group(
-            this->scheduler(), std::forward<Tasks>(tasks)...);
-        return tg.run_all();
+        for (auto & task : {std::forward<Tasks>(tasks)...}) {
+            scheduler().schedule(std::move(task));
+        }
+        return nxb::when_all(std::forward<Tasks>(tasks)...);
     }
 
     // =========================================================================
@@ -146,8 +148,9 @@ public:
 
         while (!shutdown_requested()) {
             // Wait for damage
-            damage_event_.reset();
-            co_await damage_event_;
+            //          damage_event_.reset();
+            //            auto ping =
+            //            scheduler_->schedule_after(frame_time);
 
             if (shutdown_requested())
                 break;
@@ -228,21 +231,19 @@ int run(State initial_state, BuildUI build_ui, Update update)
     UIRuntime runtime;
     State state = std::move(initial_state);
 
+    std::vector<nxb::task<>> tasks;
     try {
         TerminalGuard guard;
-        nxb::task_group tasks(runtime.scheduler());
 
-        tasks << runtime.signal_loop()
-              << runtime.run_render_loop(
-                     [&state, build_ui] { return build_ui(state); })
-              << runtime.shutdown_after(update(runtime, state));
+        tasks.push_back(runtime.signal_loop());
+        tasks.push_back(runtime.run_render_loop(
+            [&state, build_ui] { return build_ui(state); }));
+        tasks.push_back(update(runtime, state));
 
-        sync_wait(tasks.run_all());
-        runtime.cleanup();
+        nxb::sync_wait(nxb::when_all(std::move(tasks)));
     } catch (const std::exception & e) {
-        runtime.cleanup();
         fmt::print(stderr, "Error: {}\n", e.what());
-        return 1;
+        std::exit(1);
     } catch (...) {
         runtime.cleanup();
         throw;

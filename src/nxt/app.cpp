@@ -6,6 +6,7 @@
 #include "nxt/app.hpp"
 #include "nxt/ansi.hpp"
 #include "nxt/async.hpp"
+#include "nxt/scope.hpp"
 #include "nxt/units.hpp"
 
 namespace nxb::ui {
@@ -155,8 +156,9 @@ nxb::task<> UIRuntime::signal_loop()
 
             case SIGINT:
             case SIGTERM:
+                println("CTRL C! CTRL C! CTRL C! CTRL C! CTRL C! CTRL C! CTRL C!");
                 request_shutdown();
-                co_return;
+
 
             case SIGWINCH:
                 refresh_terminal_size();

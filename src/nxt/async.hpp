@@ -1,5 +1,14 @@
 #pragma once
 
+// Core async primitives - thin wrappers over libcoro
+//
+// This file provides:
+// - Type aliases for libcoro types (task, queue, event, etc.)
+// - Helper functions (sync_wait, when_all, start)
+// - task_group for managing concurrent tasks with cancellation
+//
+// For structured concurrency with channels, see scope.hpp
+
 #include <coro/coro.hpp>
 #include <coro/event.hpp>
 #include <coro/generator.hpp>
@@ -8,6 +17,7 @@
 #include <coro/queue.hpp>
 #include <coro/semaphore.hpp>
 #include <coro/task.hpp>
+#include <coro/when_any.hpp>
 
 namespace nxb {
 
@@ -50,51 +60,5 @@ inline auto start(io_scheduler & sched, task<> t)
 {
     return sched.schedule(std::move(t));
 }
-
-/// A group of tasks that run on a scheduler.
-/// Add tasks with start(), then run_all() to execute them.
-class task_group
-{
-public:
-    explicit task_group(io_scheduler & sched)
-        : sched_(sched)
-    {
-    }
-
-    template<typename... Tasks>
-    task_group(io_scheduler & sched, Tasks &&... tasks)
-        : sched_(sched)
-    {
-        (tasks_.push_back(nxb::start(sched_, std::forward<Tasks>(tasks))),
-         ...);
-    }
-
-    void start(task<> t)
-    {
-        tasks_.push_back(nxb::start(sched_, std::move(t)));
-    }
-
-    task_group & operator<<(task<> t)
-    {
-        start(std::move(t));
-        return *this;
-    }
-
-    [[nodiscard]] auto run_all()
-    {
-        return nxb::when_all(std::move(tasks_));
-    }
-
-    template<typename... Tasks>
-    [[nodiscard]] static auto run(io_scheduler & sched, Tasks &&... tasks)
-    {
-        auto tg = nxb::task_group(sched, std::forward<Tasks>(tasks)...);
-        return tg.run_all();
-    }
-
-private:
-    io_scheduler & sched_;
-    std::vector<task<>> tasks_;
-};
 
 } // namespace nxb

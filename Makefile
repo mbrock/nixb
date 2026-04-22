@@ -4,11 +4,13 @@ export CLICOLOR_FORCE=1
 
 all: build
 
-setup:
-	meson setup build --wipe 2>/dev/null || meson setup build
+setup:; meson setup build --wipe 2>/dev/null || meson setup build
 
 build:
+	@echo "*** BUILDING"
 	meson compile -C build
+	@echo "*** FINISHED"
+	./build/nxb
 
 clean:
 	rm -rf build

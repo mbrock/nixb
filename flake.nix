@@ -143,12 +143,12 @@
           nixDevShell = nix-src.devShells.${system}.native;
         in
         {
-          shellHook = ''
-            ${ccacheConfig}
-            export CC=clang
-            export CXX=clang++
-          '';
-          default = pkgs.mkShellNoCC {
+#          shellHook = ''
+#            ${ccacheConfig}
+#            export CC=clang
+#            export CXX=clang++
+#          '';
+          default = pkgs.mkShell.override { stdenv = nixDevShell.stdenv; } {
             inputsFrom = [ nixDevShell ];
             hardeningDisable = ["all"];
             packages = [
@@ -161,9 +161,9 @@
               pkgs.cli11
 
               pkgs.nixd
-              pkgs.llvmPackages_20.clang
+#              pkgs.llvmPackages_20.clang
               pkgs.nixfmt-rfc-style
-              pkgs.llvmPackages_20.clang-tools
+#              pkgs.llvmPackages_20.clang-tools
               pkgs.treefmt
             ];
           };

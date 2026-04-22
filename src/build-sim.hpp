@@ -29,6 +29,7 @@
 #include <vector>
 
 #include <nxt/async.hpp>
+#include <nxt/scope.hpp>
 #include <nxt/app.hpp>
 
 #include "drv-graph.hpp"
@@ -177,10 +178,10 @@ class Simulator
 public:
     Config config;
 
-    Simulator(nxb::ui::UIRuntime& runtime, drv::Graph& graph, nxb::queue<Event>& events)
+    Simulator(nxb::ui::UIRuntime& runtime, drv::Graph& graph, std::shared_ptr<nxb::publication<Event>> events)
         : runtime_(runtime)
         , graph_(graph)
-        , events_(events)
+        , events_(std::move(events))
         , rng_(config.seed ? config.seed : std::random_device{}())
         , build_slots_(config.max_jobs)
         , subst_slots_(config.max_substitutions)
@@ -239,9 +240,17 @@ public:
     std::size_t active_subs() const { return config.max_substitutions - subst_slots_.available(); }
 
 private:
-    void emit(Event ev)
+    // Returns false if we should stop (cancelled/disconnected)
+    nxb::task<bool> emit(Event ev)
     {
-        nxb::sync_wait(events_.push(std::move(ev)));
+        try {
+            co_await events_->push(std::move(ev));
+            co_return true;
+        } catch (const nxb::cancelled &) {
+            co_return false;
+        } catch (const nxb::disconnected &) {
+            co_return false;
+        }
     }
 
     SimTime random_duration(SimTime min, SimTime max)
@@ -339,18 +348,21 @@ private:
         // Check for shutdown before starting
         if (runtime_.shutdown_requested()) co_return;
 
-        emit(GoalStarted{idx, node->name, node->inputs.size()});
+        if (!co_await emit(GoalStarted{idx, node->name, node->inputs.size()}))
+            co_return;
 
         // Phase 1: Wait for all input dependencies
         if (!node->inputs.empty()) {
-            emit(WaitingForDeps{idx, node->inputs.size()});
+            if (!co_await emit(WaitingForDeps{idx, node->inputs.size()}))
+                co_return;
 
             for (auto dep_idx : node->inputs) {
                 if (runtime_.shutdown_requested()) co_return;
                 co_await *goal_complete_[dep_idx];
             }
 
-            emit(DepsComplete{idx});
+            if (!co_await emit(DepsComplete{idx}))
+                co_return;
         }
 
         // Check for shutdown before acquiring slot
@@ -371,11 +383,19 @@ private:
             co_return;
         }
 
-        emit(SlotAcquired{idx, is_sub});
+        if (!co_await emit(SlotAcquired{idx, is_sub})) {
+            if (is_sub) subst_slots_.release();
+            else build_slots_.release();
+            co_return;
+        }
 
         // Phase 3: Do the "work" (simulate with sleep and fake output)
         auto duration = durations_[idx];
-        emit(WorkStarted{idx, duration, is_sub});
+        if (!co_await emit(WorkStarted{idx, duration, is_sub})) {
+            if (is_sub) subst_slots_.release();
+            else build_slots_.release();
+            co_return;
+        }
 
         // Sleep for scaled duration, optionally emitting build output
         auto real_duration = std::chrono::milliseconds(
@@ -385,8 +405,9 @@ private:
             // Emit fake output lines periodically during the work
             auto interval = std::chrono::milliseconds(15 + (rng_() % 35)); // 15-50ms
             auto elapsed = std::chrono::milliseconds(0);
+            bool cancelled = false;
 
-            while (elapsed < real_duration && !runtime_.shutdown_requested()) {
+            while (elapsed < real_duration && !runtime_.shutdown_requested() && !cancelled) {
                 auto sleep_time = std::min(interval, real_duration - elapsed);
                 co_await runtime_.sleep(sleep_time);
                 elapsed += sleep_time;
@@ -396,14 +417,15 @@ private:
                     std::string line = is_sub
                         ? random_download_line(node->name)
                         : random_build_line(node->name);
-                    emit(BuildOutput{idx, std::move(line)});
+                    if (!co_await emit(BuildOutput{idx, std::move(line)}))
+                        cancelled = true;
                 }
             }
         } else {
             co_await runtime_.sleep(real_duration);
         }
 
-        // Release slot before checking shutdown
+        // Release slot
         if (is_sub) {
             subst_slots_.release();
         } else {
@@ -413,17 +435,18 @@ private:
         // Check for shutdown before completing
         if (runtime_.shutdown_requested()) co_return;
 
-        emit(WorkComplete{idx, is_sub});
+        if (!co_await emit(WorkComplete{idx, is_sub}))
+            co_return;
 
         ++completed_count_;
         goal_complete_[idx]->set();
 
-        emit(GoalComplete{idx, true});
+        co_await emit(GoalComplete{idx, true});
     }
 
     nxb::ui::UIRuntime& runtime_;
     drv::Graph& graph_;
-    nxb::queue<Event>& events_;
+    std::shared_ptr<nxb::publication<Event>> events_;
     std::mt19937 rng_;
 
     Semaphore build_slots_;

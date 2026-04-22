@@ -249,7 +249,7 @@ inline auto text(std::string s)
 // Text: fixed-width string with style
 inline auto text(std::string s, Style style)
 {
-    auto w = utf8_width(s);
+    // auto w = utf8_width(s);
     return leaf(
         WidthHint::grow(1.0 * one),
         HeightHint::fixed(1 * ln),

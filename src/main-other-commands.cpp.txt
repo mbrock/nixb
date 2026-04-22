@@ -1,0 +1,492 @@
+// Simple non-UI command: derive an installable and print info
+int cmd_derive(const std::string & installable)
+{
+    try {
+        nxb::NixContext ctx;
+        fmt::print("Resolving {}...\n", installable);
+
+        auto drv_paths = nxb::resolve_installable(ctx, installable);
+        fmt::print("Found {} derivation(s)\n", drv_paths.size());
+
+        for (const auto & drv_path : drv_paths) {
+            fmt::print("  {}\n", ctx.store()->printStorePath(drv_path));
+
+            auto info = read_derivation_info(ctx, drv_path);
+            if (info) {
+                fmt::print("    name: {}\n", info->name);
+                fmt::print("    system: {}\n", info->system);
+                fmt::print("    inputs: {}\n", info->input_drvs.size());
+            }
+        }
+        return 0;
+    } catch (const std::exception & e) {
+        fmt::print(stderr, "Error: {}\n", e.what());
+        return 1;
+    }
+}
+
+// Simple non-UI command: build an installable
+int cmd_build(const std::string & installable)
+{
+    try {
+        nxb::NixContext ctx;
+        fmt::print("Building {}...\n", installable);
+
+        auto drv_paths = nxb::resolve_installable(ctx, installable);
+        if (drv_paths.empty()) {
+            fmt::print(stderr, "No derivations found\n");
+            return 1;
+        }
+
+        std::vector<nix::DerivedPath> to_build;
+        for (const auto & drv_path : drv_paths) {
+            fmt::print("  drv: {}\n", ctx.store()->printStorePath(drv_path));
+            to_build.push_back(nix::DerivedPath::Built{
+                .drvPath = nix::makeConstantStorePathRef(drv_path),
+                .outputs = nix::OutputsSpec::All{},
+            });
+        }
+
+        auto results = ctx.store()->buildPathsWithResults(to_build, nix::bmNormal);
+
+        fmt::print("\nResults: {}\n", results.size());
+        for (const auto & result : results) {
+            auto status = result.tryGetSuccess() ? "success" : "failed";
+            fmt::print("  {}: {}\n", result.path.to_string(*ctx.store()), status);
+        }
+        return 0;
+    } catch (const std::exception & e) {
+        fmt::print(stderr, "Error: {}\n", e.what());
+        return 1;
+    }
+}
+
+// ============================================================================
+// Graph command - show derivation dependency graph
+// ============================================================================
+
+int cmd_graph(
+    const std::string & installable,
+    bool show_critical_path,
+    bool show_stats)
+{
+    try {
+        nxb::NixContext ctx;
+
+        fmt::print("Resolving {}...\n", installable);
+        auto roots = nxb::resolve_installable(ctx, installable);
+
+        if (roots.empty()) {
+            fmt::print(
+                stderr, "No derivations found for {}\n", installable);
+            return 1;
+        }
+
+        fmt::print("Building dependency graph...\n");
+        auto graph = nxb::drv::build_graph(ctx, roots);
+
+        // Print basic info
+        fmt::print("\n");
+        fmt::print(
+            fmt::emphasis::bold, "Derivation Graph for {}\n", installable);
+        fmt::print("─────────────────────────────────────────\n");
+
+        // Show roots
+        fmt::print(
+            fmt::fg(fmt::color::cyan), "Roots ({}):\n", graph.roots.size());
+        for (auto idx : graph.roots) {
+            auto * node = graph.get(idx);
+            fmt::print(
+                "  {} (height={}, subtree={})\n",
+                node->name,
+                node->height,
+                node->subtree_size);
+        }
+
+        // Show statistics
+        if (show_stats) {
+            auto stats = nxb::drv::compute_stats(graph);
+            fmt::print("\n");
+            fmt::print(fmt::fg(fmt::color::yellow), "Statistics:\n");
+            fmt::print("  Total derivations: {}\n", stats.total_nodes);
+            fmt::print("  Leaf nodes:        {}\n", stats.leaf_count);
+            fmt::print("  Max depth:         {}\n", stats.max_depth);
+            fmt::print("  Max height:        {}\n", stats.max_height);
+            fmt::print("  Max fan-in:        {}\n", stats.max_fan_in);
+            fmt::print("  Max fan-out:       {}\n", stats.max_fan_out);
+            fmt::print("  Avg inputs:        {:.2f}\n", stats.avg_inputs);
+
+            fmt::print("\n");
+            fmt::print(fmt::fg(fmt::color::yellow), "Nodes per depth:\n");
+            for (std::size_t d = 0; d < stats.nodes_per_depth.size(); ++d) {
+                fmt::print("  depth {}: {}\n", d, stats.nodes_per_depth[d]);
+            }
+        }
+
+        // Show critical path
+        if (show_critical_path) {
+            auto path = nxb::drv::critical_path(graph);
+            fmt::print("\n");
+            fmt::print(
+                fmt::fg(fmt::color::magenta),
+                "Critical path ({} nodes):\n",
+                path.size());
+            for (std::size_t i = 0; i < path.size(); ++i) {
+                auto * node = path[i];
+                std::string indent(i * 2, ' ');
+                fmt::print(
+                    "{}└─ {} (depth={}, inputs={})\n",
+                    indent,
+                    node->name,
+                    node->depth,
+                    node->inputs.size());
+            }
+        }
+
+        // Show build order (first 20)
+        fmt::print("\n");
+        fmt::print(fmt::fg(fmt::color::green), "Build order (first 20):\n");
+        auto order = graph.topological_order();
+        for (std::size_t i = 0; i < std::min(order.size(), std::size_t{20});
+             ++i) {
+            fmt::print("  {:3}. {}\n", i + 1, order[i]->name);
+        }
+        if (order.size() > 20) {
+            fmt::print("  ... and {} more\n", order.size() - 20);
+        }
+
+        return 0;
+
+    } catch (const std::exception & e) {
+        fmt::print(stderr, "Error: {}\n", e.what());
+        return 1;
+    }
+}
+
+
+// ============================================================================
+// Simulate command - simulated build execution with TUI
+// ============================================================================
+
+// Simulation options from CLI
+struct SimOptions
+{
+    float time_scale = 0.1f; // Real time per sim time (lower = faster)
+    std::size_t max_jobs = 4;
+    std::size_t max_subs = 16;
+    float sub_rate = 0.75f; // Probability of substitution vs build
+    bool verbose = false;   // Print build output spam
+};
+
+struct SimState
+{
+    std::string installable;
+    SimOptions options;
+    std::unique_ptr<nxb::drv::Graph> graph;
+    std::unique_ptr<nxb::sim::Simulator> sim;
+
+    // Display state
+    std::size_t completed = 0;
+    std::size_t total = 0;
+    double progress = 0.0;
+    bool done = false;
+    std::string error_msg;
+
+    // Active jobs for HUD display
+    struct ActiveJob
+    {
+        nxb::sim::NodeIndex node;
+        std::string name;
+        nxb::sim::SimTime duration;
+        bool is_substitution;
+    };
+
+    std::vector<ActiveJob> active_jobs;
+};
+
+auto build_sim_ui(const SimState & state)
+{
+    auto progress_pct =
+        static_cast<float>(state.progress * 100.0) * mp_units::percent;
+
+    // Count builds vs subs
+    std::size_t num_builds = 0, num_subs = 0;
+    for (const auto & job : state.active_jobs) {
+        if (job.is_substitution)
+            ++num_subs;
+        else
+            ++num_builds;
+    }
+
+    auto status_text =
+        state.done ? (state.error_msg.empty() ? "Complete!" : "Error")
+                   : fmt::format(
+                         "Building... {}/{} ({} builds, {} subs)",
+                         state.completed,
+                         state.total,
+                         num_builds,
+                         num_subs);
+
+    auto status_color = state.done
+                            ? (state.error_msg.empty() ? nxb::Rgba8::green()
+                                                       : nxb::Rgba8::red())
+                            : nxb::Rgba8::yellow();
+
+    // Build list of active job displays using the list() primitive
+    auto jobs_list = list(state.active_jobs, [](const auto & job) {
+        auto prefix = job.is_substitution ? "↓" : "⚙";
+        auto color =
+            job.is_substitution ? nxb::Rgba8::cyan() : nxb::Rgba8::yellow();
+        return text(fmt::format(" {} {}", prefix, job.name), fg(color));
+    });
+
+    return column(
+        hrule(),
+        text(
+            fmt::format("Simulating: {}", state.installable),
+            fg(nxb::Rgba8::cyan())),
+        text(status_text, fg(status_color)),
+        std::move(jobs_list),
+        progress_bar(progress_pct),
+        hrule());
+}
+
+// Consume simulation events and update UI state
+nxb::task<> consume_sim_events(
+    nxb::ui::UIRuntime & runtime,
+    SimState & state,
+    nxb::subscription<nxb::sim::Event> && events)
+{
+    try {
+        while (auto ev = co_await events.pop()) {
+            std::visit(
+                [&](auto && e) {
+                    using T = std::decay_t<decltype(e)>;
+
+                    if constexpr (std::is_same_v<T, nxb::sim::WorkStarted>) {
+                        auto * node = state.graph->get(e.node);
+                        state.active_jobs.push_back(
+                            {.node = e.node,
+                             .name = node->name,
+                             .duration = e.duration,
+                             .is_substitution = e.is_substitution});
+                    } else if constexpr (std::is_same_v<
+                                             T,
+                                             nxb::sim::WorkComplete>) {
+                        std::erase_if(state.active_jobs, [&](const auto & job) {
+                            return job.node == e.node;
+                        });
+                        ++state.completed;
+                        state.progress =
+                            static_cast<double>(state.completed) / state.total;
+                    }
+                },
+                *ev);
+
+            runtime.signal_damage();
+        }
+    } catch (const nxb::cancelled &) {
+        // Normal exit on Ctrl-C
+    }
+}
+
+nxb::task<> run_simulation(
+    nxb::ui::UIRuntime & runtime,
+    SimState & state,
+    std::shared_ptr<nxb::publication<nxb::sim::Event>> events)
+{
+    try {
+        nxb::NixContext ctx;
+        auto roots = nxb::resolve_installable(ctx, state.installable);
+
+        if (roots.empty()) {
+            state.error_msg = "No derivations found";
+            state.done = true;
+            runtime.signal_damage();
+            events.reset();
+            co_return;
+        }
+
+        state.graph = std::make_unique<nxb::drv::Graph>(
+            nxb::drv::build_graph(ctx, roots));
+
+        state.total = state.graph->total_derivations();
+
+        state.sim = std::make_unique<nxb::sim::Simulator>(
+            runtime, *state.graph, events);
+        state.sim->config.max_jobs = state.options.max_jobs;
+        state.sim->config.max_substitutions = state.options.max_subs;
+        state.sim->config.substitution_rate = state.options.sub_rate;
+        state.sim->config.time_scale = state.options.time_scale;
+        state.sim->config.verbose = state.options.verbose;
+
+        std::vector<std::size_t> root_indices;
+        for (const auto & root : roots) {
+            auto it = state.graph->path_to_index.find(root);
+            if (it != state.graph->path_to_index.end()) {
+                root_indices.push_back(it->second);
+            }
+        }
+
+        co_await state.sim->build(root_indices);
+
+        state.done = true;
+        runtime.signal_damage();
+        events.reset();
+
+        co_await runtime.sleep(std::chrono::seconds{1});
+        runtime.request_shutdown();
+
+    } catch (const nxb::cancelled &) {
+        events.reset();
+    } catch (const nxb::disconnected &) {
+        events.reset();
+    } catch (const std::exception & e) {
+        state.error_msg = e.what();
+        events.reset();
+    }
+}
+
+nxb::task<>
+update_simulation(nxb::ui::UIRuntime & runtime, SimState & state)
+{
+    nxb::channel<nxb::sim::Event> events;
+    nxb::scope scope(runtime.scheduler(), runtime.get_stop_token());
+
+    auto pub =
+        std::make_shared<nxb::publication<nxb::sim::Event>>(events, scope);
+
+    co_await coro::when_all(
+        run_simulation(runtime, state, pub),
+        consume_sim_events(runtime, state, nxb::subscribe(events, scope)));
+}
+
+int cmd_simulate(
+    const std::string & installable,
+    const SimOptions & options,
+    bool debug_ansi,
+    bool force_ansi)
+{
+    nxb::ansi::init();
+    if (debug_ansi) {
+        nxb::ansi::mode = nxb::ansi::Mode::debug;
+    } else if (force_ansi) {
+        nxb::ansi::mode = nxb::ansi::Mode::enabled;
+    }
+    return nxb::ui::run(
+        SimState{.installable = installable, .options = options},
+        build_sim_ui,
+        update_simulation);
+}
+
+
+int main(int argc, char ** argv)
+{
+    // std::set_terminate(&my_terminate_handler);
+
+    CLI::App app{"nxb - Nix build UI"};
+
+    std::string installable;
+    auto * derive_cmd = app.add_subcommand(
+        "derive", "Resolve a flake installable to derivation paths");
+    derive_cmd
+        ->add_option(
+            "installable",
+            installable,
+            "Flake installable (e.g. .#default)")
+        ->required();
+
+    std::string build_installable;
+    auto * build_cmd = app.add_subcommand(
+        "build", "Build a flake installable (using TrivialStore)");
+    build_cmd
+        ->add_option(
+            "installable",
+            build_installable,
+            "Flake installable (e.g. .#default)")
+        ->required();
+
+    std::string graph_installable;
+    bool graph_critical_path = false;
+    bool graph_stats = false;
+    auto * graph_cmd =
+        app.add_subcommand("graph", "Show derivation dependency graph");
+    graph_cmd
+        ->add_option(
+            "installable",
+            graph_installable,
+            "Flake installable (e.g. nixpkgs#hello)")
+        ->required();
+    graph_cmd->add_flag(
+        "-c,--critical-path",
+        graph_critical_path,
+        "Show critical (longest) dependency path");
+    graph_cmd->add_flag("-s,--stats", graph_stats, "Show graph statistics");
+
+    std::string sim_installable;
+    SimOptions sim_opts;
+    bool sim_debug_ansi = false;
+    bool sim_force_ansi = false;
+    auto * sim_cmd = app.add_subcommand(
+        "simulate", "Simulate build execution with fake timings");
+    sim_cmd
+        ->add_option(
+            "installable",
+            sim_installable,
+            "Flake installable (e.g. nixpkgs#hello)")
+        ->required();
+    sim_cmd
+        ->add_option(
+            "-s,--speed",
+            sim_opts.time_scale,
+            "Time scale (lower = faster, default 0.1)")
+        ->default_val(0.1f);
+    sim_cmd
+        ->add_option(
+            "-j,--jobs",
+            sim_opts.max_jobs,
+            "Max concurrent build jobs (default 4)")
+        ->default_val(4);
+    sim_cmd
+        ->add_option(
+            "-S,--subs",
+            sim_opts.max_subs,
+            "Max concurrent substitutions (default 16)")
+        ->default_val(16);
+    sim_cmd
+        ->add_option(
+            "-r,--sub-rate",
+            sim_opts.sub_rate,
+            "Substitution probability 0-1 (default 0.75)")
+        ->default_val(0.75f);
+    sim_cmd->add_flag(
+        "-v,--verbose", sim_opts.verbose, "Print fake build output spam");
+    sim_cmd->add_flag(
+        "--debug-ansi",
+        sim_debug_ansi,
+        "Print ANSI escapes in readable debug format");
+    sim_cmd->add_flag(
+        "--force-ansi",
+        sim_force_ansi,
+        "Force real ANSI output even if not a TTY");
+
+    CLI11_PARSE(app, argc, argv);
+
+    if (derive_cmd->parsed())
+        return cmd_derive(installable);
+
+    if (build_cmd->parsed())
+        return cmd_build(build_installable);
+
+    if (graph_cmd->parsed())
+        return cmd_graph(
+            graph_installable, graph_critical_path, graph_stats);
+
+    if (sim_cmd->parsed())
+        return cmd_simulate(
+            sim_installable, sim_opts, sim_debug_ansi, sim_force_ansi);
+
+    // No subcommand - show help
+    fmt::print("{}", app.help());
+    return 0;
+}
