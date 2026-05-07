@@ -1,0 +1,10 @@
+{
+  "lsp": {
+    "clangd": {
+      "binary": {
+        "path": "/home/mbrock/nixb/clangd.sh",
+        "arguments": []
+      }
+    }
+  }
+}

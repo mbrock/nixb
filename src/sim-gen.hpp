@@ -243,6 +243,8 @@ struct Config {
     bool verbose = false;
     // How many lines per build (if verbose)
     std::size_t lines_per_build = 5;
+    bool emit_progress = false;
+    SimTime progress_interval = 100ms;
 
     std::uint32_t seed = 0;
 };
@@ -485,6 +487,7 @@ inline nxb::generator<TimedEvent> generate_timed_events(drv::Graph& graph, Confi
 
     std::vector<bool> will_substitute(graph.nodes.size());
     std::vector<SimTime> durations(graph.nodes.size());
+    std::vector<SimTime> start_times(graph.nodes.size());
 
     std::uniform_real_distribution<float> sub_dist(0.0f, 1.0f);
 
@@ -507,9 +510,21 @@ inline nxb::generator<TimedEvent> generate_timed_events(drv::Graph& graph, Confi
         pending_deps[i] = graph.nodes[i]->inputs.size();
     }
 
-    using TimeNodePair = std::pair<SimTime, NodeIndex>;
-    auto cmp = [](const TimeNodePair& a, const TimeNodePair& b) { return a.first > b.first; };
-    std::priority_queue<TimeNodePair, std::vector<TimeNodePair>, decltype(cmp)> timeline(cmp);
+    struct ScheduledEvent
+    {
+        SimTime time;
+        NodeIndex node;
+        bool finish;
+    };
+    auto cmp = [](const ScheduledEvent& a, const ScheduledEvent& b) {
+        if (a.time != b.time)
+            return a.time > b.time;
+        return a.finish < b.finish;
+    };
+    std::priority_queue<
+        ScheduledEvent,
+        std::vector<ScheduledEvent>,
+        decltype(cmp)> timeline(cmp);
 
     std::size_t active_builds = 0;
     std::size_t active_subs = 0;
@@ -542,7 +557,14 @@ inline nxb::generator<TimedEvent> generate_timed_events(drv::Graph& graph, Confi
 
             ready_queue.pop();
             node_state[idx] = State::running;
-            timeline.push({current_time + durations[idx], idx});
+            start_times[idx] = current_time;
+            auto finish_time = current_time + durations[idx];
+            timeline.push({finish_time, idx, true});
+            if (config.emit_progress && config.progress_interval.count() > 0) {
+                auto progress_time = current_time + config.progress_interval;
+                if (progress_time < finish_time)
+                    timeline.push({progress_time, idx, false});
+            }
             started.push_back(idx);
         }
         return started;
@@ -561,17 +583,51 @@ inline nxb::generator<TimedEvent> generate_timed_events(drv::Graph& graph, Confi
     }
 
     while (!timeline.empty()) {
-        auto [finish_time, idx] = timeline.top();
+        auto [event_time, idx, is_finish] = timeline.top();
         timeline.pop();
 
-        current_time = finish_time;
+        current_time = event_time;
 
         auto* node = graph.nodes[idx].get();
         bool is_sub = will_substitute[idx];
+
+        if (!is_finish) {
+            if (node_state[idx] == State::running) {
+                const auto elapsed = current_time - start_times[idx];
+                const auto done =
+                    std::min(elapsed.count(), durations[idx].count());
+                co_yield TimedEvent{
+                    current_time,
+                    ActivityProgress{
+                        activity_id(idx),
+                        done,
+                        durations[idx].count(),
+                        0,
+                        0}};
+
+                auto next_time = current_time + config.progress_interval;
+                auto finish_time = start_times[idx] + durations[idx];
+                if (next_time < finish_time)
+                    timeline.push({next_time, idx, false});
+            }
+            continue;
+        }
+
         node_state[idx] = State::done;
 
         if (is_sub) --active_subs;
         else --active_builds;
+
+        if (config.emit_progress) {
+            co_yield TimedEvent{
+                current_time,
+                ActivityProgress{
+                    activity_id(idx),
+                    durations[idx].count(),
+                    durations[idx].count(),
+                    0,
+                    0}};
+        }
 
         if (config.verbose) {
             for (std::size_t i = 0; i < config.lines_per_build; ++i) {

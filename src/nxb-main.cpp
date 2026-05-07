@@ -1,17 +1,286 @@
 #include <fmt/base.h>
 #include <fmt/color.h>
 
+#include <algorithm>
 #include <chrono>
 #include <thread>
 #include <variant>
+#include <vector>
 
 #include "drv-graph.hpp"
 #include "nix-api.hpp"
 #include "nix-log-adapter.hpp"
+#include "nxt/app.hpp"
+#include "nxt/tui.hpp"
 #include "sim-gen.hpp"
 
 using namespace std::chrono_literals;
 using namespace nixb::nix_event;
+
+namespace {
+
+std::string event_label(const NixLogEvent& ev)
+{
+    return std::visit([](auto&& e) -> std::string {
+        using T = std::decay_t<decltype(e)>;
+
+        if constexpr (std::is_same_v<T, ActivityStarted>) {
+            return std::visit([](auto&& kind) -> std::string {
+                using K = std::decay_t<decltype(kind)>;
+
+                if constexpr (std::is_same_v<K, activity::Build>)
+                    return fmt::format("build {}", kind.drv_path);
+                else if constexpr (std::is_same_v<K, activity::Substitute>)
+                    return fmt::format("substitute {}", kind.path);
+                else if constexpr (std::is_same_v<K, activity::Download>)
+                    return fmt::format("download {}", kind.url);
+                else if constexpr (std::is_same_v<K, activity::Copy>)
+                    return fmt::format("copy {}", kind.path);
+                else
+                    return "activity";
+            }, e.kind);
+        } else if constexpr (std::is_same_v<T, LogLine>) {
+            return e.text;
+        } else {
+            return {};
+        }
+    }, ev);
+}
+
+bool is_build_start(const NixLogEvent& ev)
+{
+    if (auto* started = std::get_if<ActivityStarted>(&ev))
+        return std::holds_alternative<activity::Build>(started->kind);
+    return false;
+}
+
+bool is_substitute_start(const NixLogEvent& ev)
+{
+    if (auto* started = std::get_if<ActivityStarted>(&ev))
+        return std::holds_alternative<activity::Substitute>(started->kind);
+    return false;
+}
+
+struct TuiSimState
+{
+    struct ActiveItem
+    {
+        int64_t id = 0;
+        std::string label;
+        bool substitution = false;
+        nxb::percent_t progress{0.0 * nxb::percent};
+    };
+
+    std::size_t total = 0;
+    std::size_t completed = 0;
+    std::size_t active_builds = 0;
+    std::size_t active_subs = 0;
+    std::size_t max_jobs = 1;
+    std::size_t max_substitutions = 1;
+    nxb::sim::SimTime virtual_time{0};
+    std::vector<std::string> recent;
+    std::vector<ActiveItem> active;
+};
+
+std::string fit_label(std::string text, std::size_t width)
+{
+    if (text.size() <= width)
+        return text;
+    if (width <= 1)
+        return text.substr(0, width);
+    return text.substr(0, width - 1) + "…";
+}
+
+nxb::percent_t percent_of(std::size_t done, std::size_t total)
+{
+    if (total == 0)
+        return 0.0 * nxb::percent;
+    return (100.0 * static_cast<double>(done)
+            / static_cast<double>(total)) * nxb::percent;
+}
+
+nxb::percent_t percent_of(int64_t done, int64_t total)
+{
+    if (total <= 0)
+        return 0.0 * nxb::percent;
+    return (100.0 * static_cast<double>(done)
+            / static_cast<double>(total)) * nxb::percent;
+}
+
+std::vector<TuiSimState::ActiveItem>::iterator
+find_active(TuiSimState& state, int64_t id)
+{
+    return std::ranges::find_if(state.active, [id](const auto& item) {
+        return item.id == id;
+    });
+}
+
+nxb::task<> run_tui_simulation(
+    nxb::ui::UIRuntime& runtime,
+    nxb::drv::Graph& graph,
+    nxb::sim::Config config,
+    float speed,
+    TuiSimState& state)
+{
+    using Clock = std::chrono::steady_clock;
+
+    auto start = Clock::now();
+    nxb::sim::SimTime last_sim_time{0};
+    config.emit_progress = true;
+
+    for (auto& timed : nxb::sim::generate_timed_events(graph, config)) {
+        if (runtime.shutdown_requested())
+            co_return;
+
+        if (timed.time > last_sim_time) {
+            auto target = start + std::chrono::duration_cast<Clock::duration>(
+                std::chrono::duration<float, std::milli>(
+                    timed.time.count() / speed));
+            auto now = Clock::now();
+            if (target > now)
+                co_await runtime.scheduler().yield_for(target - now);
+            last_sim_time = timed.time;
+        }
+
+        state.virtual_time = timed.time;
+
+        if (auto* started = std::get_if<ActivityStarted>(&timed.event)) {
+            const auto is_sub = is_substitute_start(timed.event);
+            state.active.push_back({
+                started->id.value,
+                event_label(timed.event),
+                is_sub,
+                0.0 * nxb::percent});
+            if (is_build_start(timed.event))
+                ++state.active_builds;
+            else if (is_sub)
+                ++state.active_subs;
+        } else if (auto* finished =
+                       std::get_if<ActivityFinished>(&timed.event)) {
+            if (auto it = find_active(state, finished->id.value);
+                it != state.active.end()) {
+                if (it->substitution)
+                    --state.active_subs;
+                else
+                    --state.active_builds;
+                state.active.erase(it);
+            }
+            ++state.completed;
+        } else if (auto* progress =
+                       std::get_if<ActivityProgress>(&timed.event)) {
+            if (auto it = find_active(state, progress->id.value);
+                it != state.active.end())
+                it->progress = percent_of(progress->done, progress->expected);
+        }
+
+        if (auto label = event_label(timed.event); !label.empty()) {
+            runtime.println(label);
+            state.recent.insert(state.recent.begin(), std::move(label));
+            while (state.recent.size() > 3)
+                state.recent.pop_back();
+        }
+
+        runtime.signal_damage();
+    }
+
+    runtime.println(fmt::format("Simulation complete: {}/{} derivations",
+                                state.completed,
+                                state.total));
+    co_await runtime.sleep(700ms);
+    runtime.request_shutdown();
+}
+
+int run_tui_simulation_app(
+    nxb::drv::Graph& graph,
+    nxb::sim::Config config,
+    float speed)
+{
+    using namespace nxb::tui;
+
+    TuiSimState initial{
+        .total = graph.nodes.size(),
+        .max_jobs = config.max_jobs,
+        .max_substitutions = config.max_substitutions,
+    };
+
+    return nxb::ui::run(
+        std::move(initial),
+        [](const TuiSimState& state) {
+            auto overall = percent_of(state.completed, state.total);
+            auto build_slots =
+                percent_of(state.active_builds, state.max_jobs);
+            auto sub_slots =
+                percent_of(state.active_subs, state.max_substitutions);
+
+            return column(
+                styled_text(
+                    span("Nix Build ", fg(nxb::Rgba8::magenta()) | bold),
+                    span("Simulation", fg(nxb::Rgba8::blue()) | italic)),
+                hrule(),
+                row(
+                    text(fmt::format("{:<18}", "overall"),
+                         fg(nxb::Rgba8::white()) | bold),
+                    progress_bar(overall, nxb::Rgba8::green()),
+                    text(fmt::format(
+                             " {:>3.0f}% {}/{}",
+                             overall.force_numerical_value_in(nxb::percent),
+                             state.completed,
+                             state.total),
+                         fg(nxb::Rgba8::white()) | bold)),
+                row(
+                    text(fmt::format(
+                             "{:<18}",
+                             fmt::format("builds {}/{}",
+                                         state.active_builds,
+                                         state.max_jobs)),
+                         fg(nxb::Rgba8::yellow())),
+                    progress_bar(build_slots, nxb::Rgba8::yellow()),
+                    text(fmt::format(" {:>3.0f}%",
+                                     build_slots.force_numerical_value_in(
+                                         nxb::percent)),
+                         fg(nxb::Rgba8::yellow()) | bold)),
+                row(
+                    text(fmt::format(
+                             "{:<18}",
+                             fmt::format("subs {}/{}",
+                                         state.active_subs,
+                                         state.max_substitutions)),
+                         fg(nxb::Rgba8::cyan())),
+                    progress_bar(sub_slots, nxb::Rgba8::cyan()),
+                    text(fmt::format(" {:>3.0f}%",
+                                     sub_slots.force_numerical_value_in(
+                                         nxb::percent)),
+                         fg(nxb::Rgba8::cyan()) | bold)),
+                hrule(),
+                list(state.active, [](const auto& item) {
+                    const auto color = item.substitution
+                                           ? nxb::Rgba8::cyan()
+                                           : nxb::Rgba8::yellow();
+                    return row(
+                        text(fmt::format("{:<28}", fit_label(item.label, 28)),
+                             fg(color)),
+                        progress_bar(item.progress, color),
+                        text(fmt::format(" {:>3.0f}%",
+                                         item.progress
+                                             .force_numerical_value_in(
+                                                 nxb::percent)),
+                             fg(color) | bold));
+                }),
+                hrule(),
+                list(state.recent, [](const auto& line) {
+                    return text(
+                        fit_label(line, 80), fg(nxb::Rgba8::bright_black()));
+                }));
+        },
+        [&graph, config, speed](
+            nxb::ui::UIRuntime& runtime,
+            TuiSimState& state) -> nxb::task<> {
+            co_await run_tui_simulation(
+                runtime, graph, config, speed, state);
+        });
+}
+
+} // namespace
 
 void print_event(const NixLogEvent& ev, std::optional<nxb::sim::SimTime> time = std::nullopt)
 {
@@ -47,7 +316,12 @@ void print_event(const NixLogEvent& ev, std::optional<nxb::sim::SimTime> time = 
     }, ev);
 }
 
-int cmd_simulate(const std::string& installable, nxb::sim::Config config, float speed, bool show_time)
+int cmd_simulate(
+    const std::string& installable,
+    nxb::sim::Config config,
+    float speed,
+    bool show_time,
+    bool tui)
 {
     try {
         nxb::NixContext ctx;
@@ -62,6 +336,9 @@ int cmd_simulate(const std::string& installable, nxb::sim::Config config, float 
         fmt::print("Building dependency graph...\n");
         auto graph = nxb::drv::build_graph(ctx, roots);
         fmt::print("Found {} derivations\n\n", graph.nodes.size());
+
+        if (tui)
+            return run_tui_simulation_app(graph, config, speed);
 
         std::size_t completed = 0;
         auto start = std::chrono::steady_clock::now();
@@ -104,6 +381,7 @@ int main(int argc, char** argv)
         fmt::print("  -S, --subs N    Max concurrent substitutions (default: 16)\n");
         fmt::print("  -s, --speed N   Playback speed multiplier (default: 10)\n");
         fmt::print("  -t, --time      Show virtual timestamps\n");
+        fmt::print("  -T, --tui       Show a live progress HUD\n");
         fmt::print("  -v, --verbose   Show fake build output spam\n");
         return 1;
     }
@@ -112,6 +390,7 @@ int main(int argc, char** argv)
     nxb::sim::Config config;
     float speed = 10.0f;  // 10x speed by default (100ms virtual = 10ms real)
     bool show_time = false;
+    bool tui = false;
 
     for (int i = 2; i < argc; ++i) {
         std::string arg = argv[i];
@@ -125,8 +404,10 @@ int main(int argc, char** argv)
             config.verbose = true;
         } else if (arg == "-t" || arg == "--time") {
             show_time = true;
+        } else if (arg == "-T" || arg == "--tui") {
+            tui = true;
         }
     }
 
-    return cmd_simulate(installable, config, speed, show_time);
+    return cmd_simulate(installable, config, speed, show_time, tui);
 }
