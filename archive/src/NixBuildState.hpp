@@ -1,0 +1,191 @@
+#pragma once
+
+#include "DependencyGraph.hpp"
+#include "NixLogParser.hpp"
+#include "UiTypes.hpp"
+
+#include <chrono>
+#include <cstddef>
+#include <cstdint>
+#include <nix/store/derivations.hh>
+#include <nix/store/path.hh>
+#include <optional>
+#include <string>
+#include <unordered_map>
+
+namespace nix
+{
+class Store;
+}
+
+namespace nixb
+{
+
+// Yearning: Build plan from "these N derivations will be built"
+// Static metadata loaded upfront, defines dependency tree structure
+struct Yearning
+{
+  nix::StorePath derivation_path;
+  nix::Derivation derivation;
+  std::vector<int64_t>
+      dependency_yearning_ids;             // IDs of yearnings this depends on
+  size_t order = 0;                        // Order in build plan
+  std::optional<int64_t> live_activity_id; // Linked real activity, if started
+};
+
+// Phase timing information
+struct PhaseTimer
+{
+  std::chrono::steady_clock::time_point start_time;
+  std::optional<std::chrono::steady_clock::time_point> end_time;
+
+  std::chrono::milliseconds
+  elapsed () const
+  {
+    auto end = end_time.value_or (std::chrono::steady_clock::now ());
+    return std::chrono::duration_cast<std::chrono::milliseconds> (
+        end - start_time);
+  }
+};
+
+// ActivityInfo: Live events from Nix's @nix JSON stream
+// Dynamic state: phases, progress, current status
+struct ActivityInfo
+{
+  ActivityType type;
+  std::string text;
+  std::optional<nix::StorePath> store_path;
+  std::optional<nix::StorePath> derivation_path;
+  std::optional<nix::Derivation> derivation;
+  std::optional<std::string> store_base_url;
+  std::string label;
+  std::optional<int64_t> parent;
+  ActivityProgress progress;
+  bool has_progress = false;
+  size_t start_order = 0;
+  std::string current_phase;
+  bool is_finished = false;
+
+  // Timing tracking
+  std::chrono::steady_clock::time_point start_time;
+  std::optional<std::chrono::steady_clock::time_point> end_time;
+  std::chrono::steady_clock::time_point last_update_time;
+  std::optional<std::chrono::steady_clock::time_point> finish_time;
+
+  // Phase timing tracking (for build activities)
+  std::map<std::string, PhaseTimer> phase_timings;
+
+  std::vector<nix::StorePath> input_drv_paths; // Build dependencies
+
+  // Download speed tracking
+  std::chrono::steady_clock::time_point last_progress_time;
+  int64_t last_progress_bytes = 0;
+  double current_speed_bps = 0.0; // Bytes per second
+
+  std::string to_json () const;
+
+  // Get formatted phase timing string (e.g., "12s configure + 5s build + 3s
+  // install")
+  std::string get_phase_timing_string () const;
+
+  // Get formatted current phase timing string (e.g., "3s install")
+  std::string get_current_phase_timing_string () const;
+
+  // Get total elapsed time for this activity
+  std::chrono::milliseconds
+  elapsed () const
+  {
+    auto end = end_time.value_or (std::chrono::steady_clock::now ());
+    return std::chrono::duration_cast<std::chrono::milliseconds> (
+        end - start_time);
+  }
+};
+
+class NixBuildState
+{
+public:
+  explicit NixBuildState (std::shared_ptr<nix::Store> store);
+
+  void start_activity (const StartEvent &e);
+  void stop_activity (int64_t id);
+  void update_progress (const ResultEvent &e);
+  void cleanup_finished_activities ();
+
+  const std::unordered_map<int64_t, ActivityInfo> &
+  activities () const
+  {
+    return activities_;
+  }
+
+  const std::unordered_map<int64_t, Yearning> &
+  yearnings () const
+  {
+    return yearnings_;
+  }
+
+  const ActivityInfo *get_activity (int64_t id) const;
+  const Yearning *get_yearning (int64_t id) const;
+
+  std::string format_activity_label (const ActivityInfo &info) const;
+
+  const std::unordered_map<int64_t, std::vector<int64_t>> &
+  activity_children () const
+  {
+    return activity_graph_.children ();
+  }
+  const std::vector<int64_t> &
+  activity_roots () const
+  {
+    return activity_graph_.get_roots ();
+  }
+  const std::map<std::string, int64_t> &
+  drv_path_to_activity () const
+  {
+    return drv_path_to_activity_;
+  }
+  const std::unordered_map<int64_t, std::vector<int64_t>> &
+  activity_dependents () const
+  {
+    return activity_graph_.dependents ();
+  }
+
+  void yearn_for_derivation (const nix::StorePath &path);
+  void yearn ();
+
+private:
+  void create_synthetic_activities ();
+  void build_activity_tree (); // Build tree from scratch
+  void add_activity_to_tree (int64_t id, const ActivityInfo &info);
+  void remove_activity_from_tree (int64_t id);
+  ActivityType infer_activity_type (const StartEvent &e) const;
+  void process_store_ref (const StartEvent &e, ActivityInfo &info);
+  void process_text_fallback (const StartEvent &e, ActivityType type,
+                              ActivityInfo &info);
+  void extract_label_from_quotes (std::string_view text,
+                                  ActivityInfo &info) const;
+
+  std::shared_ptr<nix::Store> store_;
+
+  // Yearnings: build plan loaded from "these N derivations" message
+  std::unordered_map<int64_t, Yearning> yearnings_; // Negative IDs
+  size_t next_yearning_order_ = 0;
+
+  // Activities: live events from Nix's @nix stream
+  std::unordered_map<int64_t, ActivityInfo> activities_; // Nix's huge IDs
+  size_t next_activity_order_ = 0;
+
+  // Association between yearnings and activities
+  BidirectionalMap<int64_t, int64_t>
+      yearning_activity_map_; // yearning_id <-> activity_id
+
+  // Temporary: for building yearnings
+  std::vector<nix::StorePath> derivations_to_build_;
+  std::multimap<nix::StorePath, nix::StorePath> deps_;
+
+  // Retained-mode tree (built from yearnings, not activities!)
+  DependencyGraph<int64_t>
+      activity_graph_; // Handles children/dependents/roots
+  std::map<std::string, int64_t> drv_path_to_activity_;
+};
+
+} // namespace nixb
