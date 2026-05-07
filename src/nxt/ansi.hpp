@@ -74,6 +74,11 @@ public:
     Writer & hide_cursor();
     Writer & show_cursor();
 
+    /// Terminal synchronized update mode. Supporting terminals defer
+    /// presenting changes until the matching end call.
+    Writer & begin_synchronized_update();
+    Writer & end_synchronized_update();
+
     /// Save/restore cursor position
     Writer & save_cursor();
     Writer & restore_cursor();
@@ -147,6 +152,8 @@ void clear_screen();
 void clear_line();
 void hide_cursor();
 void show_cursor();
+void begin_synchronized_update();
+void end_synchronized_update();
 void set_scroll_region(row_t top, row_t bottom);
 void reset_scroll_region();
 void scroll_up(height_t n = 1 * ln);
@@ -168,6 +175,18 @@ struct TerminalGuard
 
     TerminalGuard(const TerminalGuard &) = delete;
     TerminalGuard & operator=(const TerminalGuard &) = delete;
+};
+
+struct SynchronizedUpdate
+{
+    explicit SynchronizedUpdate(bool enabled = true);
+    ~SynchronizedUpdate();
+
+    SynchronizedUpdate(const SynchronizedUpdate &) = delete;
+    SynchronizedUpdate & operator=(const SynchronizedUpdate &) = delete;
+
+private:
+    bool enabled_{false};
 };
 
 } // namespace nxb::ansi

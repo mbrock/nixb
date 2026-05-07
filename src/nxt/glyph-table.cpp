@@ -6,7 +6,11 @@ namespace nxb {
 
 GlyphTable::GlyphTable()
 {
-    // Pre-populate ASCII 0-255
+    init_ascii();
+}
+
+void GlyphTable::init_ascii()
+{
     arena_.reserve(256);
     spans_.reserve(256);
     table_.reserve(256);
@@ -16,9 +20,9 @@ GlyphTable::GlyphTable()
         arena_.push_back(static_cast<char>(i));
         spans_.push_back({offset, 1});
 
-        // Create string_view into arena for hash map key
-        std::string_view key{&arena_[offset], 1};
-        table_.emplace(key, static_cast<GlyphId>(i));
+        table_.emplace(
+            std::string(1, static_cast<char>(i)),
+            static_cast<GlyphId>(i));
     }
 }
 
@@ -31,7 +35,7 @@ GlyphTable::GlyphId GlyphTable::intern(const std::string_view bytes)
     std::lock_guard<std::mutex> lock(mutex_);
 
     // Check if already interned
-    if (const auto it = table_.find(bytes); it != table_.end())
+    if (const auto it = table_.find(std::string(bytes)); it != table_.end())
         return it->second;
 
     // Intern new glyph
@@ -48,9 +52,7 @@ GlyphTable::GlyphId GlyphTable::intern(const std::string_view bytes)
     spans_.push_back({offset, length});
     auto id = static_cast<GlyphId>(spans_.size() - 1);
 
-    // Create stable string_view into arena for hash map
-    std::string_view key{arena_.data() + offset, length};
-    table_.emplace(key, id);
+    table_.emplace(std::string(bytes), id);
 
     return id;
 }
@@ -90,6 +92,7 @@ void GlyphTable::clear()
     table_.clear();
     arena_.clear();
     spans_.clear();
+    init_ascii();
 }
 
 } // namespace nxb

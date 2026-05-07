@@ -87,19 +87,24 @@ void UIRuntime::println(std::string_view line)
     auto hud_h = compositor_->hud_height();
     auto term_h = terminal_height();
 
-    // No scroll region in full-screen mode
-    if (hud_h >= term_h)
+    // No scroll region in full-screen mode. HUD mode reserves one separator
+    // row above the HUD.
+    if (hud_h > 0 * ln && hud_h + 1 * ln >= term_h)
         return;
 
-    // Just print - cursor is already in the scroll region.
-    // The scroll region handles scrolling automatically when we hit the
-    // bottom.
+    auto scroll_bottom = hud_h > 0 * ln
+        ? term_h - hud_h - 2 * ln
+        : term_h - 1 * ln;
+    auto has_trailing_newline = !line.empty() && line.back() == '\n';
+
     fmt::memory_buffer buf;
     ansi::Writer w(buf);
+    w.move_to(Pos::at(0 * ch, scroll_bottom));
     w.reset(); // Avoid HUD styling leaking into log output
     w.text(line);
     w.clear_line_from_cursor();
-    w.text("\n");
+    if (!has_trailing_newline)
+        w.text("\n");
 
     std::cout.write(buf.data(), static_cast<std::streamsize>(buf.size()));
     std::cout.flush();
@@ -110,8 +115,8 @@ void UIRuntime::cleanup()
     auto hud_h = compositor_->hud_height();
     auto term_h = terminal_height();
 
-    // Nothing to clear in full-screen mode
-    if (hud_h >= term_h)
+    // Nothing to clear in no-HUD or full-screen mode
+    if (hud_h == 0 * ln || hud_h + 1 * ln >= term_h)
         return;
 
     // Clear HUD region plus spacer row above, preserving cursor position
@@ -158,7 +163,7 @@ nxb::task<> UIRuntime::signal_loop()
             case SIGTERM:
                 println("CTRL C! CTRL C! CTRL C! CTRL C! CTRL C! CTRL C! CTRL C!");
                 request_shutdown();
-
+                break;
 
             case SIGWINCH:
                 refresh_terminal_size();

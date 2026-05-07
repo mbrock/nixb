@@ -33,8 +33,9 @@ SignalPipe::~SignalPipe()
 SignalPipe::SignalPipe(SignalPipe && other) noexcept
     : fds_(other.fds_)
 {
+    const int old_write_fd = other.fds_[1];
     other.fds_ = {-1, -1};
-    if (s_write_fd == other.fds_[1])
+    if (s_write_fd == old_write_fd)
         s_write_fd = fds_[1];
 }
 
@@ -43,8 +44,9 @@ SignalPipe & SignalPipe::operator=(SignalPipe && other) noexcept
     if (this != &other) {
         close_fds();
         fds_ = other.fds_;
+        const int old_write_fd = other.fds_[1];
         other.fds_ = {-1, -1};
-        if (s_write_fd == other.fds_[1])
+        if (s_write_fd == old_write_fd)
             s_write_fd = fds_[1];
     }
     return *this;

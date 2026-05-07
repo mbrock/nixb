@@ -135,6 +135,25 @@ executable('tui_example',
   dependencies : [libnxt_dep],
 )
 
+test_inc = include_directories('src/test')
+
+raster_test = executable('raster-test',
+  'src/test/raster-test.cpp',
+  include_directories : [libnxt_inc, test_inc],
+  dependencies : [libnxt_dep],
+  cpp_args : mdspan_args,
+)
+
+terminal_test = executable('terminal-test',
+  'src/test/terminal-test.cpp',
+  include_directories : [libnxt_inc, test_inc],
+  dependencies : [libnxt_dep, libvterm_dep],
+  cpp_args : mdspan_args,
+)
+
+test('raster-test', raster_test)
+test('terminal-test', terminal_test)
+
 # Standalone log converter (minimal dependencies)
 executable('nix-log-to-md',
   'src/nix-log-to-md.cpp',

@@ -216,7 +216,6 @@ int run_tui_simulation_app(
                 styled_text(
                     span("Nix Build ", fg(nxb::Rgba8::magenta()) | bold),
                     span("Simulation", fg(nxb::Rgba8::blue()) | italic)),
-                hrule(),
                 row(
                     text(fmt::format("{:<18}", "overall"),
                          fg(nxb::Rgba8::white()) | bold),
@@ -251,7 +250,6 @@ int run_tui_simulation_app(
                                      sub_slots.force_numerical_value_in(
                                          nxb::percent)),
                          fg(nxb::Rgba8::cyan()) | bold)),
-                hrule(),
                 list(state.active, [](const auto& item) {
                     const auto color = item.substitution
                                            ? nxb::Rgba8::cyan()
@@ -266,7 +264,6 @@ int run_tui_simulation_app(
                                                  nxb::percent)),
                              fg(color) | bold));
                 }),
-                hrule(),
                 list(state.recent, [](const auto& line) {
                     return text(
                         fit_label(line, 80), fg(nxb::Rgba8::bright_black()));

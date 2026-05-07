@@ -194,6 +194,18 @@ Writer & Writer::show_cursor()
     return *this;
 }
 
+Writer & Writer::begin_synchronized_update()
+{
+    csi("?2026", 'h');
+    return *this;
+}
+
+Writer & Writer::end_synchronized_update()
+{
+    csi("?2026", 'l');
+    return *this;
+}
+
 Writer & Writer::save_cursor()
 {
     csi("", 's');
@@ -415,6 +427,24 @@ void show_cursor()
     print_csi("?25h");
 }
 
+void begin_synchronized_update()
+{
+    fmt::memory_buffer buf;
+    Writer w(buf);
+    w.begin_synchronized_update();
+    std::cout.write(buf.data(), static_cast<std::streamsize>(buf.size()));
+    std::cout.flush();
+}
+
+void end_synchronized_update()
+{
+    fmt::memory_buffer buf;
+    Writer w(buf);
+    w.end_synchronized_update();
+    std::cout.write(buf.data(), static_cast<std::streamsize>(buf.size()));
+    std::cout.flush();
+}
+
 void set_scroll_region(const row_t top, const row_t bottom)
 {
     const auto top_row = (top - ansi_origin_v).numerical_value_in(ln);
@@ -549,6 +579,19 @@ TerminalGuard::~TerminalGuard()
     // w.text ("\n");
     std::cout.write(buf.data(), static_cast<std::streamsize>(buf.size()));
     std::cout.flush();
+}
+
+SynchronizedUpdate::SynchronizedUpdate(bool enabled)
+    : enabled_(enabled)
+{
+    if (enabled_)
+        begin_synchronized_update();
+}
+
+SynchronizedUpdate::~SynchronizedUpdate()
+{
+    if (enabled_)
+        end_synchronized_update();
 }
 
 } // namespace nxb::ansi

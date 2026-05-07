@@ -2,8 +2,10 @@
 
 #include <coro/when_any.hpp>
 #include <stop_token>
+#include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cmath>
 
 #include "nxt/ansi.hpp"
 #include "nxt/async.hpp"
@@ -108,20 +110,8 @@ public:
     template<typename Layout>
     void render(const Layout & layout)
     {
-        // Compute HUD height from layout
-        auto hint = layout.height_hint();
-        auto term_h = terminal_height();
-
-        // If layout wants to grow, use full screen; otherwise use min
-        // height
-        height_t hud_h = hint.flex > 0 * one ? term_h : hint.min;
-        hud_h = std::min(hud_h, term_h); // Clamp to terminal
-
-        update_hud_height(hud_h);
-
-        render_impl([&layout](RasterView & view, Size size) {
-            layout.render(view, size);
-        });
+        ansi::SynchronizedUpdate synchronized_update;
+        render_frame(layout);
     }
 
     /// Print a line to the scroll region (only works when HUD
@@ -164,11 +154,16 @@ public:
             if (elapsed < frame_time)
                 co_await scheduler_->yield_for(frame_time - elapsed);
 
-            // Process any pending resizes
-            while (auto sz = resize_queue_.try_pop())
-                compositor_->resize(*sz);
+            {
+                ansi::SynchronizedUpdate synchronized_update;
 
-            render(build_ui());
+                // Process any pending resizes
+                while (auto sz = resize_queue_.try_pop())
+                    compositor_->resize(*sz);
+
+                render_frame(build_ui());
+            }
+
             last_render = std::chrono::steady_clock::now();
         }
     }
@@ -201,6 +196,55 @@ private:
     void render_impl(std::function<void(RasterView &, Size)> render_fn);
     void update_hud_height(height_t hud_h);
 
+    template<typename Layout>
+    void render_frame(const Layout & layout)
+    {
+        // Compute HUD height from layout
+        auto hint = layout.height_hint();
+        auto term_h = terminal_height();
+
+        // If layout wants to grow, use full screen; otherwise use min
+        // height
+        auto wants_fullscreen = hint.flex > 0 * one;
+        height_t target_h = wants_fullscreen ? term_h : hint.min;
+        target_h = std::min(target_h, term_h); // Clamp to terminal
+
+        if (!wants_fullscreen && target_h > 0 * ln) {
+            auto reserved_log_rows = 7 * ln;
+            auto separator = 1 * ln;
+            if (term_h > reserved_log_rows + separator) {
+                auto max_hud_h = term_h - reserved_log_rows - separator;
+                target_h = std::min(target_h, max_hud_h);
+            }
+        }
+
+        auto target_rows = static_cast<double>(
+            target_h.numerical_value_in(ln));
+
+        if (wants_fullscreen || !has_smoothed_hud_height_) {
+            smoothed_hud_rows_ = target_rows;
+            has_smoothed_hud_height_ = true;
+        } else if (target_rows > smoothed_hud_rows_) {
+            smoothed_hud_rows_ = target_rows;
+        } else {
+            smoothed_hud_rows_ =
+                hud_shrink_alpha_ * target_rows
+                + (1.0 - hud_shrink_alpha_) * smoothed_hud_rows_;
+        }
+
+        auto hud_rows = static_cast<std::size_t>(
+            std::round(smoothed_hud_rows_));
+        hud_rows = std::min(
+            hud_rows,
+            static_cast<std::size_t>(term_h.numerical_value_in(ln)));
+
+        update_hud_height(hud_rows * ln);
+
+        render_impl([&layout](RasterView & view, Size size) {
+            layout.render(view, size);
+        });
+    }
+
     std::shared_ptr<nxb::io_scheduler> scheduler_;
     GlyphTable glyphs_;
     std::unique_ptr<TerminalCompositor> compositor_;
@@ -212,6 +256,9 @@ private:
     std::atomic<nxb::width_t> term_width_{80 * ch};
     std::atomic<nxb::height_t> term_height_{24 * ln};
     std::atomic<std::uint64_t> damage_counter_{0};
+    bool has_smoothed_hud_height_{false};
+    double smoothed_hud_rows_{0.0};
+    double hud_shrink_alpha_{0.05};
 
     std::stop_source stop_source_;
 };

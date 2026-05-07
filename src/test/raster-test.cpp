@@ -111,6 +111,40 @@ suite layout_tests = [] {
 };
 
 // ============================================================================
+// Glyph table tests
+// ============================================================================
+
+suite glyph_table_tests = [] {
+    "owned lookup keys survive arena growth"_test = [] {
+        GlyphTable glyphs;
+        std::vector<GlyphTable::GlyphId> ids;
+        std::vector<std::string> labels;
+
+        for (int i = 0; i < 500; ++i) {
+            labels.push_back(fmt::format("glyph-{}", i));
+            ids.push_back(glyphs.intern(labels.back()));
+        }
+
+        for (std::size_t i = 0; i < labels.size(); ++i) {
+            expect(glyphs.intern(labels[i]) == ids[i]);
+            auto text = glyphs.get(ids[i]);
+            expect(text && *text == std::string_view(labels[i]));
+        }
+    };
+
+    "clear restores ASCII entries"_test = [] {
+        GlyphTable glyphs;
+        auto id = glyphs.intern("wide-glyph");
+        expect(id >= 256_ul);
+        glyphs.clear();
+
+        expect(glyphs.size() == 256_ul);
+        auto text = glyphs.get(static_cast<GlyphTable::GlyphId>('A'));
+        expect(text && *text == std::string_view{"A"});
+    };
+};
+
+// ============================================================================
 // Diff algorithm tests
 // ============================================================================
 
@@ -220,8 +254,8 @@ suite ansi_tests = [] {
     };
 
     "debug mode"_test = [] {
-        bool saved = ansi::debug_mode;
-        ansi::debug_mode = true;
+        auto saved = ansi::mode;
+        ansi::mode = ansi::Mode::debug;
 
         fmt::memory_buffer buf;
         ansi::Writer w(buf);
@@ -231,7 +265,22 @@ suite ansi_tests = [] {
         expect(out.find("⟨CSI:") != std::string_view::npos);
         expect(out.find("\x1b[") == std::string_view::npos);
 
-        ansi::debug_mode = saved;
+        ansi::mode = saved;
+    };
+
+    "synchronized update codes"_test = [] {
+        auto saved = ansi::mode;
+        ansi::mode = ansi::Mode::enabled;
+
+        fmt::memory_buffer buf;
+        ansi::Writer w(buf);
+        w.begin_synchronized_update();
+        w.end_synchronized_update();
+
+        std::string_view out(buf.data(), buf.size());
+        expect(out == std::string_view{"\x1b[?2026h\x1b[?2026l"});
+
+        ansi::mode = saved;
     };
 };
 

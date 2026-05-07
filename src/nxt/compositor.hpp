@@ -19,11 +19,12 @@ public:
     GlyphTable & glyphs() const noexcept;
     nxb::Size size() const noexcept;
 
-    /// Set HUD height. Raster covers only the bottom hud_height rows.
-    /// The scroll region is set to rows above the HUD.
-    /// If hud_height >= terminal height, no scroll region (full-screen
-    /// mode).
+    /// Set HUD height. In HUD mode, one separator row is reserved above the
+    /// HUD and the scroll region ends above that separator. If the HUD plus
+    /// separator cannot fit, the compositor uses full-screen mode.
     void set_hud_height(height_t hud_height, height_t term_height);
+    void set_hud_height(
+        height_t hud_height, height_t term_height, std::ostream & out);
     [[nodiscard]] height_t hud_height() const noexcept;
 
     // Public for testing the rendering pipeline without async runtime
@@ -34,7 +35,8 @@ private:
     Raster front_;
     Raster back_;
     GlyphTable & glyphs_;
-    height_t hud_height_{0 * ln}; // 0 = full-screen mode
+    height_t hud_height_{0 * ln};
+    height_t term_height_{0 * ln};
     row_t hud_start_row_{
         terminal_origin_v + 0 * ln}; // row where HUD starts
 };

@@ -4,6 +4,7 @@
 #include <mutex>
 #include <optional>
 #include <span>
+#include <string>
 #include <string_view>
 #include <unordered_map>
 #include <vector>
@@ -53,7 +54,7 @@ public:
     /// Number of interned glyphs
     [[nodiscard]] std::size_t size() const noexcept;
 
-    /// Clear all glyphs (including ASCII)
+    /// Clear interned glyphs and restore the reserved ASCII entries.
     void clear();
 
 private:
@@ -63,15 +64,17 @@ private:
         std::uint8_t length;
     };
 
+    void init_ascii();
+
     /// Arena holds all UTF-8 bytes contiguously
     std::vector<char> arena_;
 
     /// Parallel array: span info per glyph ID (index == ID)
     std::vector<Span> spans_;
 
-    /// Hash table for fast lookup (string_view -> GlyphId)
-    /// Keys point into arena_, so arena_ must not reallocate
-    std::unordered_map<std::string_view, GlyphId> table_;
+    /// Hash table for fast lookup. Keys own their bytes; reverse lookup
+    /// still uses spans into arena_.
+    std::unordered_map<std::string, GlyphId> table_;
 
     /// Mutex for thread-safe interning (multiple widgets may render
     /// concurrently)
