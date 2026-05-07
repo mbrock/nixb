@@ -290,15 +290,27 @@ inline constexpr Emphasis DEFAULT_EMPHASIS = Emphasis::none;
 using mdspan_extents = std::experimental::
     extents<std::size_t, std::dynamic_extent, std::dynamic_extent>;
 using glyph_view_t =
-    std::experimental::mdspan<GlyphTable::GlyphId, mdspan_extents>;
+    std::experimental::mdspan<
+        GlyphTable::GlyphId,
+        mdspan_extents,
+        std::experimental::layout_stride>;
 using const_glyph_view_t =
-    std::experimental::mdspan<const GlyphTable::GlyphId, mdspan_extents>;
-using color_view_t = std::experimental::mdspan<Rgba8, mdspan_extents>;
+    std::experimental::mdspan<
+        const GlyphTable::GlyphId,
+        mdspan_extents,
+        std::experimental::layout_stride>;
+using color_view_t = std::experimental::
+    mdspan<Rgba8, mdspan_extents, std::experimental::layout_stride>;
 using const_color_view_t =
-    std::experimental::mdspan<const Rgba8, mdspan_extents>;
-using emphasis_view_t = std::experimental::mdspan<Emphasis, mdspan_extents>;
+    std::experimental::
+        mdspan<const Rgba8, mdspan_extents, std::experimental::layout_stride>;
+using emphasis_view_t = std::experimental::
+    mdspan<Emphasis, mdspan_extents, std::experimental::layout_stride>;
 using const_emphasis_view_t =
-    std::experimental::mdspan<const Emphasis, mdspan_extents>;
+    std::experimental::mdspan<
+        const Emphasis,
+        mdspan_extents,
+        std::experimental::layout_stride>;
 
 /// Default color for terminal cells (resets to terminal's configured
 /// color)

@@ -1,4 +1,4 @@
-.PHONY: all setup build clean watch
+.PHONY: all setup build run clean watch
 
 export CLICOLOR_FORCE=1
 
@@ -10,6 +10,8 @@ build:
 	@echo "*** BUILDING"
 	meson compile -C build
 	@echo "*** FINISHED"
+
+run: build
 	./build/nxb
 
 clean:

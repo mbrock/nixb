@@ -61,10 +61,10 @@ int example(int argc, char * argv[])
             // Fixed-height HUD: header + hrule + 3 activities + hrule = 6
             // rows No flex-grow means scroll region above for logs
             return column(
-                styled_text(
-                    span("Build ", fg(Rgba8::magenta()) | bold),
-                    span("Progress", fg(Rgba8::blue()) | italic)),
-                hrule(),
+                // styled_text(
+                //     span("Build ", fg(Rgba8::magenta()) | bold),
+                //     span("Progress", fg(Rgba8::blue()) | italic)),
+                // hrule(),
                 list(
                     state,
                     [](const auto & act) {
@@ -86,8 +86,9 @@ int example(int argc, char * argv[])
                                      ? fg(Rgba8::yellow())
                                      : fg(Rgba8::white()))
                                     | bold));
-                    }),
-                hrule());
+                    })
+                // hrule()
+            );
         },
         [n = steps](
             nxb::ui::UIRuntime & runtime,
@@ -117,6 +118,7 @@ int example(int argc, char * argv[])
 
             runtime.println("All builds completed!");
             co_await runtime.scheduler().yield_for(1s);
+            runtime.request_shutdown();
         });
 }
 

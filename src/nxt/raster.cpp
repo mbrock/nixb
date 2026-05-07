@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <array>
 
 #include <experimental/mdspan>
 
@@ -19,6 +20,12 @@ inline std::size_t cols_from(width_t w)
 inline std::size_t rows_from(height_t h)
 {
     return h.numerical_value_in(ln);
+}
+
+auto row_major_mapping(const std::size_t rows, const std::size_t cols)
+{
+    return std::experimental::layout_stride::mapping<mdspan_extents>(
+        mdspan_extents{rows, cols}, std::array<std::size_t, 2>{cols, 1});
 }
 
 } // namespace
@@ -191,11 +198,12 @@ RasterView Raster::view() noexcept
 {
     const auto rows = rows_from(height_);
     const auto cols = cols_from(width_);
+    const auto mapping = row_major_mapping(rows, cols);
 
-    glyph_view_t glyphs(glyphs_storage_.data(), mdspan_extents{rows, cols});
-    color_view_t fgs(fgs_storage_.data(), mdspan_extents{rows, cols});
-    color_view_t bgs(bgs_storage_.data(), mdspan_extents{rows, cols});
-    emphasis_view_t ems(ems_storage_.data(), mdspan_extents{rows, cols});
+    glyph_view_t glyphs(glyphs_storage_.data(), mapping);
+    color_view_t fgs(fgs_storage_.data(), mapping);
+    color_view_t bgs(bgs_storage_.data(), mapping);
+    emphasis_view_t ems(ems_storage_.data(), mapping);
 
     return RasterView(glyphs, fgs, bgs, ems, *glyph_table_);
 }
@@ -213,7 +221,7 @@ const_glyph_view_t Raster::glyphs_2d() const noexcept
     const auto rows = rows_from(height_);
     const auto cols = cols_from(width_);
     return const_glyph_view_t(
-        glyphs_storage_.data(), mdspan_extents{rows, cols});
+        glyphs_storage_.data(), row_major_mapping(rows, cols));
 }
 
 const_color_view_t Raster::fgs_2d() const noexcept
@@ -221,7 +229,7 @@ const_color_view_t Raster::fgs_2d() const noexcept
     const auto rows = rows_from(height_);
     const auto cols = cols_from(width_);
     return const_color_view_t(
-        fgs_storage_.data(), mdspan_extents{rows, cols});
+        fgs_storage_.data(), row_major_mapping(rows, cols));
 }
 
 const_color_view_t Raster::bgs_2d() const noexcept
@@ -229,7 +237,7 @@ const_color_view_t Raster::bgs_2d() const noexcept
     const auto rows = rows_from(height_);
     const auto cols = cols_from(width_);
     return const_color_view_t(
-        bgs_storage_.data(), mdspan_extents{rows, cols});
+        bgs_storage_.data(), row_major_mapping(rows, cols));
 }
 
 const_emphasis_view_t Raster::ems_2d() const noexcept
@@ -237,7 +245,7 @@ const_emphasis_view_t Raster::ems_2d() const noexcept
     const auto rows = rows_from(height_);
     const auto cols = cols_from(width_);
     return const_emphasis_view_t(
-        ems_storage_.data(), mdspan_extents{rows, cols});
+        ems_storage_.data(), row_major_mapping(rows, cols));
 }
 
 } // namespace nxb

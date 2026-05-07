@@ -162,7 +162,7 @@ Writer & Writer::set_scroll_region(const row_t top, const row_t bottom)
 
 Writer & Writer::reset_scroll_region()
 {
-    set_scroll_region(ansi_origin_v - 1 * ln, ansi_origin_v - 1 * ln);
+    csi("", 'r');
     return *this;
 }
 
@@ -184,32 +184,32 @@ Writer & Writer::scroll_down(const height_t n)
 
 Writer & Writer::hide_cursor()
 {
-    fmt::format_to(std::back_inserter(buf_), "{}?25l", CSI);
+    csi("?25", 'l');
     return *this;
 }
 
 Writer & Writer::show_cursor()
 {
-    fmt::format_to(std::back_inserter(buf_), "{}?25h", CSI);
+    csi("?25", 'h');
     return *this;
 }
 
 Writer & Writer::save_cursor()
 {
-    fmt::format_to(std::back_inserter(buf_), "{}s", CSI);
+    csi("", 's');
     return *this;
 }
 
 Writer & Writer::restore_cursor()
 {
-    fmt::format_to(std::back_inserter(buf_), "{}u", CSI);
+    csi("", 'u');
     return *this;
 }
 
 Writer & Writer::request_cursor_position()
 {
     // DSR 6 - Device Status Report (cursor position)
-    fmt::format_to(std::back_inserter(buf_), "{}6n", CSI);
+    csi("6", 'n');
     return *this;
 }
 
@@ -424,7 +424,7 @@ void set_scroll_region(const row_t top, const row_t bottom)
 
 void reset_scroll_region()
 {
-    set_scroll_region(ansi_origin_v - 1 * ln, ansi_origin_v - 1 * ln);
+    print_csi("r");
 }
 
 void scroll_up(const height_t n)
@@ -523,6 +523,7 @@ std::optional<Pos> query_cursor_position()
 
 TerminalGuard::TerminalGuard()
 {
+    init();
     hide_cursor();
 }
 

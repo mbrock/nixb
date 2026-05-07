@@ -241,7 +241,9 @@ int run(State initial_state, BuildUI build_ui, Update update)
         tasks.push_back(update(runtime, state));
 
         nxb::sync_wait(nxb::when_all(std::move(tasks)));
+        runtime.cleanup();
     } catch (const std::exception & e) {
+        runtime.cleanup();
         fmt::print(stderr, "Error: {}\n", e.what());
         std::exit(1);
     } catch (...) {

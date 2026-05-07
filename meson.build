@@ -129,6 +129,12 @@ executable('nxb',
   install : true,
 )
 
+executable('tui_example',
+  'src/nxt/tui_example.cpp',
+  include_directories : libnxt_inc,
+  dependencies : [libnxt_dep],
+)
+
 # Standalone log converter (minimal dependencies)
 executable('nix-log-to-md',
   'src/nix-log-to-md.cpp',
