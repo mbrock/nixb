@@ -17,28 +17,31 @@ typedef boost::unordered_flat_map<
     std::hash<StorePath>>
     Roots;
 
+/**
+ * Garbage collector operation:
+ *
+ * - `gcReturnLive`: return the set of paths reachable from
+ *   (i.e. in the closure of) the roots.
+ *
+ * - `gcReturnDead`: return the set of paths not reachable from
+ *   the roots.
+ *
+ * - `gcDeleteDead`: actually delete the latter set.
+ *
+ * - `gcDeleteSpecific`: delete the paths listed in
+ *    `pathsToDelete`, insofar as they are not reachable.
+ */
+enum class GCAction {
+    gcReturnLive,
+    gcReturnDead,
+    gcDeleteDead,
+    gcDeleteSpecific,
+};
+
 struct GCOptions
 {
-    /**
-     * Garbage collector operation:
-     *
-     * - `gcReturnLive`: return the set of paths reachable from
-     *   (i.e. in the closure of) the roots.
-     *
-     * - `gcReturnDead`: return the set of paths not reachable from
-     *   the roots.
-     *
-     * - `gcDeleteDead`: actually delete the latter set.
-     *
-     * - `gcDeleteSpecific`: delete the paths listed in
-     *    `pathsToDelete`, insofar as they are not reachable.
-     */
-    typedef enum {
-        gcReturnLive,
-        gcReturnDead,
-        gcDeleteDead,
-        gcDeleteSpecific,
-    } GCAction;
+    using GCAction = nix::GCAction;
+    using enum GCAction;
 
     GCAction action{gcDeleteDead};
 
@@ -73,11 +76,10 @@ struct GCResults
      * Depending on the action, the GC roots, or the paths that would
      * be or have been deleted.
      */
-    PathSet paths;
+    StringSet paths;
 
     /**
-     * For `gcReturnDead`, `gcDeleteDead` and `gcDeleteSpecific`, the
-     * number of bytes that would be or was freed.
+     * For `gcDeleteDead` and `gcDeleteSpecific`, the number of bytes that were freed.
      */
     uint64_t bytesFreed = 0;
 };

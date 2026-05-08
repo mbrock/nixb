@@ -1,4 +1,5 @@
 #include "nix/expr/tests/libexpr.hh"
+#include "nix/expr/static-string-data.hh"
 
 #include "nix/expr/value.hh"
 #include "nix/expr/print.hh"
@@ -35,14 +36,14 @@ TEST_F(ValuePrintingTests, tBool)
 TEST_F(ValuePrintingTests, tString)
 {
     Value vString;
-    vString.mkStringNoCopy("some-string");
+    vString.mkStringNoCopy("some-string"_sds);
     test(vString, "\"some-string\"");
 }
 
 TEST_F(ValuePrintingTests, tPath)
 {
     Value vPath;
-    vPath.mkStringNoCopy("/foo");
+    vPath.mkStringNoCopy("/foo"_sds);
     test(vPath, "\"/foo\"");
 }
 
@@ -110,9 +111,8 @@ TEST_F(ValuePrintingTests, vLambda)
     PosTable::Origin origin = state.positions.addOrigin(std::monostate(), 1);
     auto posIdx = state.positions.add(origin, 0);
     auto body = ExprInt(0);
-    auto formals = Formals{};
 
-    ExprLambda eLambda(posIdx, createSymbol("a"), &formals, &body);
+    ExprLambda eLambda(posIdx, createSymbol("a"), &body);
 
     Value vLambda;
     vLambda.mkLambda(&env, &eLambda);
@@ -127,7 +127,7 @@ TEST_F(ValuePrintingTests, vLambda)
 TEST_F(ValuePrintingTests, vPrimOp)
 {
     Value vPrimOp;
-    PrimOp primOp{.name = "puppy"};
+    PrimOp primOp{.name = "puppy", .impl = [](EvalState &, const PosIdx, Value **, Value &) {}};
     vPrimOp.mkPrimOp(&primOp);
 
     test(vPrimOp, "«primop puppy»");
@@ -135,7 +135,7 @@ TEST_F(ValuePrintingTests, vPrimOp)
 
 TEST_F(ValuePrintingTests, vPrimOpApp)
 {
-    PrimOp primOp{.name = "puppy"};
+    PrimOp primOp{.name = "puppy", .impl = [](EvalState &, const PosIdx, Value **, Value &) {}};
     Value vPrimOp;
     vPrimOp.mkPrimOp(&primOp);
 
@@ -186,6 +186,22 @@ TEST_F(ValuePrintingTests, vBlackhole)
     Value vBlackhole;
     vBlackhole.mkBlackhole();
     test(vBlackhole, "«potential infinite recursion»");
+}
+
+TEST_F(ValuePrintingTests, vFailed)
+{
+    Value v;
+    try {
+        throw Error("nope");
+    } catch (...) {
+        v.mkFailed();
+    }
+
+    // Historically, a tried and then ignored value (e.g. through tryEval) was
+    // reverted to the original thunk.
+
+    test(v, "«failed»");
+    test(v, ANSI_MAGENTA "«failed»" ANSI_NORMAL, PrintOptions{.ansiColors = true});
 }
 
 TEST_F(ValuePrintingTests, depthAttrs)
@@ -268,7 +284,7 @@ struct StringPrintingTests : LibExprTest
     void test(std::string_view literal, std::string_view expected, unsigned int maxLength, A... args)
     {
         Value v;
-        v.mkString(literal);
+        v.mkString(literal, state.mem);
 
         std::stringstream out;
         printValue(state, out, v, PrintOptions{.maxStringLength = maxLength});
@@ -290,10 +306,10 @@ TEST_F(StringPrintingTests, maxLengthTruncation)
 TEST_F(ValuePrintingTests, attrsTypeFirst)
 {
     Value vType;
-    vType.mkStringNoCopy("puppy");
+    vType.mkStringNoCopy("puppy"_sds);
 
     Value vApple;
-    vApple.mkStringNoCopy("apple");
+    vApple.mkStringNoCopy("apple"_sds);
 
     BindingsBuilder builder = state.buildBindings(10);
     builder.insert(state.symbols.create("type"), &vType);
@@ -334,7 +350,7 @@ TEST_F(ValuePrintingTests, ansiColorsBool)
 TEST_F(ValuePrintingTests, ansiColorsString)
 {
     Value v;
-    v.mkStringNoCopy("puppy");
+    v.mkStringNoCopy("puppy"_sds);
 
     test(v, ANSI_MAGENTA "\"puppy\"" ANSI_NORMAL, PrintOptions{.ansiColors = true});
 }
@@ -342,7 +358,7 @@ TEST_F(ValuePrintingTests, ansiColorsString)
 TEST_F(ValuePrintingTests, ansiColorsStringElided)
 {
     Value v;
-    v.mkStringNoCopy("puppy");
+    v.mkStringNoCopy("puppy"_sds);
 
     test(
         v,
@@ -353,7 +369,7 @@ TEST_F(ValuePrintingTests, ansiColorsStringElided)
 TEST_F(ValuePrintingTests, ansiColorsPath)
 {
     Value v;
-    v.mkPath(state.rootPath(CanonPath("puppy")));
+    v.mkPath(state.rootPath(CanonPath("puppy")), state.mem);
 
     test(v, ANSI_GREEN "/puppy" ANSI_NORMAL, PrintOptions{.ansiColors = true});
 }
@@ -390,7 +406,7 @@ TEST_F(ValuePrintingTests, ansiColorsAttrs)
 TEST_F(ValuePrintingTests, ansiColorsDerivation)
 {
     Value vDerivation;
-    vDerivation.mkStringNoCopy("derivation");
+    vDerivation.mkStringNoCopy("derivation"_sds);
 
     BindingsBuilder builder = state.buildBindings(10);
     builder.insert(state.s.type, &vDerivation);
@@ -413,7 +429,7 @@ TEST_F(ValuePrintingTests, ansiColorsError)
 {
     Value throw_ = state.getBuiltin("throw");
     Value message;
-    message.mkStringNoCopy("uh oh!");
+    message.mkStringNoCopy("uh oh!"_sds);
     Value vError;
     vError.mkApp(&throw_, &message);
 
@@ -430,12 +446,12 @@ TEST_F(ValuePrintingTests, ansiColorsDerivationError)
 {
     Value throw_ = state.getBuiltin("throw");
     Value message;
-    message.mkStringNoCopy("uh oh!");
+    message.mkStringNoCopy("uh oh!"_sds);
     Value vError;
     vError.mkApp(&throw_, &message);
 
     Value vDerivation;
-    vDerivation.mkStringNoCopy("derivation");
+    vDerivation.mkStringNoCopy("derivation"_sds);
 
     BindingsBuilder builder = state.buildBindings(10);
     builder.insert(state.s.type, &vDerivation);
@@ -500,9 +516,8 @@ TEST_F(ValuePrintingTests, ansiColorsLambda)
     PosTable::Origin origin = state.positions.addOrigin(std::monostate(), 1);
     auto posIdx = state.positions.add(origin, 0);
     auto body = ExprInt(0);
-    auto formals = Formals{};
 
-    ExprLambda eLambda(posIdx, createSymbol("a"), &formals, &body);
+    ExprLambda eLambda(posIdx, createSymbol("a"), &body);
 
     Value vLambda;
     vLambda.mkLambda(&env, &eLambda);
@@ -516,7 +531,7 @@ TEST_F(ValuePrintingTests, ansiColorsLambda)
 
 TEST_F(ValuePrintingTests, ansiColorsPrimOp)
 {
-    PrimOp primOp{.name = "puppy"};
+    PrimOp primOp{.name = "puppy", .impl = [](EvalState &, const PosIdx, Value **, Value &) {}};
     Value v;
     v.mkPrimOp(&primOp);
 
@@ -525,7 +540,7 @@ TEST_F(ValuePrintingTests, ansiColorsPrimOp)
 
 TEST_F(ValuePrintingTests, ansiColorsPrimOpApp)
 {
-    PrimOp primOp{.name = "puppy"};
+    PrimOp primOp{.name = "puppy", .impl = [](EvalState &, const PosIdx, Value **, Value &) {}};
     Value vPrimOp;
     vPrimOp.mkPrimOp(&primOp);
 

@@ -17,7 +17,7 @@ class AttrCursor;
 struct App
 {
     std::vector<DerivedPath> context;
-    Path program;
+    std::filesystem::path program;
     // FIXME: add args, sandbox settings, metadata, ...
 };
 
@@ -93,7 +93,7 @@ struct InstallableValue : Installable
      * However if none exists, throw exception instead of returning
      * empty vector.
      */
-    virtual std::vector<ref<eval_cache::AttrCursor>> getCursors(EvalState & state);
+    virtual std::vector<ref<eval_cache::AttrCursor>> getCursors(EvalState & state, bool useDefaultAttrPath = true);
 
     /**
      * Get the first and most preferred cursor this Installable could

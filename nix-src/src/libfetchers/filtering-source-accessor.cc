@@ -11,13 +11,7 @@ std::optional<std::filesystem::path> FilteringSourceAccessor::getPhysicalPath(co
     return next->getPhysicalPath(prefix / path);
 }
 
-std::string FilteringSourceAccessor::readFile(const CanonPath & path)
-{
-    checkAccess(path);
-    return next->readFile(prefix / path);
-}
-
-void FilteringSourceAccessor::readFile(const CanonPath & path, Sink & sink, std::function<void(uint64_t)> sizeCallback)
+void FilteringSourceAccessor::readFile(const CanonPath & path, Sink & sink, fun<void(uint64_t)> sizeCallback)
 {
     checkAccess(path);
     return next->readFile(prefix / path, sink, sizeCallback);
@@ -68,11 +62,22 @@ std::pair<CanonPath, std::optional<std::string>> FilteringSourceAccessor::getFin
     return next->getFingerprint(prefix / path);
 }
 
+std::shared_ptr<const Provenance> FilteringSourceAccessor::getProvenance(const CanonPath & path)
+{
+    if (provenance)
+        return SourceAccessor::getProvenance(path);
+    return next->getProvenance(prefix / path);
+}
+
+void FilteringSourceAccessor::invalidateCache(const CanonPath & path)
+{
+    next->invalidateCache(prefix / path);
+}
+
 void FilteringSourceAccessor::checkAccess(const CanonPath & path)
 {
     if (!isAllowed(path))
-        throw makeNotAllowedError ? makeNotAllowedError(path)
-                                  : RestrictedPathError("access to path '%s' is forbidden", showPath(path));
+        throw makeNotAllowedError(path);
 }
 
 struct AllowListSourceAccessorImpl : AllowListSourceAccessor

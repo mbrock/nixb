@@ -16,7 +16,8 @@ cxx = meson.get_compiler('cpp')
 
 subdir('nix-meson-build-support/deps-lists')
 
-configdata = configuration_data()
+configdata_pub = configuration_data()
+configdata_priv = configuration_data()
 
 deps_private_maybe_subproject = []
 deps_public_maybe_subproject = []
@@ -34,8 +35,14 @@ check_funcs = [
 foreach funcspec : check_funcs
   define_name = 'HAVE_' + funcspec[0].underscorify().to_upper()
   define_value = cxx.has_function(funcspec[0]).to_int()
-  configdata.set(define_name, define_value, description : funcspec[1])
+  configdata_priv.set(define_name, define_value, description : funcspec[1])
 endforeach
+
+configdata_pub.set(
+  'NIX_UBSAN_ENABLED',
+  ('undefined' in get_option('b_sanitize')).to_int(),
+  description : 'Whether nix has been built with UBSan enabled',
+)
 
 subdir('nix-meson-build-support/libatomic')
 
@@ -104,7 +111,7 @@ cpuid = dependency(
   version : '>= 0.7.0',
   required : cpuid_required,
 )
-configdata.set('HAVE_LIBCPUID', cpuid.found().to_int())
+configdata_priv.set('HAVE_LIBCPUID', cpuid.found().to_int())
 deps_private += cpuid
 
 nlohmann_json = dependency('nlohmann_json', version : '>= 3.9')
@@ -113,12 +120,15 @@ deps_public += nlohmann_json
 cxx = meson.get_compiler('cpp')
 
 config_priv_h = configure_file(
-  configuration : configdata,
+  configuration : configdata_priv,
   output : 'util-config-private.hh',
 )
 
 subdir('nix-meson-build-support/common')
-subdir('nix-meson-build-support/asan-options')
+
+if have_cxa_throw
+  deps_other += cxa_throw_dep
+endif
 
 sources = [ config_priv_h ] + files(
   'archive.cc',
@@ -126,6 +136,8 @@ sources = [ config_priv_h ] + files(
   'base-n.cc',
   'base-nix-32.cc',
   'canon-path.cc',
+  'compression-algo.cc',
+  'compression-settings.cc',
   'compression.cc',
   'compute-levels.cc',
   'config-global.cc',
@@ -147,18 +159,24 @@ sources = [ config_priv_h ] + files(
   'json-utils.cc',
   'logging.cc',
   'memory-source-accessor.cc',
+  'memory-source-accessor/json.cc',
   'mounted-source-accessor.cc',
+  'nar-accessor.cc',
+  'nar-cache.cc',
+  'nar-listing.cc',
   'pos-table.cc',
   'position.cc',
   'posix-source-accessor.cc',
+  'processes.cc',
+  'provenance.cc',
   'serialise.cc',
   'signature/local-keys.cc',
   'signature/signer.cc',
   'source-accessor.cc',
   'source-path.cc',
   'strings.cc',
-  'subdir-source-accessor.cc',
   'suggestions.cc',
+  'table.cc',
   'tarfile.cc',
   'tee-logger.cc',
   'terminal.cc',
@@ -202,7 +220,7 @@ this_library = library(
   dependencies : deps_public + deps_private + deps_other,
   include_directories : include_dirs,
   link_args : linker_export_flags,
-  prelink : true, # For C++ static initializers
+  prelink : prelink, # For C++ static initializers
   install : true,
   cpp_pch : do_pch ? [ 'pch/precompiled-headers.hh' ] : [],
 )

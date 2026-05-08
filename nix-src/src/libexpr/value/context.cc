@@ -1,5 +1,6 @@
 #include "nix/util/util.hh"
 #include "nix/expr/value/context.hh"
+#include "nix/store/store-dir-config.hh"
 
 #include <optional>
 
@@ -9,8 +10,7 @@ NixStringContextElem NixStringContextElem::parse(std::string_view s0, const Expe
 {
     std::string_view s = s0;
 
-    std::function<SingleDerivedPath()> parseRest;
-    parseRest = [&]() -> SingleDerivedPath {
+    auto parseRest = [&](this auto & parseRest) -> SingleDerivedPath {
         // Case on whether there is a '!'
         size_t index = s.find("!");
         if (index == std::string_view::npos) {
@@ -104,6 +104,24 @@ std::string NixStringContextElem::to_string() const
         raw);
 
     return res;
+}
+
+std::string NixStringContextElem::display(const StoreDirConfig & store) const
+{
+    return std::visit(
+        overloaded{
+            [&](const NixStringContextElem::Opaque & o) -> std::string {
+                return SingleDerivedPath{o}.to_string(store);
+            },
+            [&](const NixStringContextElem::DrvDeep & d) -> std::string {
+                return store.printStorePath(d.drvPath) + " (deep)";
+            },
+            [&](const NixStringContextElem::Built & b) -> std::string { return SingleDerivedPath{b}.to_string(store); },
+            [&](const NixStringContextElem::Path & p) -> std::string {
+                return store.printStorePath(p.storePath) + " (untracked)";
+            },
+        },
+        raw);
 }
 
 } // namespace nix

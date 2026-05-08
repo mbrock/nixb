@@ -6,6 +6,7 @@
 #include <strings.h> // for strcasecmp
 
 #include "nix/util/archive.hh"
+#include "nix/util/alignment.hh"
 #include "nix/util/config-global.hh"
 #include "nix/util/posix-source-accessor.hh"
 #include "nix/util/source-path.hh"
@@ -31,7 +32,13 @@ static ArchiveSettings archiveSettings;
 
 static GlobalConfig::Register rArchiveSettings(&archiveSettings);
 
-PathFilter defaultPathFilter = [](const Path &) { return true; };
+/* Maximum directory nesting depth for dumpPath()/parseDump(). Bounds
+   stack usage so deep trees cannot overflow the (possibly coroutine)
+   stack these run on. Chosen to fit comfortably in the default 128 KiB
+   boost coroutine stack. */
+static constexpr size_t narMaxDepth = 64;
+
+PathFilter defaultPathFilter = [](const std::string &) { return true; };
 
 void SourceAccessor::dumpPath(const CanonPath & path, Sink & sink, PathFilter & filter)
 {
@@ -46,12 +53,15 @@ void SourceAccessor::dumpPath(const CanonPath & path, Sink & sink, PathFilter & 
         writePadding(*size, sink);
     };
 
-    std::function<void(const CanonPath & path)> dump;
+    sink << narVersionMagic1;
 
-    dump = [&](const CanonPath & path) {
+    [&, &this_(*this)](this const auto & dump, const CanonPath & path, size_t depth) -> void {
         checkInterrupt();
 
-        auto st = lstat(path);
+        if (depth >= narMaxDepth)
+            throw Error("path '%s' exceeds maximum NAR directory depth of %d", this_.showPath(path), narMaxDepth);
+
+        auto st = this_.lstat(path);
 
         sink << "(";
 
@@ -68,7 +78,7 @@ void SourceAccessor::dumpPath(const CanonPath & path, Sink & sink, PathFilter & 
             /* If we're on a case-insensitive system like macOS, undo
                the case hack applied by restorePath(). */
             StringMap unhacked;
-            for (auto & i : readDirectory(path))
+            for (auto & i : this_.readDirectory(path))
                 if (archiveSettings.useCaseHack) {
                     std::string name(i.first);
                     size_t pos = i.first.find(caseHackSuffix);
@@ -85,32 +95,29 @@ void SourceAccessor::dumpPath(const CanonPath & path, Sink & sink, PathFilter & 
             for (auto & i : unhacked)
                 if (filter((path / i.first).abs())) {
                     sink << "entry" << "(" << "name" << i.first << "node";
-                    dump(path / i.second);
+                    dump(path / i.second, depth + 1);
                     sink << ")";
                 }
         }
 
         else if (st.type == tSymlink)
-            sink << "type" << "symlink" << "target" << readLink(path);
+            sink << "type" << "symlink" << "target" << this_.readLink(path);
 
         else
             throw Error("file '%s' has an unsupported type", path);
 
         sink << ")";
-    };
-
-    sink << narVersionMagic1;
-    dump(path);
+    }(path, 0);
 }
 
-time_t dumpPathAndGetMtime(const Path & path, Sink & sink, PathFilter & filter)
+time_t dumpPathAndGetMtime(const std::filesystem::path & path, Sink & sink, PathFilter & filter)
 {
-    auto path2 = PosixSourceAccessor::createAtRoot(path);
+    auto path2 = PosixSourceAccessor::createAtRoot(path, /*trackLastModified=*/true);
     path2.dumpPath(sink, filter);
-    return path2.accessor.dynamic_pointer_cast<PosixSourceAccessor>()->mtime;
+    return path2.accessor->getLastModified().value();
 }
 
-void dumpPath(const Path & path, Sink & sink, PathFilter & filter)
+void dumpPath(const std::filesystem::path & path, Sink & sink, PathFilter & filter)
 {
     dumpPathAndGetMtime(path, sink, filter);
 }
@@ -133,7 +140,7 @@ static void parseContents(CreateRegularFileSink & sink, Source & source)
     sink.preallocateContents(size);
 
     if (sink.skipContents) {
-        source.skip(size + (size % 8 ? 8 - (size % 8) : 0));
+        source.skip(alignUp(size, 8));
         return;
     }
 
@@ -161,35 +168,47 @@ struct CaseInsensitiveCompare
     }
 };
 
-static void parse(FileSystemObjectSink & sink, Source & source, const CanonPath & path)
+static void parse(FileSystemObjectSink & sink, Source & source, const CanonPath & path, size_t depth)
 {
-    auto getString = [&]() {
+    if (depth >= narMaxDepth)
+        throw badArchive("NAR directory nesting exceeds maximum depth of %d", narMaxDepth);
+
+    /* NAR keywords are all <= 10 bytes; a little slack keeps error
+       messages useful for short garbage without allowing large
+       allocations. */
+    constexpr size_t narMaxTag = 32;
+    /* Format-defined bounds, intentionally independent of host
+       NAME_MAX/PATH_MAX. */
+    constexpr size_t narMaxName = 255;
+    constexpr size_t narMaxTarget = 4095;
+
+    auto getString = [&](size_t max) {
         checkInterrupt();
-        return readString(source);
+        return readString(source, max);
     };
 
     auto expectTag = [&](std::string_view expected) {
-        auto tag = getString();
+        auto tag = getString(narMaxTag);
         if (tag != expected)
-            throw badArchive("expected tag '%s', got '%s'", expected, tag.substr(0, 1024));
+            throw badArchive("expected tag '%s', got '%s'", expected, tag);
     };
 
     expectTag("(");
 
     expectTag("type");
 
-    auto type = getString();
+    auto type = getString(narMaxTag);
 
     if (type == "regular") {
         sink.createRegularFile(path, [&](auto & crf) {
-            auto tag = getString();
+            auto tag = getString(narMaxTag);
 
             if (tag == "executable") {
-                auto s2 = getString();
+                auto s2 = getString(0);
                 if (s2 != "")
                     throw badArchive("executable marker has non-empty value");
                 crf.isExecutable();
-                tag = getString();
+                tag = getString(narMaxTag);
             }
 
             if (tag != "contents")
@@ -202,60 +221,62 @@ static void parse(FileSystemObjectSink & sink, Source & source, const CanonPath 
     }
 
     else if (type == "directory") {
-        sink.createDirectory(path);
+        sink.createDirectory(path, [&](FileSystemObjectSink & dirSink, const CanonPath & relDirPath) {
+            std::map<std::string, int, CaseInsensitiveCompare> names;
 
-        std::map<Path, int, CaseInsensitiveCompare> names;
+            std::string prevName;
 
-        std::string prevName;
+            while (1) {
+                auto tag = getString(narMaxTag);
 
-        while (1) {
-            auto tag = getString();
+                if (tag == ")")
+                    break;
 
-            if (tag == ")")
-                break;
+                if (tag != "entry")
+                    throw badArchive("expected tag 'entry' or ')', got '%s'", tag);
 
-            if (tag != "entry")
-                throw badArchive("expected tag 'entry' or ')', got '%s'", tag);
+                expectTag("(");
 
-            expectTag("(");
+                expectTag("name");
 
-            expectTag("name");
+                auto name = getString(narMaxName);
+                if (name.empty() || name == "." || name == ".." || name.find('/') != std::string::npos
+                    || name.find((char) 0) != std::string::npos)
+                    throw badArchive("NAR contains invalid file name '%1%'", name);
+                if (name <= prevName)
+                    throw badArchive("NAR directory is not sorted");
+                prevName = name;
+                if (archiveSettings.useCaseHack) {
+                    auto i = names.find(name);
+                    if (i != names.end()) {
+                        debug("case collision between '%1%' and '%2%'", i->first, name);
+                        name += caseHackSuffix;
+                        name += std::to_string(++i->second);
+                        auto j = names.find(name);
+                        if (j != names.end())
+                            throw badArchive(
+                                "NAR contains file name '%s' that collides with case-hacked file name '%s'",
+                                prevName,
+                                j->first);
+                    } else
+                        names[name] = 0;
+                }
 
-            auto name = getString();
-            if (name.empty() || name == "." || name == ".." || name.find('/') != std::string::npos
-                || name.find((char) 0) != std::string::npos)
-                throw badArchive("NAR contains invalid file name '%1%'", name);
-            if (name <= prevName)
-                throw badArchive("NAR directory is not sorted");
-            prevName = name;
-            if (archiveSettings.useCaseHack) {
-                auto i = names.find(name);
-                if (i != names.end()) {
-                    debug("case collision between '%1%' and '%2%'", i->first, name);
-                    name += caseHackSuffix;
-                    name += std::to_string(++i->second);
-                    auto j = names.find(name);
-                    if (j != names.end())
-                        throw badArchive(
-                            "NAR contains file name '%s' that collides with case-hacked file name '%s'",
-                            prevName,
-                            j->first);
-                } else
-                    names[name] = 0;
+                expectTag("node");
+
+                parse(dirSink, source, relDirPath / name, depth + 1);
+
+                expectTag(")");
             }
-
-            expectTag("node");
-
-            parse(sink, source, path / name);
-
-            expectTag(")");
-        }
+        });
     }
 
     else if (type == "symlink") {
         expectTag("target");
 
-        auto target = getString();
+        auto target = getString(narMaxTarget);
+        if (target.empty() || target.find((char) 0) != std::string::npos)
+            throw badArchive("NAR contains invalid symlink target");
         sink.createSymlink(path, target);
 
         expectTag(")");
@@ -276,7 +297,7 @@ void parseDump(FileSystemObjectSink & sink, Source & source)
     }
     if (version != narVersionMagic1)
         throw badArchive("input doesn't look like a Nix archive");
-    parse(sink, source, CanonPath::root);
+    parse(sink, source, CanonPath::root, 0);
 }
 
 void restorePath(const std::filesystem::path & path, Source & source, bool startFsync)

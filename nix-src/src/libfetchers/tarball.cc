@@ -9,13 +9,16 @@
 #include "nix/store/store-api.hh"
 #include "nix/fetchers/git-utils.hh"
 #include "nix/fetchers/fetch-settings.hh"
+#include "nix/fetchers/provenance.hh"
+
+#include <nlohmann/json.hpp>
 
 namespace nix::fetchers {
 
 DownloadFileResult downloadFile(
-    ref<Store> store,
+    Store & store,
     const Settings & settings,
-    const std::string & url,
+    const VerbatimURL & url,
     const std::string & name,
     const Headers & headers)
 {
@@ -24,11 +27,11 @@ DownloadFileResult downloadFile(
     Cache::Key key{
         "file",
         {{
-            {"url", url},
+            {"url", url.to_string()},
             {"name", name},
         }}};
 
-    auto cached = settings.getCache()->lookupStorePath(key, *store);
+    auto cached = settings.getCache()->lookupStorePath(key, store);
 
     auto useCached = [&]() -> DownloadFileResult {
         return {
@@ -42,7 +45,7 @@ DownloadFileResult downloadFile(
     if (cached && !cached->expired)
         return useCached();
 
-    FileTransferRequest request(VerbatimURL{url});
+    FileTransferRequest request(url);
     request.headers = headers;
     if (cached)
         request.expectedETag = getStrAttr(cached->value, "etag");
@@ -51,7 +54,7 @@ DownloadFileResult downloadFile(
         res = getFileTransfer()->download(request);
     } catch (FileTransferError & e) {
         if (cached) {
-            warn("%s; using cached version", e.msg());
+            warn("%s; using cached version", e.message());
             return useCached();
         } else
             throw;
@@ -74,7 +77,7 @@ DownloadFileResult downloadFile(
         dumpString(res.data, sink);
         auto hash = hashString(HashAlgorithm::SHA256, res.data);
         auto info = ValidPathInfo::makeFromCA(
-            *store,
+            store,
             name,
             FixedOutputInfo{
                 .method = FileIngestionMethod::Flat,
@@ -83,8 +86,10 @@ DownloadFileResult downloadFile(
             },
             hashString(HashAlgorithm::SHA256, sink.s));
         info.narSize = sink.s.size();
+        if (experimentalFeatureSettings.isEnabled(Xp::Provenance))
+            info.provenance = std::make_shared<FetchurlProvenance>(request.uri.to_string());
         auto source = StringSource{sink.s};
-        store->addToStore(info, source, NoRepair, NoCheckSigs);
+        store.addToStore(info, source, NoRepair, NoCheckSigs);
         storePath = std::move(info.path);
     }
 
@@ -93,7 +98,7 @@ DownloadFileResult downloadFile(
         key.second.insert_or_assign("url", url);
         assert(!res.urls.empty());
         infoAttrs.insert_or_assign("url", *res.urls.rbegin());
-        settings.getCache()->upsert(key, *store, infoAttrs, *storePath);
+        settings.getCache()->upsert(key, store, infoAttrs, *storePath);
     }
 
     return {
@@ -104,8 +109,12 @@ DownloadFileResult downloadFile(
     };
 }
 
-static DownloadTarballResult downloadTarball_(
-    const Settings & settings, const std::string & urlS, const Headers & headers, const std::string & displayPrefix)
+static std::optional<DownloadTarballResult> downloadTarball_(
+    const Settings & settings,
+    const std::string & urlS,
+    const Headers & headers,
+    const std::string & displayPrefix,
+    bool fastOnly)
 {
     ParsedURL url = parseURL(urlS);
 
@@ -113,16 +122,23 @@ static DownloadTarballResult downloadTarball_(
     // Namely lets catch when the url is a local file path, but
     // it is not in fact a tarball.
     if (url.scheme == "file") {
-        std::filesystem::path localPath = renderUrlPathEnsureLegal(url.path);
+        std::filesystem::path localPath = urlPathToPath(url.path);
+        if (!localPath.is_absolute()) {
+            throw Error(
+                "tarball '%s' must use an absolute path. "
+                "The 'file' scheme does not support relative paths.",
+                url);
+        }
         if (!exists(localPath)) {
-            throw Error("tarball '%s' does not exist.", localPath);
+            throw Error("tarball %s does not exist.", PathFmt(localPath));
         }
         if (is_directory(localPath)) {
             if (exists(localPath / ".git")) {
                 throw Error(
-                    "tarball '%s' is a git repository, not a tarball. Please use `git+file` as the scheme.", localPath);
+                    "tarball %s is a git repository, not a tarball. Please use `git+file` as the scheme.",
+                    PathFmt(localPath));
             }
-            throw Error("tarball '%s' is a directory, not a file.", localPath);
+            throw Error("tarball %s is a directory, not a file.", PathFmt(localPath));
         }
     }
 
@@ -136,7 +152,7 @@ static DownloadTarballResult downloadTarball_(
             .treeHash = treeHash,
             .lastModified = (time_t) getIntAttr(infoAttrs, "lastModified"),
             .immutableUrl = maybeGetStrAttr(infoAttrs, "immutableUrl"),
-            .accessor = settings.getTarballCache()->getAccessor(treeHash, false, displayPrefix),
+            .accessor = settings.getTarballCache()->getAccessor(treeHash, {}, displayPrefix),
         };
     };
 
@@ -147,6 +163,9 @@ static DownloadTarballResult downloadTarball_(
         /* We previously downloaded this tarball and it's younger than
            `tarballTtl`, so no need to check the server. */
         return attrsToResult(cached->value);
+
+    if (fastOnly)
+        return std::nullopt;
 
     auto _res = std::make_shared<Sync<FileTransferResult>>();
 
@@ -170,8 +189,9 @@ static DownloadTarballResult downloadTarball_(
            the entire file to disk so libarchive can access it
            in random-access mode. */
         auto [fdTemp, path] = createTempFile("nix-zipfile");
-        cleanupTemp.reset(path);
-        debug("downloading '%s' into '%s'...", url, path);
+        cleanupTemp.cancel();
+        cleanupTemp = {path};
+        debug("downloading '%s' into %s...", url, PathFmt(path));
         {
             FdSink sink(fdTemp.get());
             source->drainInto(sink);
@@ -214,7 +234,7 @@ static DownloadTarballResult downloadTarball_(
     return attrsToResult(infoAttrs);
 }
 
-ref<SourceAccessor> downloadTarball(ref<Store> store, const Settings & settings, const std::string & url)
+ref<SourceAccessor> downloadTarball(Store & store, const Settings & settings, const std::string & url)
 {
     /* Go through Input::getAccessor() to ensure that the resulting
        accessor has a fingerprint. */
@@ -278,7 +298,7 @@ struct CurlInputScheme : InputScheme
            HTTP request. Now that we've processed the Nix-specific
            attributes above, remove them so we don't also send them as
            part of the HTTP request. */
-        for (auto & param : allowedAttrs())
+        for (auto & [param, _] : allowedAttrs())
             url.query.erase(param);
 
         input.attrs.insert_or_assign("type", std::string{schemeName()});
@@ -286,18 +306,83 @@ struct CurlInputScheme : InputScheme
         return input;
     }
 
-    StringSet allowedAttrs() const override
+    static const std::map<std::string, AttributeInfo> & allowedAttrsImpl()
     {
-        return {
-            "type",
-            "url",
-            "narHash",
-            "name",
-            "unpack",
-            "rev",
-            "revCount",
-            "lastModified",
+        static const std::map<std::string, AttributeInfo> attrs = {
+            {
+                "url",
+                {
+                    .type = "String",
+                    .required = true,
+                    .doc = R"(
+                      Supported protocols:
+
+                      - `https`
+
+                        > **Example**
+                        >
+                        > ```nix
+                        > fetchTree {
+                        >   type = "file";
+                        >   url = "https://example.com/index.html";
+                        > }
+                        > ```
+
+                      - `http`
+
+                        Insecure HTTP transfer for legacy sources.
+
+                        > **Warning**
+                        >
+                        > HTTP performs no encryption or authentication.
+                        > Use a `narHash` known in advance to ensure the output has expected contents.
+
+                      - `file`
+
+                        A file on the local file system.
+
+                        > **Example**
+                        >
+                        > ```nix
+                        > fetchTree {
+                        >   type = "file";
+                        >   url = "file:///home/eelco/nix/README.md";
+                        > }
+                        > ```
+                    )",
+                },
+            },
+            {
+                "narHash",
+                {},
+            },
+            {
+                "name",
+                {},
+            },
+            {
+                "unpack",
+                {},
+            },
+            {
+                "rev",
+                {},
+            },
+            {
+                "revCount",
+                {},
+            },
+            {
+                "lastModified",
+                {},
+            },
         };
+        return attrs;
+    }
+
+    const std::map<std::string, AttributeInfo> & allowedAttrs() const override
+    {
+        return allowedAttrsImpl();
     }
 
     std::optional<Input> inputFromAttrs(const Settings & settings, const Attrs & attrs) const override
@@ -332,6 +417,14 @@ struct FileInputScheme : CurlInputScheme
         return "file";
     }
 
+    std::string schemeDescription() const override
+    {
+        return stripIndentation(R"(
+          Place a plain file into the Nix store.
+          This is similar to [`builtins.fetchurl`](@docroot@/language/builtins.md#builtins-fetchurl)
+        )");
+    }
+
     bool isValidURL(const ParsedURL & url, bool requireTree) const override
     {
         auto parsedUrlScheme = parseUrlScheme(url.scheme);
@@ -341,7 +434,7 @@ struct FileInputScheme : CurlInputScheme
     }
 
     std::pair<ref<SourceAccessor>, Input>
-    getAccessor(const Settings & settings, ref<Store> store, const Input & _input) const override
+    getAccessor(const Settings & settings, Store & store, const Input & _input) const override
     {
         auto input(_input);
 
@@ -351,10 +444,10 @@ struct FileInputScheme : CurlInputScheme
            tarballs. */
         auto file = downloadFile(store, settings, getStrAttr(input.attrs, "url"), input.getName());
 
-        auto narHash = store->queryPathInfo(file.storePath)->narHash;
+        auto narHash = store.queryPathInfo(file.storePath)->narHash;
         input.attrs.insert_or_assign("narHash", narHash.to_string(HashFormat::SRI, true));
 
-        auto accessor = ref{store->getFSAccessor(file.storePath)};
+        auto accessor = ref{store.getFSAccessor(file.storePath)};
 
         accessor->setPathDisplay("«" + input.to_string(true) + "»");
 
@@ -369,6 +462,34 @@ struct TarballInputScheme : CurlInputScheme
         return "tarball";
     }
 
+    std::string schemeDescription() const override
+    {
+        return stripIndentation(R"(
+          Download a tar archive and extract it into the Nix store.
+          This has the same underlying implementation as [`builtins.fetchTarball`](@docroot@/language/builtins.md#builtins-fetchTarball)
+        )");
+    }
+
+    const std::map<std::string, AttributeInfo> & allowedAttrs() const override
+    {
+        static const std::map<std::string, AttributeInfo> attrs = [] {
+            auto attrs = CurlInputScheme::allowedAttrsImpl();
+            // Override the "url" attribute to add tarball-specific example
+            attrs["url"].doc = R"(
+              > **Example**
+              >
+              > ```nix
+              > fetchTree {
+              >   type = "tarball";
+              >   url = "https://github.com/NixOS/nixpkgs/tarball/nixpkgs-23.11";
+              > }
+              > ```
+            )";
+            return attrs;
+        }();
+        return attrs;
+    }
+
     bool isValidURL(const ParsedURL & url, bool requireTree) const override
     {
         auto parsedUrlScheme = parseUrlScheme(url.scheme);
@@ -378,12 +499,16 @@ struct TarballInputScheme : CurlInputScheme
                                                : (requireTree || hasTarballExtension(url)));
     }
 
-    std::pair<ref<SourceAccessor>, Input>
-    getAccessor(const Settings & settings, ref<Store> store, const Input & _input) const override
+    std::optional<std::pair<ref<SourceAccessor>, Input>>
+    getAccessor(const Settings & settings, Store & store, const Input & _input, bool fastOnly) const override
     {
         auto input(_input);
 
-        auto result = downloadTarball_(settings, getStrAttr(input.attrs, "url"), {}, "«" + input.to_string(true) + "»");
+        auto res =
+            downloadTarball_(settings, getStrAttr(input.attrs, "url"), {}, "«" + input.to_string(true) + "»", fastOnly);
+        if (!res)
+            return std::nullopt;
+        auto & result = *res;
 
         if (result.immutableUrl) {
             auto immutableInput = Input::fromURL(settings, *result.immutableUrl);
@@ -401,15 +526,15 @@ struct TarballInputScheme : CurlInputScheme
             "narHash",
             settings.getTarballCache()->treeHashToNarHash(settings, result.treeHash).to_string(HashFormat::SRI, true));
 
-        return {result.accessor, input};
+        return {{result.accessor, input}};
     }
 
-    std::optional<std::string> getFingerprint(ref<Store> store, const Input & input) const override
+    std::optional<std::string> getFingerprint(Store & store, const Input & input) const override
     {
         if (auto narHash = input.getNarHash())
-            return narHash->to_string(HashFormat::SRI, true);
+            return "tarball:" + narHash->to_string(HashFormat::SRI, true);
         else if (auto rev = input.getRev())
-            return rev->gitRev();
+            return "tarball:" + rev->gitRev();
         else
             return std::nullopt;
     }

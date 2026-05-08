@@ -7,6 +7,8 @@ project(
     # TODO(Qyriad): increase the warning level
     'warning_level=1',
     'errorlogs=true', # Please print logs for tests that fail
+    'unity=on',
+    'unity_size=1024',
   ],
   meson_version : '>= 1.1',
   license : 'LGPL-2.1-or-later',
@@ -28,7 +30,7 @@ deps_public_maybe_subproject = [
 subdir('nix-meson-build-support/subprojects')
 subdir('nix-meson-build-support/big-objs')
 
-# Check for each of these functions, and create a define like `#define HAVE_LCHOWN 1`.
+# Check for each of these functions, and create a define like `#define HAVE_SYSCONF 1`.
 check_funcs = [
   'sysconf',
 ]
@@ -77,6 +79,17 @@ endif
 # Used in public header. Affects ABI!
 configdata_pub.set('NIX_USE_BOEHMGC', bdw_gc.found().to_int())
 
+link_args = []
+
+wasmtime_required = get_option('wasm').disable_if(
+  get_option('default_library') == 'static',
+  error_message : 'Building with wasmtime and static linking is not supported',
+)
+
+if wasmtime_required.enabled()
+  link_args += '-lwasmtime'
+endif
+
 toml11 = dependency(
   'toml11',
   version : '>=3.7.0',
@@ -97,7 +110,6 @@ config_priv_h = configure_file(
 )
 
 subdir('nix-meson-build-support/common')
-subdir('nix-meson-build-support/asan-options')
 
 parser_tab = custom_target(
   input : 'parser.y',
@@ -154,6 +166,7 @@ endforeach
 sources = files(
   'attr-path.cc',
   'attr-set.cc',
+  'diagnose.cc',
   'eval-cache.cc',
   'eval-error.cc',
   'eval-gc.cc',
@@ -164,13 +177,13 @@ sources = files(
   'function-trace.cc',
   'get-drvs.cc',
   'json-to-value.cc',
-  'lexer-helpers.cc',
   'nixexpr.cc',
   'parallel-eval.cc',
   'paths.cc',
   'primops.cc',
   'print-ambiguous.cc',
   'print.cc',
+  'provenance.cc',
   'search-path.cc',
   'symbol-table.cc',
   'value-to-json.cc',
@@ -186,18 +199,65 @@ subdir('primops')
 subdir('nix-meson-build-support/export-all-symbols')
 subdir('nix-meson-build-support/windows-version')
 
+# Turns out that Bison/Flex are particularly sensitive to compilers
+# failing to inline functions. For that reason we crank up the inlining
+# threshold manually for optimized builds. Yes, this can be considered 'ricing'
+# the compiler, but it does pay off.
+#
+# NOTE: missed inlining can be spotted (for Clang) using -Rpass-missed=inline
+# and -fdump-ipa-inline-missed (for GCC).
+parser_library_cpp_args = []
+
+if not get_option('debug')
+  if cxx.get_id() == 'clang'
+    # The default as of LLVM 21 is 225:
+    # llc --help-hidden | grep inline-threshold
+    parser_library_cpp_args += [
+      '-mllvm',
+      '-inline-threshold=5000',
+    ]
+  elif cxx.get_id() == 'gcc'
+    parser_library_cpp_args += [
+      '--param=max-inline-insns-single=1000',
+      '--param=max-inline-insns-auto=1000',
+      '--param=inline-unit-growth=400',
+    ]
+  endif
+endif
+
+# Working around https://github.com/mesonbuild/meson/issues/1367.
+parser_library = static_library(
+  'nixexpr-parser',
+  parser_tab,
+  lexer_tab,
+  files('lexer-helpers.cc'),
+  cpp_args : parser_library_cpp_args,
+  dependencies : deps_public + deps_private + deps_other,
+  include_directories : include_dirs,
+  # 1. Stdlib and regular assertions regress parser performance significantly, so build without
+  # them for this one library when building in a release configuration.
+  # 2. Disable LTO for GCC because then inlining flags won't apply, since LTO in GCC is done
+  # by plonking down GIMPLE in the archive.
+  override_options : [
+    'b_ndebug=@0@'.format(not get_option('debug')),
+    'b_lto=@0@'.format(get_option('b_lto') and cxx.get_id() != 'gcc'),
+    'unity=off',
+  ],
+)
+
 this_library = library(
   'nixexpr',
   sources,
   config_priv_h,
-  parser_tab,
-  lexer_tab,
+  parser_tab[1],
+  lexer_tab[1],
   generated_headers,
   soversion : nix_soversion,
   dependencies : deps_public + deps_private + deps_other,
   include_directories : include_dirs,
-  link_args : linker_export_flags,
-  prelink : true, # For C++ static initializers
+  link_args : linker_export_flags + link_args,
+  link_whole : [ parser_library ],
+  prelink : prelink, # For C++ static initializers
   install : true,
   cpp_pch : do_pch ? [ 'pch/precompiled-headers.hh' ] : [],
 )

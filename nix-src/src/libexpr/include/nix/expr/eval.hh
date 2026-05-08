@@ -52,11 +52,12 @@ enum RepairFlag : bool;
 struct MemorySourceAccessor;
 struct MountedSourceAccessor;
 struct AsyncPathWriter;
+struct Provenance;
+struct Executor;
 
 namespace eval_cache {
 class EvalCache;
 }
-struct Executor;
 
 /**
  * Increments a count on construction and decrements on destruction.
@@ -110,7 +111,7 @@ struct PrimOp
     /**
      * Optional free-form documentation about the primop.
      */
-    const char * doc = nullptr;
+    std::optional<std::string> doc;
 
     /**
      * Add a trace item, while calling the `<name>` builtin.
@@ -122,7 +123,7 @@ struct PrimOp
     /**
      * Implementation of the primop.
      */
-    std::function<PrimOpFun> fun;
+    fun<PrimOpFun> impl;
 
     /**
      * Optional experimental for this to be gated on.
@@ -227,7 +228,7 @@ struct StaticEvalSymbols
         line, column, functor, toString, right, wrong, structuredAttrs, json, allowedReferences, allowedRequisites,
         disallowedReferences, disallowedRequisites, maxSize, maxClosureSize, builder, args, contentAddressed, impure,
         outputHash, outputHashAlgo, outputHashMode, recurseForDerivations, description, self, epsilon, startSet,
-        operator_, key, path, prefix, outputSpecified;
+        operator_, key, path, prefix, outputSpecified, __meta;
 
     Expr::AstSymbols exprSymbols;
 
@@ -280,6 +281,7 @@ struct StaticEvalSymbols
             .path = alloc.create("path"),
             .prefix = alloc.create("prefix"),
             .outputSpecified = alloc.create("outputSpecified"),
+            .__meta = alloc.create("__meta"),
             .exprSymbols = {
                 .sub = alloc.create("__sub"),
                 .lessThan = alloc.create("__lessThan"),
@@ -307,18 +309,6 @@ struct StaticEvalSymbols
 
 class EvalMemory
 {
-#if NIX_USE_BOEHMGC
-    /**
-     * Allocation cache for GC'd Value objects.
-     */
-    std::shared_ptr<void *> valueAllocCache;
-
-    /**
-     * Allocation cache for size-1 Env objects.
-     */
-    std::shared_ptr<void *> env1AllocCache;
-#endif
-
 public:
     struct Statistics
     {
@@ -337,6 +327,7 @@ public:
     EvalMemory & operator=(const EvalMemory &) = delete;
     EvalMemory & operator=(EvalMemory &&) = delete;
 
+    inline void * allocBytes(size_t n);
     inline Value * allocValue();
     inline Env & allocEnv(size_t size);
 
@@ -350,7 +341,7 @@ public:
     ListBuilder buildList(size_t size)
     {
         stats.nrListElems += size;
-        return ListBuilder(size);
+        return ListBuilder(*this, size);
     }
 
     const Statistics & getStats() const &
@@ -476,18 +467,18 @@ private:
 
     /* Cache for calls to addToStore(); maps source paths to the store
        paths. */
-    ref<boost::concurrent_flat_map<SourcePath, StorePath>> srcToStore;
+    const ref<boost::concurrent_flat_map<SourcePath, StorePath>> srcToStore;
 
     /**
      * A cache that maps paths to "resolved" paths for importing Nix
      * expressions, i.e. `/foo` to `/foo/default.nix`.
      */
-    ref<boost::concurrent_flat_map<SourcePath, SourcePath>> importResolutionCache;
+    const ref<boost::concurrent_flat_map<SourcePath, SourcePath>> importResolutionCache;
 
     /**
      * A cache from resolved paths to values.
      */
-    ref<boost::concurrent_flat_map<
+    const ref<boost::concurrent_flat_map<
         SourcePath,
         Value *,
         std::hash<SourcePath>,
@@ -499,23 +490,29 @@ private:
      * Associate source positions of certain AST nodes with their preceding doc comment, if they have one.
      * Grouped by file.
      */
-    SharedSync<boost::unordered_flat_map<SourcePath, ref<DocCommentMap>>> positionToDocComment;
+    const ref<boost::concurrent_flat_map<SourcePath, ref<DocCommentMap>>> positionToDocComment;
 
     LookupPath lookupPath;
 
-    // FIXME: make thread-safe.
-    boost::unordered_flat_map<std::string, std::optional<SourcePath>, StringViewHash, std::equal_to<>>
+    const ref<boost::concurrent_flat_map<std::string, std::optional<SourcePath>, StringViewHash, std::equal_to<>>>
         lookupPathResolved;
 
     /**
      * Cache used by prim_match().
      */
-    ref<RegexCache> regexCache;
+    const ref<RegexCache> regexCache;
 
 public:
 
+    /**
+     * @param lookupPath     Only used during construction.
+     * @param store          The store to use for instantiation
+     * @param fetchSettings  Must outlive the lifetime of this EvalState!
+     * @param settings       Must outlive the lifetime of this EvalState!
+     * @param buildStore     The store to use for builds ("import from derivation", C API `nix_string_realise`)
+     */
     EvalState(
-        const LookupPath & _lookupPath,
+        const LookupPath & lookupPath,
         ref<Store> store,
         const fetchers::Settings & fetchSettings,
         const EvalSettings & settings,
@@ -545,7 +542,7 @@ public:
     /**
      * Variant which accepts relative paths too.
      */
-    SourcePath rootPath(PathView path);
+    SourcePath rootPath(std::string_view path);
 
     /**
      * Return a `SourcePath` that refers to `path` in the store.
@@ -562,7 +559,7 @@ public:
      * Only for restrict eval: pure eval just whitelist store paths,
      * never arbitrary paths.
      */
-    void allowPathLegacy(const Path & path);
+    void allowPathLegacy(const std::string & path);
 
     /**
      * Allow access to a store path. Note that this gets remapped to
@@ -596,13 +593,26 @@ public:
      * Parse a Nix expression from the specified file.
      */
     Expr * parseExprFromFile(const SourcePath & path);
-    Expr * parseExprFromFile(const SourcePath & path, std::shared_ptr<StaticEnv> & staticEnv);
+    Expr * parseExprFromFile(const SourcePath & path, const std::shared_ptr<StaticEnv> & staticEnv);
 
     /**
      * Parse a Nix expression from the specified string.
      */
-    Expr * parseExprFromString(std::string s, const SourcePath & basePath, std::shared_ptr<StaticEnv> & staticEnv);
+    Expr *
+    parseExprFromString(std::string s, const SourcePath & basePath, const std::shared_ptr<StaticEnv> & staticEnv);
     Expr * parseExprFromString(std::string s, const SourcePath & basePath);
+
+    /**
+     * Parse REPL bindings from the specified string.
+     * Returns ExprAttrs with bindings to add to scope.
+     */
+    ExprAttrs *
+    parseReplBindings(std::string s, const SourcePath & basePath, const std::shared_ptr<StaticEnv> & staticEnv);
+    ExprAttrs * parseReplBindings(
+        std::string s,
+        std::string errorSource,
+        const SourcePath & basePath,
+        const std::shared_ptr<StaticEnv> & staticEnv);
 
     Expr * parseStdin();
 
@@ -657,6 +667,8 @@ public:
     }
 
     void tryFixupBlackHolePos(Value & v, PosIdx pos);
+
+public:
 
     /**
      * Force a value, then recursively force list elements and
@@ -791,7 +803,7 @@ public:
 
 #if NIX_USE_BOEHMGC
     /** A GC root for the baseEnv reference. */
-    std::shared_ptr<Env *> baseEnvP;
+    const std::shared_ptr<Env *> baseEnvP;
 #endif
 
 public:
@@ -805,7 +817,7 @@ public:
     /**
      * The same, but used during parsing to resolve variables.
      */
-    std::shared_ptr<StaticEnv> staticBaseEnv; // !!! should be private
+    const std::shared_ptr<StaticEnv> staticBaseEnv; // !!! should be private
 
     /**
      * Internal primops not exposed to the user.
@@ -887,7 +899,14 @@ private:
         size_t length,
         Pos::Origin origin,
         const SourcePath & basePath,
-        std::shared_ptr<StaticEnv> & staticEnv);
+        const std::shared_ptr<StaticEnv> & staticEnv);
+
+    ExprAttrs * parseReplBindings(
+        char * text,
+        size_t length,
+        Pos::Origin origin,
+        const SourcePath & basePath,
+        const std::shared_ptr<StaticEnv> & staticEnv);
 
     /**
      * Current Nix call stack depth, used with `max-call-depth`
@@ -1026,6 +1045,12 @@ public:
     realiseContext(const NixStringContext & context, StorePathSet * maybePaths = nullptr, bool isIFD = true);
 
     /**
+     * Coerce `v` to a path and realise it, i.e. build anything in the value's string context using `realiseContext()`.
+     */
+    SourcePath realisePath(
+        const PosIdx pos, Value & v, std::optional<SymlinkResolution> resolveSymlinks = SymlinkResolution::Full);
+
+    /**
      * Realise the given string with context, and return the string with outputs instead of downstream output
      * placeholders.
      * @param[in] str the string to realise
@@ -1113,6 +1138,45 @@ private:
     friend class ListBuilder;
 
 public:
+
+    /**
+     * Per-thread evaluation context. This context is propagated to worker threads when a value is evaluated
+     * asynchronously.
+     */
+    struct EvalContext
+    {
+        std::shared_ptr<const Provenance> provenance;
+    };
+
+    thread_local static EvalContext evalContext;
+
+    /**
+     * Create a work item that propagates the current evaluation context.
+     */
+    template<typename T>
+    auto makeWork(T && t)
+    {
+        return [this, t{std::move(t)}, evalContext(evalContext)]() {
+            this->evalContext = evalContext;
+            t();
+        };
+    }
+
+    /**
+     * Add a work item to the given work vector that propagates the current evaluation context.
+     */
+    template<typename WorkItems, typename T>
+    void addWork(WorkItems & work, uint8_t priority, T && t)
+    {
+        work.emplace_back(makeWork(std::move(t)), priority);
+    }
+
+    template<typename FuturesVector, typename T>
+    void spawn(FuturesVector & futures, uint8_t priority, T && t)
+    {
+        futures.spawn(priority, makeWork(std::move(t)));
+    }
+
     /**
      * Worker threads manager.
      *
@@ -1157,6 +1221,24 @@ SourcePath resolveExprPath(SourcePath path, bool addDefaultNix = true);
  * Whether a URI is allowed, assuming restrictEval is enabled
  */
 bool isAllowedURI(std::string_view uri, const Strings & allowedPaths);
+
+struct PushProvenance
+{
+    EvalState & state;
+    std::shared_ptr<const Provenance> prev;
+
+    PushProvenance(EvalState & state, std::shared_ptr<const Provenance> prov)
+        : state(state)
+    {
+        state.evalContext.provenance.swap(prev);
+        state.evalContext.provenance.swap(prov);
+    }
+
+    ~PushProvenance()
+    {
+        state.evalContext.provenance.swap(prev);
+    }
+};
 
 } // namespace nix
 

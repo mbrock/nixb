@@ -6,6 +6,7 @@
 #include "nix/store/path.hh"
 #include "nix/util/ref.hh"
 #include "nix/util/types.hh"
+#include "nix/util/url.hh"
 
 namespace nix {
 class Store;
@@ -25,9 +26,9 @@ struct DownloadFileResult
 };
 
 DownloadFileResult downloadFile(
-    ref<Store> store,
+    Store & store,
     const Settings & settings,
-    const std::string & url,
+    const VerbatimURL & url,
     const std::string & name,
     const Headers & headers = {});
 
@@ -43,6 +44,6 @@ struct DownloadTarballResult
  * Download and import a tarball into the Git cache. The result is the
  * Git tree hash of the root directory.
  */
-ref<SourceAccessor> downloadTarball(ref<Store> store, const Settings & settings, const std::string & url);
+ref<SourceAccessor> downloadTarball(Store & store, const Settings & settings, const std::string & url);
 
 } // namespace nix::fetchers

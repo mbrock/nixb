@@ -44,6 +44,10 @@ configdata.set(
   'HAVE_LOWDOWN_1_4',
   lowdown.version().version_compare('>= 1.4.0').to_int(),
 )
+configdata.set(
+  'HAVE_LOWDOWN_3',
+  lowdown.version().version_compare('>= 3.0.0').to_int(),
+)
 
 readline_flavor = get_option('readline-flavor')
 if readline_flavor == 'editline'
@@ -67,7 +71,7 @@ config_priv_h = configure_file(
 )
 
 subdir('nix-meson-build-support/common')
-subdir('nix-meson-build-support/asan-options')
+subdir('nix-meson-build-support/generate-header')
 
 sources = files(
   'built-path.cc',
@@ -75,6 +79,8 @@ sources = files(
   'command.cc',
   'common-eval-args.cc',
   'editor-for.cc',
+  'flake-schemas.cc',
+  'get-build-log.cc',
   'installable-attr-path.cc',
   'installable-derived-path.cc',
   'installable-flake.cc',
@@ -86,6 +92,17 @@ sources = files(
   'repl-interacter.cc',
   'repl.cc',
 )
+
+if host_machine.system() != 'windows'
+  sources += files(
+    'unix/unix-socket-server.cc',
+  )
+endif
+
+sources += [
+  gen_header.process('call-flake-schemas.nix'),
+  gen_header.process('builtin-flake-schemas.nix'),
+]
 
 subdir('include/nix/cmd')
 
@@ -100,7 +117,7 @@ this_library = library(
   dependencies : deps_public + deps_private + deps_other,
   include_directories : include_dirs,
   link_args : linker_export_flags,
-  prelink : true, # For C++ static initializers
+  prelink : prelink, # For C++ static initializers
   install : true,
   cpp_pch : do_pch ? [ 'pch/precompiled-headers.hh' ] : [],
 )

@@ -5,6 +5,7 @@
 #include "nix/util/configuration.hh"
 #include "nix/util/file-descriptor.hh"
 #include "nix/util/finally.hh"
+#include "nix/util/fun.hh"
 
 #include <filesystem>
 
@@ -56,9 +57,9 @@ struct LoggerSettings : Config
           expression evaluation errors.
         )"};
 
-    Setting<Path> jsonLogPath{
+    Setting<std::optional<AbsolutePath>> jsonLogPath{
         this,
-        "",
+        {},
         "json-log-path",
         R"(
           A file or Unix domain socket to which JSON records of Nix's log output are
@@ -66,6 +67,15 @@ struct LoggerSettings : Config
           (without the `@nix ` prefixes on each line).
           Concurrent writes to the same file by multiple Nix processes are not supported and
           may result in interleaved or corrupted log records.
+        )"};
+
+    Setting<std::string> sessionId{
+        this,
+        "",
+        "session-id",
+        R"(
+          An identifier for the current Nix session, which is included in JSON log output to
+          allow grouping of log messages from the same session. This defaults to a random UUID.
         )"};
 };
 
@@ -115,7 +125,7 @@ public:
      */
     struct Suspension
     {
-        Finally<std::function<void()>> _finalize;
+        Finally<fun<void()>> _finalize;
     };
 
     Suspension suspend();

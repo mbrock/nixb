@@ -14,21 +14,21 @@ struct LegacySSHStoreConfig : std::enable_shared_from_this<LegacySSHStoreConfig>
 {
     using CommonSSHStoreConfig::CommonSSHStoreConfig;
 
-    LegacySSHStoreConfig(std::string_view scheme, std::string_view authority, const Params & params);
+    LegacySSHStoreConfig(const ParsedURL::Authority & authority, const Params & params);
 
 #ifndef _WIN32
     // Hack for getting remote build log output.
     // Intentionally not in `LegacySSHStoreConfig` so that it doesn't appear in
     // the documentation
-    const Setting<int> logFD{this, INVALID_DESCRIPTOR, "log-fd", "file descriptor to which SSH's stderr is connected"};
+    Setting<int> logFD{this, INVALID_DESCRIPTOR, "log-fd", "file descriptor to which SSH's stderr is connected"};
 #else
     Descriptor logFD = INVALID_DESCRIPTOR;
 #endif
 
-    const Setting<Strings> remoteProgram{
+    Setting<Strings> remoteProgram{
         this, {"nix-store"}, "remote-program", "Path to the `nix-store` executable on the remote machine."};
 
-    const Setting<int> maxConnections{this, 1, "max-connections", "Maximum number of concurrent SSH connections."};
+    Setting<int> maxConnections{this, 1, "max-connections", "Maximum number of concurrent SSH connections."};
 
     /**
      * Hack for hydra
@@ -73,6 +73,11 @@ struct LegacySSHStore : public virtual Store
 
     ref<Connection> openConnection();
 
+    bool includeInProvenance() override
+    {
+        return true;
+    }
+
     void queryPathInfoUncached(
         const StorePath & path, Callback<std::shared_ptr<const ValidPathInfo>> callback) noexcept override;
 
@@ -90,7 +95,7 @@ struct LegacySSHStore : public virtual Store
      *
      * This is exposed for sake of Hydra.
      */
-    void narFromPath(const StorePath & path, std::function<void(Source &)> fun);
+    void narFromPath(const StorePath & path, fun<void(Source &)> receiveNar);
 
     std::optional<StorePath> queryPathFromHashPart(const std::string & hashPart) override
     {
@@ -112,11 +117,12 @@ struct LegacySSHStore : public virtual Store
     StorePath addToStoreFromDump(
         Source & dump,
         std::string_view name,
-        FileSerialisationMethod dumpMethod = FileSerialisationMethod::NixArchive,
-        ContentAddressMethod hashMethod = FileIngestionMethod::NixArchive,
-        HashAlgorithm hashAlgo = HashAlgorithm::SHA256,
-        const StorePathSet & references = StorePathSet(),
-        RepairFlag repair = NoRepair) override
+        FileSerialisationMethod dumpMethod,
+        ContentAddressMethod hashMethod,
+        HashAlgorithm hashAlgo,
+        const StorePathSet & references,
+        RepairFlag repair,
+        std::shared_ptr<const Provenance> provenance) override
     {
         unsupported("addToStore");
     }
@@ -136,7 +142,7 @@ public:
      *
      * @todo Use C++23 `std::move_only_function`.
      */
-    std::function<BuildResult()> buildDerivationAsync(
+    fun<BuildResult()> buildDerivationAsync(
         const StorePath & drvPath, const BasicDerivation & drv, const ServeProto::BuildOptions & options);
 
     void buildPaths(
@@ -208,11 +214,17 @@ public:
      */
     std::optional<TrustedFlag> isTrustedClient() override;
 
-    void
-    queryRealisationUncached(const DrvOutput &, Callback<std::shared_ptr<const Realisation>> callback) noexcept override
+    void queryRealisationUncached(
+        const DrvOutput &, Callback<std::shared_ptr<const UnkeyedRealisation>> callback) noexcept override
     // TODO: Implement
     {
         unsupported("queryRealisation");
+    }
+
+    StorePathSet querySubstitutablePaths(const StorePathSet & paths) override
+    {
+        // not supported
+        return {};
     }
 };
 

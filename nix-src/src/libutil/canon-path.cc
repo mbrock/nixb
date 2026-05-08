@@ -3,16 +3,43 @@
 #include "nix/util/file-path-impl.hh"
 #include "nix/util/strings-inline.hh"
 
+#include <cstring>
+
 namespace nix {
 
-CanonPath CanonPath::root = CanonPath("/");
+const CanonPath CanonPath::root = CanonPath("/");
 
 static std::string absPathPure(std::string_view path)
 {
     return canonPathInner<UnixPathTrait>(path, [](auto &, auto &) {});
 }
 
+static void ensureNoNullBytes(std::string_view s)
+{
+    if (std::memchr(s.data(), '\0', s.size())) [[unlikely]] {
+        using namespace std::string_view_literals;
+        auto str = replaceStrings(std::string(s), "\0"sv, "␀"sv);
+        throw BadCanonPath("path segment '%s' must not contain null (\\0) bytes", str);
+    }
+}
+
+CanonPath CanonPath::fromFilename(std::string_view segment)
+{
+    auto res = CanonPath(segment);
+    /* Use existing canonicalisation logic for CanonPath to check that the segment
+       is already a valid filename. */
+    if (segment != res.rel() || std::ranges::distance(res) != 1)
+        throw BadCanonPath("invalid filename '%s'", segment);
+    return res;
+}
+
 CanonPath::CanonPath(std::string_view raw)
+    : path(absPathPure(concatStrings("/", raw)))
+{
+    ensureNoNullBytes(raw);
+}
+
+CanonPath::CanonPath(const char * raw)
     : path(absPathPure(concatStrings("/", raw)))
 {
 }
@@ -20,6 +47,7 @@ CanonPath::CanonPath(std::string_view raw)
 CanonPath::CanonPath(std::string_view raw, const CanonPath & root)
     : path(absPathPure(raw.size() > 0 && raw[0] == '/' ? raw : concatStrings(root.abs(), "/", raw)))
 {
+    ensureNoNullBytes(raw);
 }
 
 CanonPath::CanonPath(const std::vector<std::string> & elems)
@@ -80,6 +108,7 @@ void CanonPath::push(std::string_view c)
 {
     assert(c.find('/') == c.npos);
     assert(c != "." && c != "..");
+    ensureNoNullBytes(c);
     if (!isRoot())
         path += '/';
     path += c;

@@ -1,13 +1,14 @@
 #include "nix/cmd/command.hh"
 #include "nix/store/store-api.hh"
 #include "nix/util/archive.hh"
+#include "nix/util/terminal.hh"
 
 using namespace nix;
 
 static FdSink getNarSink()
 {
     auto fd = getStandardOutput();
-    if (isatty(fd))
+    if (isTTY(fd))
         throw UsageError("refusing to write NAR to a terminal");
     return FdSink(std::move(fd));
 }
@@ -38,7 +39,7 @@ static auto rDumpPath = registerCommand2<CmdDumpPath>({"store", "dump-path"});
 
 struct CmdDumpPath2 : Command
 {
-    Path path;
+    std::filesystem::path path;
 
     CmdDumpPath2()
     {
@@ -60,7 +61,7 @@ struct CmdDumpPath2 : Command
     void run() override
     {
         auto sink = getNarSink();
-        dumpPath(path, sink);
+        dumpPath(path.string(), sink);
         sink.flush();
     }
 };

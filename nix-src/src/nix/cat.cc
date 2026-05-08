@@ -1,6 +1,11 @@
 #include "nix/cmd/command.hh"
 #include "nix/store/store-api.hh"
-#include "nix/store/nar-accessor.hh"
+#include "nix/util/archive.hh"
+#include "nix/util/nar-accessor.hh"
+#include "nix/util/serialise.hh"
+#include "nix/util/source-accessor.hh"
+
+#include <nlohmann/json.hpp>
 
 using namespace nix;
 
@@ -13,7 +18,9 @@ struct MixCat : virtual Args
             throw Error("path '%1%' is not a regular file", path.abs());
         logger->stop();
 
-        writeFull(getStandardOutput(), accessor->readFile(path));
+        FdSink output{getStandardOutput()};
+        accessor->readFile(path, output);
+        output.flush();
     }
 };
 
@@ -41,16 +48,13 @@ struct CmdCatStore : StoreCommand, MixCat
     void run(ref<Store> store) override
     {
         auto [storePath, rest] = store->toStorePath(path);
-        auto accessor = store->getFSAccessor(storePath);
-        if (!accessor)
-            throw InvalidPath("path '%1%' is not a valid store path", store->printStorePath(storePath));
-        cat(ref{std::move(accessor)}, CanonPath{rest});
+        cat(store->requireStoreObjectAccessor(storePath), rest);
     }
 };
 
 struct CmdCatNar : StoreCommand, MixCat
 {
-    Path narPath;
+    std::filesystem::path narPath;
 
     std::string path;
 
@@ -74,7 +78,44 @@ struct CmdCatNar : StoreCommand, MixCat
 
     void run(ref<Store> store) override
     {
-        cat(makeNarAccessor(readFile(narPath)), CanonPath{path});
+        auto fd = openFileReadonly(narPath);
+        if (!fd)
+            throw NativeSysError("opening NAR file %s", PathFmt(narPath));
+        auto source = FdSource{fd.get()};
+
+        struct CatRegularFileSink : NullFileSystemObjectSink
+        {
+            CanonPath neededPath = CanonPath::root;
+            bool found = false;
+
+            void createRegularFile(const CanonPath & path, fun<void(CreateRegularFileSink &)> crf) override
+            {
+                struct : CreateRegularFileSink, FdSink
+                {
+                    void isExecutable() override {}
+                } crfSink;
+
+                crfSink.fd = INVALID_DESCRIPTOR;
+
+                if (path == neededPath) {
+                    logger->stop();
+                    crfSink.skipContents = false;
+                    crfSink.fd = getStandardOutput();
+                    found = true;
+                } else {
+                    crfSink.skipContents = true;
+                }
+
+                crf(crfSink);
+            }
+        } sink;
+
+        sink.neededPath = CanonPath(path);
+        /* NOTE: We still parse the whole file to validate that it's a correct NAR. */
+        parseDump(sink, source);
+
+        if (!sink.found)
+            throw Error("NAR does not contain regular file '%1%'", path);
     }
 };
 

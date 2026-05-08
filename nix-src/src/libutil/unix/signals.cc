@@ -1,6 +1,7 @@
 #include "nix/util/signals.hh"
 #include "nix/util/util.hh"
 #include "nix/util/error.hh"
+#include "nix/util/fun.hh"
 #include "nix/util/sync.hh"
 #include "nix/util/terminal.hh"
 
@@ -12,24 +13,14 @@ using namespace unix;
 
 std::atomic<bool> unix::_isInterrupted = false;
 
-namespace unix {
-static thread_local bool interruptThrown = false;
-}
-
 thread_local std::function<bool()> unix::interruptCheck;
-
-void setInterruptThrown()
-{
-    unix::interruptThrown = true;
-}
 
 void unix::_interrupted()
 {
     /* Block user interrupts while an exception is being handled.
        Throwing an exception while another exception is being handled
        kills the program! */
-    if (!interruptThrown && !std::uncaught_exceptions()) {
-        interruptThrown = true;
+    if (!std::uncaught_exceptions()) {
         throw Interrupted("interrupted by the user");
     }
 }
@@ -49,10 +40,12 @@ struct InterruptCallbacks
     Token nextToken = 0;
 
     /* Used as a list, see InterruptCallbacks comment. */
-    std::map<Token, std::function<void()>> callbacks;
+    std::map<Token, fun<void()>> callbacks;
 };
 
-static Sync<InterruptCallbacks> _interruptCallbacks;
+// Note: this object intentionally leaks to ensure that it's not deleted while the detached signal handler thread is
+// running.
+static auto _interruptCallbacks = new Sync<InterruptCallbacks>;
 
 static void signalHandlerThread(sigset_t set)
 {
@@ -78,7 +71,7 @@ void unix::triggerInterrupt()
         while (true) {
             std::function<void()> callback;
             {
-                auto interruptCallbacks(_interruptCallbacks.lock());
+                auto interruptCallbacks(_interruptCallbacks->lock());
                 auto lb = interruptCallbacks->callbacks.lower_bound(i);
                 if (lb == interruptCallbacks->callbacks.end())
                     break;
@@ -151,23 +144,29 @@ struct InterruptCallbackImpl : InterruptCallback
 {
     InterruptCallbacks::Token token;
 
+    InterruptCallbackImpl(InterruptCallbacks::Token token)
+        : token(token)
+    {
+    }
+
+    InterruptCallbackImpl(InterruptCallbackImpl &&) = delete;
+    InterruptCallbackImpl(const InterruptCallbackImpl &) = delete;
+    InterruptCallbackImpl & operator=(InterruptCallbackImpl &&) = delete;
+    InterruptCallbackImpl & operator=(const InterruptCallbackImpl &) = delete;
+
     ~InterruptCallbackImpl() override
     {
-        auto interruptCallbacks(_interruptCallbacks.lock());
+        auto interruptCallbacks(_interruptCallbacks->lock());
         interruptCallbacks->callbacks.erase(token);
     }
 };
 
-std::unique_ptr<InterruptCallback> createInterruptCallback(std::function<void()> callback)
+std::unique_ptr<InterruptCallback> createInterruptCallback(fun<void()> callback)
 {
-    auto interruptCallbacks(_interruptCallbacks.lock());
+    auto interruptCallbacks(_interruptCallbacks->lock());
     auto token = interruptCallbacks->nextToken++;
     interruptCallbacks->callbacks.emplace(token, callback);
-
-    std::unique_ptr<InterruptCallbackImpl> res{new InterruptCallbackImpl{}};
-    res->token = token;
-
-    return std::unique_ptr<InterruptCallback>(res.release());
+    return std::make_unique<InterruptCallbackImpl>(token);
 }
 
 } // namespace nix

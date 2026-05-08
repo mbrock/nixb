@@ -16,24 +16,10 @@ in
 scope: {
   inherit stdenv;
 
-  aws-sdk-cpp =
-    (pkgs.aws-sdk-cpp.override {
-      apis = [
-        "identity-management"
-        "s3"
-        "transfer"
-      ];
-      customMemoryManagement = false;
-    }).overrideAttrs
-      {
-        # only a stripped down version is built, which takes a lot less resources
-        # to build, so we don't need a "big-parallel" machine.
-        requiredSystemFeatures = [ ];
-      };
-
   boehmgc =
     (pkgs.boehmgc.override {
       enableLargeConfig = true;
+      inherit stdenv;
     }).overrideAttrs
       (attrs: {
         # Increase the initial mark stack size to avoid stack
@@ -42,35 +28,98 @@ scope: {
         # small, run Nix with GC_PRINT_STATS=1 and look for messages
         # such as `Mark stack overflow`, `No room to copy back mark
         # stack`, and `Grew mark stack to ... frames`.
-        NIX_CFLAGS_COMPILE = "-DINITIAL_MARK_STACK_SIZE=1048576";
+        NIX_CFLAGS_COMPILE = [
+          "-DINITIAL_MARK_STACK_SIZE=1048576"
+        ]
+        # For some reason that is not clear, it is wanting to use libgcc_eh which is not available.
+        # Force this to be built with compiler-rt & libunwind over libgcc_eh works.
+        # Issue: https://github.com/NixOS/nixpkgs/issues/177129
+        ++
+          lib.optionals
+            (
+              stdenv.cc.isClang
+              && stdenv.hostPlatform.isStatic
+              && stdenv.cc.libcxx != null
+              && stdenv.cc.libcxx.isLLVM
+            )
+            [
+              "-rtlib=compiler-rt"
+              "-unwindlib=libunwind"
+            ];
+
+        buildInputs =
+          (attrs.buildInputs or [ ])
+          ++ lib.optional (
+            stdenv.cc.isClang
+            && stdenv.hostPlatform.isStatic
+            && stdenv.cc.libcxx != null
+            && stdenv.cc.libcxx.isLLVM
+          ) pkgs.llvmPackages.libunwind;
       });
 
-  lowdown = pkgs.lowdown.overrideAttrs (prevAttrs: rec {
-    version = "2.0.2";
-    src = pkgs.fetchurl {
-      url = "https://kristaps.bsd.lv/lowdown/snapshots/lowdown-${version}.tar.gz";
-      hash = "sha512-cfzhuF4EnGmLJf5EGSIbWqJItY3npbRSALm+GarZ7SMU7Hr1xw0gtBFMpOdi5PBar4TgtvbnG4oRPh+COINGlA==";
-    };
-    nativeBuildInputs = prevAttrs.nativeBuildInputs ++ [ pkgs.buildPackages.bmake ];
-    postInstall =
-      lib.replaceStrings [ "lowdown.so.1" "lowdown.1.dylib" ] [ "lowdown.so.2" "lowdown.2.dylib" ]
-        prevAttrs.postInstall;
-  });
-
-  # TODO: Remove this when https://github.com/NixOS/nixpkgs/pull/442682 is included in a stable release
-  toml11 =
-    if lib.versionAtLeast pkgs.toml11.version "4.4.0" then
-      pkgs.toml11
+  lowdown =
+    if lib.versionAtLeast pkgs.lowdown.version "2.0.2" then
+      pkgs.lowdown
     else
-      pkgs.toml11.overrideAttrs rec {
-        version = "4.4.0";
-        src = pkgs.fetchFromGitHub {
-          owner = "ToruNiina";
-          repo = "toml11";
-          tag = "v${version}";
-          hash = "sha256-sgWKYxNT22nw376ttGsTdg0AMzOwp8QH3E8mx0BZJTQ=";
+      pkgs.lowdown.overrideAttrs (prevAttrs: rec {
+        version = "2.0.2";
+        src = pkgs.fetchurl {
+          url = "https://kristaps.bsd.lv/lowdown/snapshots/lowdown-${version}.tar.gz";
+          hash = "sha512-cfzhuF4EnGmLJf5EGSIbWqJItY3npbRSALm+GarZ7SMU7Hr1xw0gtBFMpOdi5PBar4TgtvbnG4oRPh+COINGlA==";
         };
+        nativeBuildInputs = prevAttrs.nativeBuildInputs ++ [ pkgs.buildPackages.bmake ];
+        postInstall =
+          lib.replaceStrings [ "lowdown.so.1" "lowdown.1.dylib" ] [ "lowdown.so.2" "lowdown.2.dylib" ]
+            (prevAttrs.postInstall or "");
+      });
+
+  curl =
+    (pkgs.curl.override {
+      http3Support = !pkgs.stdenv.hostPlatform.isWindows;
+      # Make sure we enable all the dependencies for Content-Encoding/Transfer-Encoding decompression.
+      zstdSupport = true;
+      brotliSupport = true;
+      zlibSupport = true;
+      # libpsl uses a data file needed at runtime, not useful for nix.
+      pslSupport = !stdenv.hostPlatform.isStatic;
+      idnSupport = !stdenv.hostPlatform.isStatic;
+    }).overrideAttrs
+      {
+        # TODO: Fix in nixpkgs. Static build with brotli is marked as broken, but it's not the case.
+        # Remove once https://github.com/NixOS/nixpkgs/pull/494111 lands in the 25.11 channel.
+        meta.broken = false;
       };
+
+  libblake3 =
+    (pkgs.libblake3.override {
+      inherit stdenv;
+      # Nixpkgs disables tbb on static
+      useTBB = !(stdenv.hostPlatform.isWindows || stdenv.hostPlatform.isStatic);
+    })
+    # For some reason that is not clear, it is wanting to use libgcc_eh which is not available.
+    # Force this to be built with compiler-rt & libunwind over libgcc_eh works.
+    # Issue: https://github.com/NixOS/nixpkgs/issues/177129
+    .overrideAttrs
+      (
+        attrs:
+        lib.optionalAttrs
+          (
+            stdenv.cc.isClang
+            && stdenv.hostPlatform.isStatic
+            && stdenv.cc.libcxx != null
+            && stdenv.cc.libcxx.isLLVM
+          )
+          {
+            NIX_CFLAGS_COMPILE = [
+              "-rtlib=compiler-rt"
+              "-unwindlib=libunwind"
+            ];
+
+            buildInputs = [
+              pkgs.llvmPackages.libunwind
+            ];
+          }
+      );
 
   # TODO Hack until https://github.com/NixOS/nixpkgs/issues/45462 is fixed.
   boost =
@@ -84,6 +133,7 @@ scope: {
         "--with-thread"
       ];
       enableIcu = false;
+      inherit stdenv;
     }).overrideAttrs
       (old: {
         # Need to remove `--with-*` to use `--with-libraries=...`
@@ -91,37 +141,10 @@ scope: {
         installPhase = lib.replaceStrings [ "--without-python" ] [ "" ] old.installPhase;
       });
 
-  libgit2 =
-    if lib.versionAtLeast pkgs.libgit2.version "1.9.0" then
-      pkgs.libgit2
-    else
-      pkgs.libgit2.overrideAttrs (attrs: {
-        # libgit2: Nixpkgs 24.11 has < 1.9.0, which needs our patches
-        nativeBuildInputs =
-          attrs.nativeBuildInputs or [ ]
-          # gitMinimal does not build on Windows. See packbuilder patch.
-          ++ lib.optionals (!stdenv.hostPlatform.isWindows) [
-            # Needed for `git apply`; see `prePatch`
-            pkgs.buildPackages.gitMinimal
-          ];
-        # Only `git apply` can handle git binary patches
-        prePatch =
-          attrs.prePatch or ""
-          + lib.optionalString (!stdenv.hostPlatform.isWindows) ''
-            patch() {
-              git apply
-            }
-          '';
-        patches =
-          attrs.patches or [ ]
-          ++ [
-            ./patches/libgit2-mempack-thin-packfile.patch
-          ]
-          # gitMinimal does not build on Windows, but fortunately this patch only
-          # impacts interruptibility
-          ++ lib.optionals (!stdenv.hostPlatform.isWindows) [
-            # binary patch; see `prePatch`
-            ./patches/libgit2-packbuilder-callback-interruptible.patch
-          ];
-      });
+  wasmtime = pkgs.callPackage ./wasmtime.nix { };
+
+  sentry-native = (pkgs.callPackage ./sentry-native.nix { }).override {
+    # Avoid having two curls in our closure.
+    inherit (scope) curl;
+  };
 }

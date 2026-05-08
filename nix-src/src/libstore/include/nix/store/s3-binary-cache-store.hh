@@ -2,41 +2,31 @@
 ///@file
 
 #include "nix/store/config.hh"
-
-#if NIX_WITH_S3_SUPPORT
-
-#  include "nix/store/binary-cache-store.hh"
-
-#  include <atomic>
+#include "nix/store/http-binary-cache-store.hh"
+#include "nix/store/s3-url.hh"
 
 namespace nix {
 
-struct S3BinaryCacheStoreConfig : std::enable_shared_from_this<S3BinaryCacheStoreConfig>, virtual BinaryCacheStoreConfig
+struct S3BinaryCacheStoreConfig : HttpBinaryCacheStoreConfig
 {
-    std::string bucketName;
+    using HttpBinaryCacheStoreConfig::HttpBinaryCacheStoreConfig;
 
-    using BinaryCacheStoreConfig::BinaryCacheStoreConfig;
+    S3BinaryCacheStoreConfig(ParsedURL cacheUri, const Params & params);
 
-    S3BinaryCacheStoreConfig(std::string_view uriScheme, std::string_view bucketName, const Params & params);
+    S3BinaryCacheStoreConfig(std::string_view bucketName, const Params & params);
 
-    const Setting<std::string> profile{
+    Setting<std::string> profile{
         this,
-        "",
+        "default",
         "profile",
         R"(
           The name of the AWS configuration profile to use. By default
           Nix uses the `default` profile.
         )"};
 
-protected:
-
-    constexpr static const char * defaultRegion = "us-east-1";
-
-public:
-
-    const Setting<std::string> region{
+    Setting<std::string> region{
         this,
-        defaultRegion,
+        "us-east-1",
         "region",
         R"(
           The region of the S3 bucket. If your bucket is not in
@@ -44,9 +34,9 @@ public:
           parameter.
         )"};
 
-    const Setting<std::string> scheme{
+    Setting<std::string> scheme{
         this,
-        "",
+        "https",
         "scheme",
         R"(
           The scheme used for S3 requests, `https` (default) or `http`. This
@@ -59,79 +49,100 @@ public:
           > information.
         )"};
 
-    const Setting<std::string> endpoint{
+    Setting<std::string> endpoint{
         this,
         "",
         "endpoint",
         R"(
-          The URL of the endpoint of an S3-compatible service such as MinIO.
-          Do not specify this setting if you're using Amazon S3.
-
-          > **Note**
-          >
-          > This endpoint must support HTTPS and uses path-based
-          > addressing instead of virtual host based addressing.
+          The S3 endpoint to use. When empty (default), uses AWS S3 with
+          region-specific endpoints. For S3-compatible services such as
+          MinIO, set this to your service's endpoint.
         )"};
 
-    const Setting<std::string> narinfoCompression{
-        this, "", "narinfo-compression", "Compression method for `.narinfo` files."};
-
-    const Setting<std::string> lsCompression{this, "", "ls-compression", "Compression method for `.ls` files."};
-
-    const Setting<std::string> logCompression{
+    Setting<S3AddressingStyle> addressingStyle{
         this,
-        "",
-        "log-compression",
+        S3AddressingStyle::Auto,
+        "addressing-style",
         R"(
-          Compression method for `log/*` files. It is recommended to
-          use a compression method supported by most web browsers
-          (e.g. `brotli`).
+          The S3 addressing style to use. `auto` (default) uses
+          virtual-hosted-style for standard AWS endpoints and path-style
+          for custom endpoints; bucket names containing dots automatically
+          fall back to path-style to avoid TLS certificate errors. `path`
+          forces path-style addressing (deprecated by AWS). `virtual`
+          forces virtual-hosted-style addressing (bucket names must not
+          contain dots).
         )"};
 
-    const Setting<bool> multipartUpload{this, false, "multipart-upload", "Whether to use multi-part uploads."};
+    Setting<bool> multipartUpload{
+        this,
+        false,
+        "multipart-upload",
+        R"(
+          Whether to use multipart uploads for large files. When enabled,
+          files exceeding the multipart threshold will be uploaded in
+          multiple parts, which is required for files larger than 5 GiB and
+          can improve performance and reliability for large uploads.
+        )"};
 
-    const Setting<uint64_t> bufferSize{
-        this, 5 * 1024 * 1024, "buffer-size", "Size (in bytes) of each part in multi-part uploads."};
+    Setting<uint64_t> multipartChunkSize{
+        this,
+        5 * 1024 * 1024,
+        "multipart-chunk-size",
+        R"(
+          The size (in bytes) of each part in multipart uploads. Must be
+          at least 5 MiB (AWS S3 requirement). Larger chunk sizes reduce the
+          number of requests but use more memory. Default is 5 MiB.
+        )",
+        {"buffer-size"}};
+
+    Setting<uint64_t> multipartThreshold{
+        this,
+        100 * 1024 * 1024,
+        "multipart-threshold",
+        R"(
+          The minimum file size (in bytes) for using multipart uploads.
+          Files smaller than this threshold will use regular PUT requests.
+          Default is 100 MiB. Only takes effect when multipart-upload is enabled.
+        )"};
+
+    Setting<std::optional<std::string>> storageClass{
+        this,
+        std::nullopt,
+        "storage-class",
+        R"(
+          The S3 storage class to use for uploaded objects. When not set (default),
+          uses the bucket's default storage class. Valid values include:
+          - STANDARD (default, frequently accessed data)
+          - REDUCED_REDUNDANCY (less frequently accessed data)
+          - STANDARD_IA (infrequent access)
+          - ONEZONE_IA (infrequent access, single AZ)
+          - INTELLIGENT_TIERING (automatic cost optimization)
+          - GLACIER (archival with retrieval times in minutes to hours)
+          - DEEP_ARCHIVE (long-term archival with 12-hour retrieval)
+          - GLACIER_IR (instant retrieval archival)
+
+          See AWS S3 documentation for detailed storage class descriptions and pricing:
+          https://docs.aws.amazon.com/AmazonS3/latest/userguide/storage-class-intro.html
+        )"};
+
+    /**
+     * Set of settings that are part of the S3 URI itself.
+     * These are needed for region specification and other S3-specific settings.
+     */
+    const std::set<const AbstractSetting *> s3UriSettings = {&profile, &region, &scheme, &endpoint, &addressingStyle};
 
     static const std::string name()
     {
         return "S3 Binary Cache Store";
     }
 
-    static StringSet uriSchemes()
-    {
-        return {"s3"};
-    }
+    static StringSet uriSchemes();
 
     static std::string doc();
 
+    std::string getHumanReadableURI() const override;
+
     ref<Store> openStore() const override;
-
-    StoreReference getReference() const override;
-};
-
-struct S3BinaryCacheStore : virtual BinaryCacheStore
-{
-    using Config = S3BinaryCacheStoreConfig;
-
-    ref<Config> config;
-
-    S3BinaryCacheStore(ref<Config>);
-
-    struct Stats
-    {
-        std::atomic<uint64_t> put{0};
-        std::atomic<uint64_t> putBytes{0};
-        std::atomic<uint64_t> putTimeMs{0};
-        std::atomic<uint64_t> get{0};
-        std::atomic<uint64_t> getBytes{0};
-        std::atomic<uint64_t> getTimeMs{0};
-        std::atomic<uint64_t> head{0};
-    };
-
-    virtual const Stats & getS3Stats() = 0;
 };
 
 } // namespace nix
-
-#endif

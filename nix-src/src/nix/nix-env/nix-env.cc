@@ -5,6 +5,7 @@
 #include "nix/expr/eval.hh"
 #include "nix/expr/get-drvs.hh"
 #include "nix/store/globals.hh"
+#include "nix/util/config-global.hh"
 #include "nix/store/names.hh"
 #include "nix/store/profiles.hh"
 #include "nix/store/path-with-outputs.hh"
@@ -16,6 +17,7 @@
 #include "nix/util/xml-writer.hh"
 #include "nix/cmd/legacy.hh"
 #include "nix/expr/eval-settings.hh" // for defexpr
+#include "nix/util/table.hh"
 #include "nix/util/terminal.hh"
 #include "man-pages.hh"
 
@@ -33,13 +35,46 @@
 using namespace nix;
 using std::cout;
 
+/**
+ * Settings related to Nix user environments.
+ */
+struct EnvSettings : Config
+{
+    Setting<bool> keepDerivations{
+        this,
+        false,
+        "keep-env-derivations",
+        R"(
+          If `false` (default), derivations are not stored in Nix user
+          environments. That is, the derivations of any build-time-only
+          dependencies may be garbage-collected.
+
+          If `true`, when you add a Nix derivation to a user environment, the
+          path of the derivation is stored in the user environment. Thus, the
+          derivation isn't garbage-collected until the user environment
+          generation is deleted (`nix-env --delete-generations`). To prevent
+          build-time-only dependencies from being collected, you should also
+          turn on `keep-outputs`.
+
+          The difference between this option and `keep-derivations` is that
+          this one is "sticky": it applies to any user environment created
+          while this option was enabled, while `keep-derivations` only applies
+          at the moment the garbage collector is run.
+        )",
+        {"env-keep-derivations"}};
+};
+
+EnvSettings envSettings;
+
+static GlobalConfig::Register rSettings(&envSettings);
+
 typedef enum { srcNixExprDrvs, srcNixExprs, srcStorePaths, srcProfile, srcAttrPath, srcUnknown } InstallSourceType;
 
 struct InstallSourceInfo
 {
     InstallSourceType type;
     std::shared_ptr<SourcePath> nixExprPath; /* for srcNixExprDrvs, srcNixExprs */
-    Path profile;                            /* for srcProfile */
+    std::filesystem::path profile;           /* for srcProfile */
     std::string systemFilter;                /* for srcNixExprDrvs */
     Bindings * autoArgs;
 };
@@ -47,7 +82,7 @@ struct InstallSourceInfo
 struct Globals
 {
     InstallSourceInfo instSource;
-    Path profile;
+    std::filesystem::path profile;
     std::shared_ptr<EvalState> state;
     bool dryRun;
     bool preserveInstalled;
@@ -132,7 +167,7 @@ static void getAllExprs(EvalState & state, const SourcePath & path, StringSet & 
             }
             /* Load the expression on demand. */
             auto vArg = state.allocValue();
-            vArg->mkPath(path2);
+            vArg->mkPath(path2, state.mem);
             if (seen.size() == maxAttrs)
                 throw Error("too many Nix expressions in directory '%1%'", path);
             attrs.alloc(attrName).mkApp(&state.getBuiltin("import"), vArg);
@@ -461,6 +496,7 @@ static void printMissing(EvalState & state, PackageInfos & elems)
     std::vector<DerivedPath> targets;
     for (auto & i : elems)
         if (auto drvPath = i.queryDrvPath()) {
+            state.waitForPath(*drvPath);
             auto path = DerivedPath::Built{
                 .drvPath = makeConstantStorePathRef(*drvPath),
                 .outputs = OutputsSpec::All{},
@@ -483,12 +519,12 @@ static bool keep(PackageInfo & drv)
 static void setMetaFlag(EvalState & state, PackageInfo & drv, const std::string & name, const std::string & value)
 {
     auto v = state.allocValue();
-    v->mkString(value);
+    v->mkString(value, state.mem);
     drv.setMeta(name, v);
 }
 
-static void
-installDerivations(Globals & globals, const Strings & args, const Path & profile, std::optional<int> priority)
+static void installDerivations(
+    Globals & globals, const Strings & args, const std::filesystem::path & profile, std::optional<int> priority)
 {
     debug("installing derivations");
 
@@ -545,7 +581,7 @@ installDerivations(Globals & globals, const Strings & args, const Path & profile
         if (globals.dryRun)
             return;
 
-        if (createUserEnv(*globals.state, allElems, profile, settings.envKeepDerivations, lockToken))
+        if (createUserEnv(*globals.state, allElems, profile, envSettings.keepDerivations, lockToken))
             break;
     }
 }
@@ -656,7 +692,7 @@ static void upgradeDerivations(Globals & globals, const Strings & args, UpgradeT
         if (globals.dryRun)
             return;
 
-        if (createUserEnv(*globals.state, newElems, globals.profile, settings.envKeepDerivations, lockToken))
+        if (createUserEnv(*globals.state, newElems, globals.profile, envSettings.keepDerivations, lockToken))
             break;
     }
 }
@@ -715,7 +751,7 @@ static void opSetFlag(Globals & globals, Strings opFlags, Strings opArgs)
         checkSelectorUse(selectors);
 
         /* Write the new user environment. */
-        if (createUserEnv(*globals.state, installedElems, globals.profile, settings.envKeepDerivations, lockToken))
+        if (createUserEnv(*globals.state, installedElems, globals.profile, envSettings.keepDerivations, lockToken))
             break;
     }
 }
@@ -746,8 +782,6 @@ static void opSet(Globals & globals, Strings opFlags, Strings opArgs)
         drv.setName(globals.forceName);
 
     auto drvPath = drv.queryDrvPath();
-    if (drvPath)
-        globals.state->waitForPath(*drvPath);
     std::vector<DerivedPath> paths{
         drvPath ? (DerivedPath) (DerivedPath::Built{
                       .drvPath = makeConstantStorePathRef(*drvPath),
@@ -763,11 +797,11 @@ static void opSet(Globals & globals, Strings opFlags, Strings opArgs)
     globals.state->store->buildPaths(paths, globals.state->repair ? bmRepair : bmNormal);
 
     debug("switching to new user environment");
-    Path generation = createGeneration(*store2, globals.profile, drv.queryOutPath());
+    auto generation = createGeneration(*store2, globals.profile, drv.queryOutPath());
     switchLink(globals.profile, generation);
 }
 
-static void uninstallDerivations(Globals & globals, Strings & selectors, Path & profile)
+static void uninstallDerivations(Globals & globals, Strings & selectors, const std::filesystem::path & profile)
 {
     while (true) {
         auto lockToken = optimisticLockProfile(profile);
@@ -800,7 +834,7 @@ static void uninstallDerivations(Globals & globals, Strings & selectors, Path & 
         if (globals.dryRun)
             return;
 
-        if (createUserEnv(*globals.state, workingElems, profile, settings.envKeepDerivations, lockToken))
+        if (createUserEnv(*globals.state, workingElems, profile, envSettings.keepDerivations, lockToken))
             break;
     }
 }
@@ -822,38 +856,6 @@ static bool cmpElemByName(const PackageInfo & a, const PackageInfo & b)
     auto a_name = a.queryName();
     auto b_name = b.queryName();
     return lexicographical_compare(a_name.begin(), a_name.end(), b_name.begin(), b_name.end(), cmpChars);
-}
-
-typedef std::list<Strings> Table;
-
-void printTable(Table & table)
-{
-    auto nrColumns = table.size() > 0 ? table.front().size() : 0;
-
-    std::vector<size_t> widths;
-    widths.resize(nrColumns);
-
-    for (auto & i : table) {
-        assert(i.size() == nrColumns);
-        Strings::iterator j;
-        size_t column;
-        for (j = i.begin(), column = 0; j != i.end(); ++j, ++column)
-            if (j->size() > widths[column])
-                widths[column] = j->size();
-    }
-
-    for (auto & i : table) {
-        Strings::iterator j;
-        size_t column;
-        for (j = i.begin(), column = 0; j != i.end(); ++j, ++column) {
-            std::string s = *j;
-            replace(s.begin(), s.end(), '\n', ' ');
-            cout << s;
-            if (column < nrColumns - 1)
-                cout << std::string(widths[column] - s.size() + 2, ' ');
-        }
-        cout << std::endl;
-    }
 }
 
 /* This function compares the version of an element against the
@@ -1095,7 +1097,7 @@ static void opQuery(Globals & globals, Strings opFlags, Strings opArgs)
                 continue;
 
             /* For table output. */
-            Strings columns;
+            TableRow columns;
 
             /* For XML output. */
             XMLAttrs attrs;
@@ -1230,7 +1232,7 @@ static void opQuery(Globals & globals, Strings opFlags, Strings opArgs)
                         else {
                             if (v->type() == nString) {
                                 attrs2["type"] = "string";
-                                attrs2["value"] = v->c_str();
+                                attrs2["value"] = v->string_view();
                                 xml.writeEmptyElement("meta", attrs2);
                             } else if (v->type() == nInt) {
                                 attrs2["type"] = "int";
@@ -1251,7 +1253,7 @@ static void opQuery(Globals & globals, Strings opFlags, Strings opArgs)
                                     if (elem->type() != nString)
                                         continue;
                                     XMLAttrs attrs3;
-                                    attrs3["value"] = elem->c_str();
+                                    attrs3["value"] = elem->string_view();
                                     xml.writeEmptyElement("string", attrs3);
                                 }
                             } else if (v->type() == nAttrs) {
@@ -1262,7 +1264,7 @@ static void opQuery(Globals & globals, Strings opFlags, Strings opArgs)
                                         continue;
                                     XMLAttrs attrs3;
                                     attrs3["type"] = globals.state->symbols[i.name];
-                                    attrs3["value"] = i.value->c_str();
+                                    attrs3["value"] = i.value->string_view();
                                     xml.writeEmptyElement("string", attrs3);
                                 }
                             }
@@ -1283,7 +1285,7 @@ static void opQuery(Globals & globals, Strings opFlags, Strings opArgs)
     }
 
     if (!xmlOutput)
-        printTable(table);
+        printTable(std::cout, table);
 }
 
 static void opSwitchProfile(Globals & globals, Strings opFlags, Strings opArgs)
@@ -1293,8 +1295,8 @@ static void opSwitchProfile(Globals & globals, Strings opFlags, Strings opArgs)
     if (opArgs.size() != 1)
         throw UsageError("exactly one argument expected");
 
-    Path profile = absPath(opArgs.front());
-    Path profileLink = settings.useXDGBaseDirectories ? createNixStateDir() + "/profile" : getHome() + "/.nix-profile";
+    auto profile = absPath(std::filesystem::path{opArgs.front()});
+    auto profileLink = settings.useXDGBaseDirectories ? createNixStateDir() / "profile" : getHome() / ".nix-profile";
 
     switchLink(profileLink, profile);
 }
@@ -1409,14 +1411,15 @@ static int main_nix_env(int argc, char ** argv)
         globals.instSource.type = srcUnknown;
         globals.instSource.systemFilter = "*";
 
-        Path nixExprPath = getNixDefExpr();
+        std::filesystem::path nixExprPath = getNixDefExpr();
 
         if (!pathExists(nixExprPath)) {
             try {
+                auto profilesDirOpts = settings.getProfileDirsOptions();
                 createDirs(nixExprPath);
-                replaceSymlink(defaultChannelsDir(), nixExprPath + "/channels");
+                replaceSymlink(defaultChannelsDir(profilesDirOpts), nixExprPath / "channels");
                 if (!isRootUser())
-                    replaceSymlink(rootChannelsDir(), nixExprPath + "/channels_root");
+                    replaceSymlink(rootChannelsDir(profilesDirOpts), nixExprPath / "channels_root");
             } catch (Error &) {
             }
         }
@@ -1513,7 +1516,8 @@ static int main_nix_env(int argc, char ** argv)
         globals.state->repair = myArgs.repair;
 
         globals.instSource.nixExprPath = std::make_shared<SourcePath>(
-            file != "" ? lookupFileArg(*globals.state, file) : globals.state->rootPath(CanonPath(nixExprPath)));
+            file != "" ? lookupFileArg(*globals.state, file)
+                       : globals.state->rootPath(CanonPath(nixExprPath.string())));
 
         globals.instSource.autoArgs = myArgs.getAutoArgs(*globals.state);
 
@@ -1521,7 +1525,7 @@ static int main_nix_env(int argc, char ** argv)
             globals.profile = getEnv("NIX_PROFILE").value_or("");
 
         if (globals.profile == "")
-            globals.profile = getDefaultProfile();
+            globals.profile = getDefaultProfile(settings.getProfileDirsOptions()).string();
 
         op(globals, std::move(opFlags), std::move(opArgs));
 

@@ -10,7 +10,8 @@ namespace nix {
 struct LocalFSStoreConfig : virtual StoreConfig
 {
 private:
-    static OptionalPathSetting makeRootDirSetting(LocalFSStoreConfig & self, std::optional<Path> defaultValue)
+    static Setting<std::optional<AbsolutePath>>
+    makeRootDirSetting(LocalFSStoreConfig & self, std::optional<AbsolutePath> defaultValue)
     {
         return {
             &self,
@@ -30,9 +31,9 @@ public:
      *
      * @todo Make this less error-prone with new store settings system.
      */
-    LocalFSStoreConfig(PathView path, const Params & params);
+    LocalFSStoreConfig(const std::filesystem::path & path, const Params & params);
 
-    OptionalPathSetting rootDir = makeRootDirSetting(*this, std::nullopt);
+    Setting<std::optional<AbsolutePath>> rootDir = makeRootDirSetting(*this, std::nullopt);
 
 private:
 
@@ -40,33 +41,42 @@ private:
      * An indirection so that we don't need to refer to global settings
      * in headers.
      */
-    static Path getDefaultStateDir();
+    static std::filesystem::path getDefaultStateDir();
 
     /**
      * An indirection so that we don't need to refer to global settings
      * in headers.
      */
-    static Path getDefaultLogDir();
+    static std::filesystem::path getDefaultLogDir();
 
 public:
 
-    PathSetting stateDir{
+    Setting<AbsolutePath> stateDir{
         this,
-        rootDir.get() ? *rootDir.get() + "/nix/var/nix" : getDefaultStateDir(),
+        rootDir.get() ? *rootDir.get() / "nix" / "var" / "nix" : getDefaultStateDir(),
         "state",
-        "Directory where Nix stores state."};
+        "Directory where Nix stores state.",
+    };
 
-    PathSetting logDir{
+    Setting<AbsolutePath> logDir{
         this,
-        rootDir.get() ? *rootDir.get() + "/nix/var/log/nix" : getDefaultLogDir(),
+        rootDir.get() ? *rootDir.get() / "nix" / "var" / "log" / "nix" : getDefaultLogDir(),
         "log",
-        "directory where Nix stores log files."};
+        "directory where Nix stores log files.",
+    };
 
-    PathSetting realStoreDir{
-        this, rootDir.get() ? *rootDir.get() + "/nix/store" : storeDir, "real", "Physical path of the Nix store."};
+    Setting<AbsolutePath> realStoreDir{
+        this,
+        rootDir.get() ? *rootDir.get() / "nix" / "store" : std::filesystem::path{storeDir},
+        "real",
+        "Physical path of the Nix store.",
+    };
 };
 
-struct LocalFSStore : virtual Store, virtual GcStore, virtual LogStore
+struct alignas(8) /* Work around ASAN failures on i686-linux. */
+    LocalFSStore : virtual Store,
+                   virtual GcStore,
+                   virtual LogStore
 {
     using Config = LocalFSStoreConfig;
 
@@ -74,11 +84,10 @@ struct LocalFSStore : virtual Store, virtual GcStore, virtual LogStore
 
     inline static std::string operationName = "Local Filesystem Store";
 
-    const static std::string drvsLogDir;
+    const static std::filesystem::path drvsLogDir;
 
     LocalFSStore(const Config & params);
 
-    void narFromPath(const StorePath & path, Sink & sink) override;
     ref<SourceAccessor> getFSAccessor(bool requireValidPath = true) override;
     std::shared_ptr<SourceAccessor> getFSAccessor(const StorePath & path, bool requireValidPath = true) override;
 
@@ -91,22 +100,21 @@ struct LocalFSStore : virtual Store, virtual GcStore, virtual LogStore
      * @param gcRoot The location of the symlink.
      *
      * @param storePath The store object being rooted. The symlink will
-     * point to `toRealPath(store.printStorePath(storePath))`.
+     * point to `toRealPath(storePath)`.
      *
      * How the permanent GC root corresponding to this symlink is
      * managed is implementation-specific.
      */
-    virtual Path addPermRoot(const StorePath & storePath, const Path & gcRoot) = 0;
+    virtual std::filesystem::path addPermRoot(const StorePath & storePath, const std::filesystem::path & gcRoot) = 0;
 
-    virtual Path getRealStoreDir()
+    virtual std::filesystem::path getRealStoreDir()
     {
         return config.realStoreDir;
     }
 
-    Path toRealPath(const Path & storePath) override
+    std::filesystem::path toRealPath(const StorePath & storePath)
     {
-        assert(isInStore(storePath));
-        return getRealStoreDir() + "/" + std::string(storePath, storeDir.size() + 1);
+        return getRealStoreDir() / storePath.to_string();
     }
 
     std::optional<std::string> getBuildLogExact(const StorePath & path) override;

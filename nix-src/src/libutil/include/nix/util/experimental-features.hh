@@ -22,7 +22,6 @@ enum struct ExperimentalFeature {
     FetchTree,
     GitHashing,
     RecursiveNix,
-    NoUrlLiterals,
     FetchClosure,
     AutoAllocateUids,
     Cgroups,
@@ -39,6 +38,9 @@ enum struct ExperimentalFeature {
     BLAKE3Hashes,
     BuildTimeFetchTree,
     ParallelEval,
+    WasmBuiltin,
+    WasmDerivations,
+    Provenance,
 };
 
 extern std::set<std::string> stabilizedFeatures;
@@ -82,7 +84,7 @@ std::set<ExperimentalFeature> parseFeatures(const StringSet &);
  * An experimental feature was required for some (experimental)
  * operation, but was not enabled.
  */
-class MissingExperimentalFeature : public Error
+class MissingExperimentalFeature final : public CloneableError<MissingExperimentalFeature, Error>
 {
 public:
     /**
@@ -90,7 +92,9 @@ public:
      */
     ExperimentalFeature missingFeature;
 
-    MissingExperimentalFeature(ExperimentalFeature missingFeature);
+    std::string reason;
+
+    MissingExperimentalFeature(ExperimentalFeature missingFeature, std::string reason = "");
 };
 
 /**

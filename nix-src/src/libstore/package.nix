@@ -9,11 +9,13 @@
   nix-util,
   boost,
   curl,
-  aws-sdk-cpp,
+  aws-c-common,
   aws-crt-cpp,
   libseccomp,
   nlohmann_json,
   sqlite,
+  cmake, # for resolving aws-crt-cpp dep
+  wasmtime,
 
   busybox-sandbox-shell ? null,
 
@@ -21,13 +23,13 @@
 
   version,
 
-  embeddedSandboxShell ? stdenv.hostPlatform.isStatic,
+  embeddedSandboxShell ? stdenv.hostPlatform.isStatic && !stdenv.hostPlatform.isDarwin,
 
   withAWS ?
     # Default is this way because there have been issues building this dependency
-    stdenv.hostPlatform == stdenv.buildPlatform && (stdenv.isLinux || stdenv.isDarwin),
+    (lib.meta.availableOn stdenv.hostPlatform aws-c-common) && !stdenv.hostPlatform.isStatic,
 
-  withCurlS3 ? false,
+  enableWasm ? !stdenv.hostPlatform.isStatic,
 }:
 
 let
@@ -61,7 +63,8 @@ mkMesonLibrary (finalAttrs: {
     (fileset.fileFilter (file: file.hasExt "sql") ./.)
   ];
 
-  nativeBuildInputs = lib.optional embeddedSandboxShell unixtools.hexdump;
+  nativeBuildInputs =
+    lib.optional withAWS cmake ++ lib.optional embeddedSandboxShell unixtools.hexdump;
 
   buildInputs = [
     boost
@@ -69,8 +72,8 @@ mkMesonLibrary (finalAttrs: {
     sqlite
   ]
   ++ lib.optional stdenv.hostPlatform.isLinux libseccomp
-  ++ lib.optional withAWS aws-sdk-cpp
-  ++ lib.optional withCurlS3 aws-crt-cpp;
+  ++ lib.optional withAWS aws-crt-cpp
+  ++ lib.optional enableWasm wasmtime;
 
   propagatedBuildInputs = [
     nix-util
@@ -80,7 +83,8 @@ mkMesonLibrary (finalAttrs: {
   mesonFlags = [
     (lib.mesonEnable "seccomp-sandboxing" stdenv.hostPlatform.isLinux)
     (lib.mesonBool "embedded-sandbox-shell" embeddedSandboxShell)
-    (lib.mesonEnable "curl-s3-store" withCurlS3)
+    (lib.mesonEnable "s3-aws-auth" withAWS)
+    (lib.mesonEnable "wasm" enableWasm)
   ]
   ++ lib.optionals stdenv.hostPlatform.isLinux [
     (lib.mesonOption "sandbox-shell" "${busybox-sandbox-shell}/bin/busybox")

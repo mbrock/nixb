@@ -57,23 +57,26 @@ let
         "nix-flake"
         "nix-flake-c"
         "nix-flake-tests"
+        "nix-nswrapper"
         "nix-main"
         "nix-main-c"
         "nix-cmd"
         "nix-cli"
         "nix-functional-tests"
+        "nix-json-schema-checks"
       ]
       ++ lib.optionals enableBindings [
         "nix-perl-bindings"
       ]
       ++ lib.optionals enableDocs [
         "nix-manual"
+        "nix-manual-manpages-only"
         "nix-internal-api-docs"
         "nix-external-api-docs"
       ]
     );
 in
-{
+rec {
   /**
     An internal check to make sure our package listing is complete.
   */
@@ -112,7 +115,11 @@ in
 
   # Binary package for various platforms.
   build = forAllPackages (
-    pkgName: forAllSystems (system: nixpkgsFor.${system}.native.nixComponents2.${pkgName})
+    pkgName:
+    lib.filterAttrs (
+      system: _do_not_touch:
+      pkgName == "nix-nswrapper" -> nixpkgsFor.${system}.native.stdenv.hostPlatform.isLinux
+    ) (forAllSystems (system: nixpkgsFor.${system}.native.nixComponents2.${pkgName}))
   );
 
   shellInputs = removeAttrs (forAllSystems (

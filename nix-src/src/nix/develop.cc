@@ -22,10 +22,6 @@
 
 #include "nix/util/strings.hh"
 
-namespace nix::fs {
-using namespace std::filesystem;
-}
-
 using namespace nix;
 
 struct DevelopSettings : Config
@@ -257,10 +253,15 @@ static StorePath getDerivationEnvironment(ref<Store> store, ref<Store> evalStore
     drv.args = {store->printStorePath(getEnvShPath)};
 
     /* Remove derivation checks. */
-    drv.env.erase("allowedReferences");
-    drv.env.erase("allowedRequisites");
-    drv.env.erase("disallowedReferences");
-    drv.env.erase("disallowedRequisites");
+    if (drv.structuredAttrs) {
+        drv.structuredAttrs->structuredAttrs.erase("outputChecks");
+    } else {
+        drv.env.erase("allowedReferences");
+        drv.env.erase("allowedRequisites");
+        drv.env.erase("disallowedReferences");
+        drv.env.erase("disallowedRequisites");
+    }
+
     drv.env.erase("name");
 
     /* Rehash and write the derivation. FIXME: would be nice to use
@@ -268,28 +269,26 @@ static StorePath getDerivationEnvironment(ref<Store> store, ref<Store> evalStore
     drv.name += "-env";
     drv.env.emplace("name", drv.name);
     drv.inputSrcs.insert(std::move(getEnvShPath));
-    if (experimentalFeatureSettings.isEnabled(Xp::CaDerivations)) {
-        for (auto & output : drv.outputs) {
-            output.second = DerivationOutput::Deferred{}, drv.env[output.first] = hashPlaceholder(output.first);
-        }
-    } else {
-        for (auto & output : drv.outputs) {
-            output.second = DerivationOutput::Deferred{};
-            drv.env[output.first] = "";
-        }
-        auto hashesModulo = hashDerivationModulo(*evalStore, drv, true);
-
-        for (auto & output : drv.outputs) {
-            Hash h = hashesModulo.hashes.at(output.first);
-            auto outPath = store->makeOutputPath(output.first, h, drv.name);
-            output.second = DerivationOutput::InputAddressed{
-                .path = outPath,
-            };
-            drv.env[output.first] = store->printStorePath(outPath);
-        }
+    for (auto & [outputName, output] : drv.outputs) {
+        std::visit(
+            overloaded{
+                [&](const DerivationOutput::InputAddressed &) {
+                    output = DerivationOutput::Deferred{};
+                    drv.env[outputName] = "";
+                },
+                [&](const DerivationOutput::CAFixed &) {
+                    output = DerivationOutput::Deferred{};
+                    drv.env[outputName] = "";
+                },
+                [&](const auto &) {
+                    // Do nothing for other types (CAFloating, Deferred, Impure)
+                },
+            },
+            output.raw);
     }
+    drv.fillInOutputPaths(*evalStore);
 
-    auto shellDrvPath = writeDerivation(*evalStore, drv);
+    auto shellDrvPath = evalStore->writeDerivation(drv);
 
     /* Build the derivation. */
     store->buildPaths(
@@ -304,10 +303,9 @@ static StorePath getDerivationEnvironment(ref<Store> store, ref<Store> evalStore
     // path, so return the first non-empty output path.
     for (auto & [_0, optPath] : evalStore->queryPartialDerivationOutputMap(shellDrvPath)) {
         assert(optPath);
-        auto & outPath = *optPath;
-        auto st = store->getFSAccessor()->lstat(CanonPath(outPath.to_string()));
-        if (st.fileSize.value_or(0))
-            return outPath;
+        auto accessor = evalStore->requireStoreObjectAccessor(*optPath);
+        if (auto st = accessor->maybeLstat(CanonPath::root); st && st->fileSize.value_or(0))
+            return *optPath;
     }
 
     throw Error("get-env.sh failed to produce an environment");
@@ -334,7 +332,7 @@ struct Common : InstallableCommand, MixProfile
         "UID",
     };
 
-    std::vector<std::pair<std::string, std::string>> redirects;
+    std::vector<std::pair<std::string, std::filesystem::path>> redirects;
 
     Common()
     {
@@ -342,7 +340,7 @@ struct Common : InstallableCommand, MixProfile
             .longName = "redirect",
             .description = "Redirect a store path to a mutable location.",
             .labels = {"installable", "outputs-dir"},
-            .handler = {[&](std::string installable, std::string outputsDir) {
+            .handler = {[&](std::string installable, std::filesystem::path outputsDir) {
                 redirects.push_back({installable, outputsDir});
             }},
         });
@@ -386,7 +384,8 @@ struct Common : InstallableCommand, MixProfile
 
         /* Substitute occurrences of output paths. */
         auto outputs = buildEnvironment.vars.find("outputs");
-        assert(outputs != buildEnvironment.vars.end());
+        if (outputs == buildEnvironment.vars.end())
+            throw Error("derivation does not have an 'outputs' attribute");
 
         StringMap rewrites;
         if (buildEnvironment.providesStructuredAttrs()) {
@@ -415,8 +414,8 @@ struct Common : InstallableCommand, MixProfile
                 if (script.find(from) == std::string::npos)
                     warn("'%s' (path '%s') is not used by this build environment", installable->what(), from);
                 else {
-                    printInfo("redirecting '%s' to '%s'", from, dir);
-                    rewrites.insert({from, dir});
+                    printInfo("redirecting '%s' to '%s'", from, PathFmt(dir));
+                    rewrites.insert({from, dir.string()});
                 }
             }
         }
@@ -441,7 +440,7 @@ struct Common : InstallableCommand, MixProfile
      * that's accessible from the interactive shell session.
      */
     void fixupStructuredAttrs(
-        PathViewNG::string_view ext,
+        PathView::string_view ext,
         const std::string & envVar,
         const std::string & content,
         StringMap & rewrites,
@@ -458,22 +457,9 @@ struct Common : InstallableCommand, MixProfile
         rewrites.insert({BuildEnvironment::getString(fileInBuilderEnv->second), targetFilePath.string()});
     }
 
-    Strings getDefaultFlakeAttrPaths() override
+    StringSet getRoles() override
     {
-        Strings paths{
-            "devShells." + settings.thisSystem.get() + ".default",
-            "devShell." + settings.thisSystem.get(),
-        };
-        for (auto & p : SourceExprCommand::getDefaultFlakeAttrPaths())
-            paths.push_back(p);
-        return paths;
-    }
-
-    Strings getDefaultFlakeAttrPathPrefixes() override
-    {
-        auto res = SourceExprCommand::getDefaultFlakeAttrPathPrefixes();
-        res.emplace_front("devShells." + settings.thisSystem.get() + ".");
-        return res;
+        return {"nix-develop"};
     }
 
     StorePath getShellOutPath(ref<Store> store, ref<Installable> installable)
@@ -500,11 +486,14 @@ struct Common : InstallableCommand, MixProfile
     {
         auto shellOutPath = getShellOutPath(store, installable);
 
-        updateProfile(shellOutPath);
+        updateProfile(*store, shellOutPath);
 
         debug("reading environment file '%s'", store->printStorePath(shellOutPath));
 
-        return {BuildEnvironment::parseJSON(store->getFSAccessor()->readFile(shellOutPath.to_string())), shellOutPath};
+        return {
+            BuildEnvironment::parseJSON(store->requireStoreObjectAccessor(shellOutPath)->readFile(CanonPath::root)),
+            shellOutPath,
+        };
     }
 };
 
@@ -596,7 +585,7 @@ struct CmdDevelop : Common, MixEnvironment
         if (verbosity >= lvlDebug)
             script += "set -x\n";
 
-        script += fmt("command rm -f '%s'\n", rcFilePath);
+        script += fmt("command rm -f '%s'\n", rcFilePath.string());
 
         if (phase) {
             if (!command.empty())
@@ -633,7 +622,7 @@ struct CmdDevelop : Common, MixEnvironment
         // prevent garbage collection until shell exits
         setEnv("NIX_GCROOT", store->printStorePath(gcroot).c_str());
 
-        Path shell = "bash";
+        std::filesystem::path shell = "bash";
         bool foundInteractive = false;
 
         try {
@@ -653,9 +642,9 @@ struct CmdDevelop : Common, MixEnvironment
                 std::move(nixpkgs),
                 "bashInteractive",
                 ExtendedOutputsSpec::Default(),
-                Strings{},
-                Strings{"legacyPackages." + settings.thisSystem.get() + "."},
-                nixpkgsLockFlags);
+                StringSet{"nix-build"},
+                nixpkgsLockFlags,
+                std::nullopt);
 
             for (auto & path : Installable::toStorePathSet(
                      getEvalStore(), store, Realise::Outputs, OperateOn::Output, {bashInstallable})) {
@@ -676,11 +665,12 @@ struct CmdDevelop : Common, MixEnvironment
 
         // Override SHELL with the one chosen for this environment.
         // This is to make sure the system shell doesn't leak into the build environment.
-        setEnv("SHELL", shell.c_str());
-        // https://github.com/NixOS/nix/issues/5873
-        script += fmt("SHELL=\"%s\"\n", shell);
+        setEnvOs(OS_STR("SHELL"), shell.c_str());
+        /* See: https://github.com/NixOS/nix/issues/5873
+           Format via .string() and not PathFmt intentionally. */
+        script += fmt("SHELL=\"%s\"\n", shell.string());
         if (foundInteractive)
-            script += fmt("PATH=\"%s${PATH:+:$PATH}\"\n", std::filesystem::path(shell).parent_path());
+            script += fmt("PATH=\"%s${PATH:+:$PATH}\"\n", std::filesystem::path(shell).parent_path().string());
         writeFull(rcFileFd.get(), script);
 
 #ifdef _WIN32 // TODO re-enable on Windows
@@ -688,8 +678,8 @@ struct CmdDevelop : Common, MixEnvironment
 #else
         // If running a phase or single command, don't want an interactive shell running after
         // Ctrl-C, so don't pass --rcfile
-        auto args = phase || !command.empty() ? Strings{std::string(baseNameOf(shell)), rcFilePath}
-                                              : Strings{std::string(baseNameOf(shell)), "--rcfile", rcFilePath};
+        auto args = phase || !command.empty() ? Strings{shell.filename().string(), rcFilePath}
+                                              : Strings{shell.filename().string(), "--rcfile", rcFilePath};
 
         // Need to chdir since phases assume in flake directory
         if (phase) {
@@ -699,7 +689,7 @@ struct CmdDevelop : Common, MixEnvironment
                 auto sourcePath = installableFlake->getLockedFlake()->flake.resolvedRef.input.getSourcePath();
                 if (sourcePath) {
                     if (chdir(sourcePath->c_str()) == -1) {
-                        throw SysError("chdir to %s failed", *sourcePath);
+                        throw SysError("chdir to %s failed", PathFmt(*sourcePath));
                     }
                 }
             }

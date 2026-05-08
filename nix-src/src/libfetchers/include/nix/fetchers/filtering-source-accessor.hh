@@ -11,7 +11,7 @@ namespace nix {
  * `RestrictedPathError` explaining that access to `path` is
  * forbidden.
  */
-typedef std::function<RestrictedPathError(const CanonPath & path)> MakeNotAllowedError;
+typedef fun<RestrictedPathError(const CanonPath & path)> MakeNotAllowedError;
 
 /**
  * An abstract wrapping `SourceAccessor` that performs access
@@ -34,9 +34,9 @@ struct FilteringSourceAccessor : SourceAccessor
 
     std::optional<std::filesystem::path> getPhysicalPath(const CanonPath & path) override;
 
-    std::string readFile(const CanonPath & path) override;
+    using SourceAccessor::readFile;
 
-    void readFile(const CanonPath & path, Sink & sink, std::function<void(uint64_t)> sizeCallback) override;
+    void readFile(const CanonPath & path, Sink & sink, fun<void(uint64_t)> sizeCallback) override;
 
     bool pathExists(const CanonPath & path) override;
 
@@ -51,6 +51,10 @@ struct FilteringSourceAccessor : SourceAccessor
     std::string showPath(const CanonPath & path) override;
 
     std::pair<CanonPath, std::optional<std::string>> getFingerprint(const CanonPath & path) override;
+
+    std::shared_ptr<const Provenance> getProvenance(const CanonPath & path) override;
+
+    void invalidateCache(const CanonPath & path) override;
 
     /**
      * Call `makeNotAllowedError` to throw a `RestrictedPathError`

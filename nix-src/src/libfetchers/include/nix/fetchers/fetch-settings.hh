@@ -123,6 +123,35 @@ struct Settings : public Config
           When empty, disables the global flake registry.
         )"};
 
+    Setting<bool> nix219Compat{
+        this,
+        false,
+        "nix-219-compat",
+        R"(
+          If enabled, Nix will generate lock files that are compatible with Nix 2.19.
+          In particular, Nix will use `git archive` rather than `libgit2` to copy Git inputs.
+          The resulting locks may not be compatible with Nix >= 2.20.
+        )"};
+
+    Setting<unsigned int> tarballTtl{
+        this,
+        60 * 60,
+        "tarball-ttl",
+        R"(
+          The number of seconds a downloaded tarball is considered fresh. If
+          the cached tarball is stale, Nix checks whether it is still up
+          to date using the ETag header. Nix downloads a new version if
+          the ETag header is unsupported, or the cached ETag doesn't match.
+
+          Setting the TTL to `0` forces Nix to always check if the tarball is
+          up to date.
+
+          Nix caches tarballs in `$XDG_CACHE_HOME/nix/tarballs`.
+
+          Files fetched via `NIX_PATH`, `fetchGit`, `fetchMercurial`,
+          `fetchTarball`, and `fetchurl` respect this TTL.
+        )"};
+
     ref<Cache> getCache() const;
 
     ref<GitRepo> getTarballCache() const;

@@ -29,7 +29,6 @@ nlohmann_json = dependency('nlohmann_json', version : '>= 3.9')
 deps_public += nlohmann_json
 
 subdir('nix-meson-build-support/common')
-subdir('nix-meson-build-support/asan-options')
 
 subdir('nix-meson-build-support/generate-header')
 
@@ -46,6 +45,7 @@ sources = files(
   'flake.cc',
   'flakeref.cc',
   'lockfile.cc',
+  'provenance.cc',
   'settings.cc',
   'url-name.cc',
 )
@@ -63,7 +63,7 @@ this_library = library(
   dependencies : deps_public + deps_private + deps_other,
   include_directories : include_dirs,
   link_args : linker_export_flags,
-  prelink : true, # For C++ static initializers
+  prelink : prelink, # For C++ static initializers
   install : true,
 )
 

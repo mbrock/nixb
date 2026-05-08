@@ -17,7 +17,7 @@ static void prim_unsafeDiscardStringContext(EvalState & state, const PosIdx pos,
         if (auto * p = std::get_if<NixStringContextElem::Path>(&c.raw))
             filtered.insert(*p);
 
-    v.mkString(*s, filtered);
+    v.mkString(*s, filtered, state.mem);
 }
 
 static RegisterPrimOp primop_unsafeDiscardStringContext({
@@ -26,7 +26,7 @@ static RegisterPrimOp primop_unsafeDiscardStringContext({
     .doc = R"(
         Discard the [string context](@docroot@/language/string-context.md) from a value that can be coerced to a string.
     )",
-    .fun = prim_unsafeDiscardStringContext,
+    .impl = prim_unsafeDiscardStringContext,
 });
 
 bool hasContext(const NixStringContext & context)
@@ -65,7 +65,7 @@ static RegisterPrimOp primop_hasContext(
       > else { ${name} = meta; }
       > ```
     )",
-     .fun = prim_hasContext});
+     .impl = prim_hasContext});
 
 static void prim_unsafeDiscardOutputDependency(EvalState & state, const PosIdx pos, Value ** args, Value & v)
 {
@@ -84,7 +84,7 @@ static void prim_unsafeDiscardOutputDependency(EvalState & state, const PosIdx p
         }
     }
 
-    v.mkString(*s, context2);
+    v.mkString(*s, context2, state.mem);
 }
 
 static RegisterPrimOp primop_unsafeDiscardOutputDependency(
@@ -94,7 +94,7 @@ static RegisterPrimOp primop_unsafeDiscardOutputDependency(
       Create a copy of the given string where every
       [derivation deep](@docroot@/language/string-context.md#string-context-element-derivation-deep)
       string context element is turned into a
-      [constant](@docroot@/language/string-context.md#string-context-element-constant)
+      [constant](@docroot@/language/string-context.md#string-context-constant)
       string context element.
 
       This is the opposite of [`builtins.addDrvOutputDependencies`](#builtins-addDrvOutputDependencies).
@@ -107,7 +107,7 @@ static RegisterPrimOp primop_unsafeDiscardOutputDependency(
 
       [`builtins.addDrvOutputDependencies`]: #builtins-addDrvOutputDependencies
     )",
-     .fun = prim_unsafeDiscardOutputDependency});
+     .impl = prim_unsafeDiscardOutputDependency});
 
 static void prim_addDrvOutputDependencies(EvalState & state, const PosIdx pos, Value ** args, Value & v)
 {
@@ -157,7 +157,7 @@ static void prim_addDrvOutputDependencies(EvalState & state, const PosIdx pos, V
             context.begin()->raw)}),
     };
 
-    v.mkString(*s, context2);
+    v.mkString(*s, context2, state.mem);
 }
 
 static RegisterPrimOp primop_addDrvOutputDependencies(
@@ -165,7 +165,7 @@ static RegisterPrimOp primop_addDrvOutputDependencies(
      .args = {"s"},
      .doc = R"(
       Create a copy of the given string where a single
-      [constant](@docroot@/language/string-context.md#string-context-element-constant)
+      [constant](@docroot@/language/string-context.md#string-context-constant)
       string context element is turned into a
       [derivation deep](@docroot@/language/string-context.md#string-context-element-derivation-deep)
       string context element.
@@ -177,7 +177,7 @@ static RegisterPrimOp primop_addDrvOutputDependencies(
 
       This is the opposite of [`builtins.unsafeDiscardOutputDependency`](#builtins-unsafeDiscardOutputDependency).
     )",
-     .fun = prim_addDrvOutputDependencies});
+     .impl = prim_addDrvOutputDependencies});
 
 /* Extract the context of a string as a structured Nix value.
 
@@ -239,7 +239,7 @@ static void prim_getContext(EvalState & state, const PosIdx pos, Value ** args, 
         if (!info.second.outputs.empty()) {
             auto list = state.buildList(info.second.outputs.size());
             for (const auto & [i, output] : enumerate(info.second.outputs))
-                (list[i] = state.allocValue())->mkString(output);
+                (list[i] = state.allocValue())->mkString(output, state.mem);
             infoAttrs.alloc(state.s.outputs).mkList(list);
         }
         attrs.alloc(state.store->printStorePath(info.first)).mkAttrs(infoAttrs);
@@ -270,7 +270,7 @@ static RegisterPrimOp primop_getContext(
       { "/nix/store/arhvjaf6zmlyn8vh8fgn55rpwnxq0n7l-a.drv" = { outputs = [ "out" ]; }; }
       ```
     )",
-     .fun = prim_getContext});
+     .impl = prim_getContext});
 
 /* Append the given context to a given string.
 
@@ -342,9 +342,9 @@ static void prim_appendContext(EvalState & state, const PosIdx pos, Value ** arg
         }
     }
 
-    v.mkString(orig, context);
+    v.mkString(orig, context, state.mem);
 }
 
-static RegisterPrimOp primop_appendContext({.name = "__appendContext", .arity = 2, .fun = prim_appendContext});
+static RegisterPrimOp primop_appendContext({.name = "__appendContext", .arity = 2, .impl = prim_appendContext});
 
 } // namespace nix

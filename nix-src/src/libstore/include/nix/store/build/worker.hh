@@ -5,17 +5,21 @@
 #include "nix/store/store-api.hh"
 #include "nix/store/derived-path-map.hh"
 #include "nix/store/build/goal.hh"
+#include "nix/store/build-result.hh"
 #include "nix/store/realisation.hh"
 #include "nix/util/muxable-pipe.hh"
 
+#include <functional>
 #include <future>
 #include <thread>
 
 namespace nix {
 
 /* Forward definition. */
+struct WorkerSettings;
 struct DerivationTrampolineGoal;
 struct DerivationGoal;
+struct DerivationResolutionGoal;
 struct DerivationBuildingGoal;
 struct PathSubstitutionGoal;
 class DrvOutputSubstitutionGoal;
@@ -111,6 +115,7 @@ private:
     DerivedPathMap<std::map<OutputsSpec, std::weak_ptr<DerivationTrampolineGoal>>> derivationTrampolineGoals;
 
     std::map<StorePath, std::map<OutputName, std::weak_ptr<DerivationGoal>>> derivationGoals;
+    std::map<StorePath, std::weak_ptr<DerivationResolutionGoal>> derivationResolutionGoals;
     std::map<StorePath, std::weak_ptr<DerivationBuildingGoal>> derivationBuildingGoals;
     std::map<StorePath, std::weak_ptr<PathSubstitutionGoal>> substitutionGoals;
     std::map<DrvOutput, std::weak_ptr<DrvOutputSubstitutionGoal>> drvOutputSubstitutionGoals;
@@ -142,25 +147,9 @@ public:
     const Activity actSubstitutions;
 
     /**
-     * Set if at least one derivation had a BuildError (i.e. permanent
-     * failure).
+     * Tracks different types of build failures for exit status computation.
      */
-    bool permanentFailure;
-
-    /**
-     * Set if at least one derivation had a timeout.
-     */
-    bool timedOut;
-
-    /**
-     * Set if at least one derivation fails with a hash mismatch.
-     */
-    bool hashMismatch;
-
-    /**
-     * Set if at least one derivation is not deterministic in check mode.
-     */
-    bool checkMismatch;
+    ExitStatusFlags exitStatusFlags;
 
 #ifdef _WIN32
     AutoCloseFD ioport;
@@ -168,6 +157,15 @@ public:
 
     Store & store;
     Store & evalStore;
+    const WorkerSettings & settings;
+
+    /**
+     * Function to get the substituters to use for path substitution.
+     *
+     * Defaults to `getDefaultSubstituters`. This allows tests to
+     * inject custom substituters.
+     */
+    fun<std::list<ref<Store>>()> getSubstituters;
 
 #ifndef _WIN32 // TODO Enable building on Windows
     std::unique_ptr<HookInstance> hook;
@@ -208,34 +206,37 @@ private:
     std::shared_ptr<G> initGoalIfNeeded(std::weak_ptr<G> & goal_weak, Args &&... args);
 
     std::shared_ptr<DerivationTrampolineGoal> makeDerivationTrampolineGoal(
-        ref<const SingleDerivedPath> drvReq, const OutputsSpec & wantedOutputs, BuildMode buildMode = bmNormal);
+        ref<const SingleDerivedPath> drvReq, const OutputsSpec & wantedOutputs, BuildMode buildMode);
 
 public:
     std::shared_ptr<DerivationTrampolineGoal> makeDerivationTrampolineGoal(
-        const StorePath & drvPath,
-        const OutputsSpec & wantedOutputs,
-        const Derivation & drv,
-        BuildMode buildMode = bmNormal);
+        const StorePath & drvPath, const OutputsSpec & wantedOutputs, const Derivation & drv, BuildMode buildMode);
 
     std::shared_ptr<DerivationGoal> makeDerivationGoal(
         const StorePath & drvPath,
         const Derivation & drv,
         const OutputName & wantedOutput,
-        BuildMode buildMode = bmNormal);
+        BuildMode buildMode,
+        bool storeDerivation);
 
     /**
-     * @ref DerivationBuildingGoal "derivation goal"
+     * @ref DerivationResolutionGoal "derivation resolution goal"
      */
-    std::shared_ptr<DerivationBuildingGoal>
-    makeDerivationBuildingGoal(const StorePath & drvPath, const Derivation & drv, BuildMode buildMode = bmNormal);
+    std::shared_ptr<DerivationResolutionGoal>
+    makeDerivationResolutionGoal(const StorePath & drvPath, const Derivation & drv, BuildMode buildMode);
+
+    /**
+     * @ref DerivationBuildingGoal "derivation building goal"
+     */
+    std::shared_ptr<DerivationBuildingGoal> makeDerivationBuildingGoal(
+        const StorePath & drvPath, const Derivation & drv, BuildMode buildMode, bool storeDerivation);
 
     /**
      * @ref PathSubstitutionGoal "substitution goal"
      */
     std::shared_ptr<PathSubstitutionGoal> makePathSubstitutionGoal(
         const StorePath & storePath, RepairFlag repair = NoRepair, std::optional<ContentAddress> ca = std::nullopt);
-    std::shared_ptr<DrvOutputSubstitutionGoal> makeDrvOutputSubstitutionGoal(
-        const DrvOutput & id, RepairFlag repair = NoRepair, std::optional<ContentAddress> ca = std::nullopt);
+    std::shared_ptr<DrvOutputSubstitutionGoal> makeDrvOutputSubstitutionGoal(const DrvOutput & id);
 
     /**
      * Make a goal corresponding to the `DerivedPath`.
@@ -281,8 +282,20 @@ public:
      * false if there is no sense in waking up goals that are sleeping
      * because they can't run yet (e.g., there is no free build slot,
      * or the hook would still say `postpone`).
+     *
+     * This overload requires `goal` to point to a fully constructed,
+     * valid goal object, as it calls `goal->jobCategory()`.
      */
     void childTerminated(Goal * goal, bool wakeSleepers = true);
+
+    /**
+     * Unregisters a running child process, like the other overload.
+     *
+     * This overload only uses `goal` as a pointer for comparison with
+     * weak goal references, so it is safe to call from destructors
+     * where the goal object may be partially destroyed.
+     */
+    void childTerminated(Goal * goal, JobCategory jobCategory, bool wakeSleepers = true);
 
     /**
      * Put `goal` to sleep until a build slot becomes available (which
@@ -313,29 +326,6 @@ public:
      * Wait for input to become available.
      */
     void waitForInput();
-
-    /***
-     * The exit status in case of failure.
-     *
-     * In the case of a build failure, returned value follows this
-     * bitmask:
-     *
-     * ```
-     * 0b1100100
-     *      ^^^^
-     *      |||`- timeout
-     *      ||`-- output hash mismatch
-     *      |`--- build failure
-     *      `---- not deterministic
-     * ```
-     *
-     * In other words, the failure code is at least 100 (0b1100100), but
-     * might also be greater.
-     *
-     * Otherwise (no build failure, but some other sort of failure by
-     * assumption), this returned value is 1.
-     */
-    unsigned int failingExitStatus();
 
     /**
      * Check whether the given valid path exists and has the right

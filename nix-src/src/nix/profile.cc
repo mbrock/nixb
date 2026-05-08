@@ -140,7 +140,7 @@ struct ProfileManifest
                 sOriginalUrl = "originalUrl";
                 break;
             default:
-                throw Error("profile manifest '%s' has unsupported version %d", manifestPath, version);
+                throw Error("profile manifest %s has unsupported version %d", PathFmt(manifestPath), version);
             }
 
             auto elems = json["elements"];
@@ -247,13 +247,13 @@ struct ProfileManifest
             }
         }
 
-        buildProfile(tempDir, std::move(pkgs));
+        buildProfile(tempDir.string(), std::move(pkgs));
 
-        writeFile(tempDir + "/manifest.json", toJSON(*store).dump());
+        writeFile(tempDir / "manifest.json", toJSON(*store).dump());
 
         /* Add the symlink tree to the store. */
         StringSink sink;
-        dumpPath(tempDir, sink);
+        dumpPath(tempDir.string(), sink);
 
         auto narHash = hashString(HashAlgorithm::SHA256, sink.s);
 
@@ -313,11 +313,11 @@ struct ProfileManifest
 };
 
 static std::map<Installable *, std::pair<BuiltPaths, ref<ExtraPathInfo>>>
-builtPathsPerInstallable(const std::vector<std::pair<ref<Installable>, BuiltPathWithResult>> & builtPaths)
+builtPathsPerInstallable(const std::vector<InstallableWithBuildResult> & builtPaths)
 {
     std::map<Installable *, std::pair<BuiltPaths, ref<ExtraPathInfo>>> res;
-    for (auto & [installable, builtPath] : builtPaths) {
-        auto & r = res.insert({&*installable,
+    for (auto & b : builtPaths) {
+        auto & r = res.insert({&*b.installable,
                                {
                                    {},
                                    make_ref<ExtraPathInfo>(),
@@ -327,6 +327,7 @@ builtPathsPerInstallable(const std::vector<std::pair<ref<Installable>, BuiltPath
            (e.g. meta.priority fields) if the installable returned
            multiple derivations. So pick one arbitrarily. FIXME:
            print a warning? */
+        auto builtPath = b.getSuccess();
         r.first.push_back(builtPath.path);
         r.second = builtPath.info;
     }
@@ -363,8 +364,10 @@ struct CmdProfileAdd : InstallablesCommand, MixDefaultProfile
     {
         ProfileManifest manifest(*getEvalState(), *profile);
 
-        auto builtPaths = builtPathsPerInstallable(
-            Installable::build2(getEvalStore(), store, Realise::Outputs, installables, bmNormal));
+        auto buildResults = Installable::build2(getEvalStore(), store, Realise::Outputs, installables, bmNormal);
+        Installable::throwBuildErrors(buildResults, *store);
+
+        auto builtPaths = builtPathsPerInstallable(buildResults);
 
         for (auto & installable : installables) {
             ProfileElement element;
@@ -412,7 +415,7 @@ struct CmdProfileAdd : InstallablesCommand, MixDefaultProfile
         }
 
         try {
-            updateProfile(manifest.build(store));
+            updateProfile(*store, manifest.build(store));
         } catch (BuildEnvFileConflictError & conflictError) {
             // FIXME use C++20 std::ranges once macOS has it
             //       See
@@ -421,10 +424,10 @@ struct CmdProfileAdd : InstallablesCommand, MixDefaultProfile
                 for (auto it = begin; it != end; it++) {
                     auto & [name, profileElement] = *it;
                     for (auto & storePath : profileElement.storePaths) {
-                        if (conflictError.fileA.starts_with(store->printStorePath(storePath))) {
+                        if (conflictError.fileA.string().starts_with(store->printStorePath(storePath))) {
                             return std::tuple(conflictError.fileA, name, profileElement.toInstallables(*store));
                         }
-                        if (conflictError.fileB.starts_with(store->printStorePath(storePath))) {
+                        if (conflictError.fileB.string().starts_with(store->printStorePath(storePath))) {
                             return std::tuple(conflictError.fileB, name, profileElement.toInstallables(*store));
                         }
                     }
@@ -462,8 +465,8 @@ struct CmdProfileAdd : InstallablesCommand, MixDefaultProfile
                 "To prioritise the existing package:\n"
                 "\n"
                 "  nix profile add %4% --priority %7%\n",
-                originalConflictingFilePath,
-                newConflictingFilePath,
+                PathFmt(originalConflictingFilePath),
+                PathFmt(newConflictingFilePath),
                 originalEntryName,
                 concatStringsSep(" ", newConflictingRefs),
                 conflictError.priority,
@@ -558,9 +561,23 @@ struct AllMatcher final : public Matcher
 
 AllMatcher all;
 
-class MixProfileElementMatchers : virtual Args, virtual StoreCommand
+class MixProfileElementMatchers : virtual Args, virtual StoreCommand, public virtual MixDefaultProfile
 {
     std::vector<ref<Matcher>> _matchers;
+
+    void completeProfileElements(AddCompletions & completions, std::string_view prefix)
+    {
+        auto * evalCmd = dynamic_cast<EvalCommand *>(this);
+        if (!evalCmd)
+            return;
+
+        auto evalState = evalCmd->getEvalState();
+        ProfileManifest manifest(*evalState, *profile);
+
+        for (auto & [name, element] : manifest.elements)
+            if (name.starts_with(prefix))
+                completions.add(name, element.identifier());
+    }
 
 public:
 
@@ -592,6 +609,9 @@ public:
                          _matchers.push_back(make_ref<NameMatcher>(arg));
                      }
                  }
+             }},
+             .completer = {[this](AddCompletions & completions, size_t, std::string_view prefix) {
+                 completeProfileElements(completions, prefix);
              }}});
     }
 
@@ -632,7 +652,7 @@ public:
     }
 };
 
-struct CmdProfileRemove : virtual EvalCommand, MixDefaultProfile, MixProfileElementMatchers
+struct CmdProfileRemove : virtual EvalCommand, MixProfileElementMatchers
 {
     std::string description() override
     {
@@ -668,11 +688,11 @@ struct CmdProfileRemove : virtual EvalCommand, MixDefaultProfile, MixProfileElem
         auto removedCount = oldManifest.elements.size() - newManifest.elements.size();
         printInfo("removed %d packages, kept %d packages", removedCount, newManifest.elements.size());
 
-        updateProfile(newManifest.build(store));
+        updateProfile(*store, newManifest.build(store));
     }
 };
 
-struct CmdProfileUpgrade : virtual SourceExprCommand, MixDefaultProfile, MixProfileElementMatchers
+struct CmdProfileUpgrade : virtual SourceExprCommand, MixProfileElementMatchers
 {
     std::string description() override
     {
@@ -726,11 +746,11 @@ struct CmdProfileUpgrade : virtual SourceExprCommand, MixDefaultProfile, MixProf
                 this,
                 getEvalState(),
                 FlakeRef(element.source->originalRef),
-                "",
+                "." + element.source->attrPath, // absolute lookup
                 element.source->outputs,
-                Strings{element.source->attrPath},
-                Strings{},
-                lockFlags);
+                StringSet{},
+                lockFlags,
+                getDefaultFlakeSchemas());
 
             auto derivedPaths = installable->toDerivedPaths();
             if (derivedPaths.empty())
@@ -766,8 +786,10 @@ struct CmdProfileUpgrade : virtual SourceExprCommand, MixDefaultProfile, MixProf
             return;
         }
 
-        auto builtPaths = builtPathsPerInstallable(
-            Installable::build2(getEvalStore(), store, Realise::Outputs, installables, bmNormal));
+        auto buildResults = Installable::build2(getEvalStore(), store, Realise::Outputs, installables, bmNormal);
+        Installable::throwBuildErrors(buildResults, *store);
+
+        auto builtPaths = builtPathsPerInstallable(buildResults);
 
         for (size_t i = 0; i < installables.size(); ++i) {
             auto & installable = installables.at(i);
@@ -775,7 +797,7 @@ struct CmdProfileUpgrade : virtual SourceExprCommand, MixDefaultProfile, MixProf
             element.updateStorePaths(getEvalStore(), store, builtPaths.find(&*installable)->second.first);
         }
 
-        updateProfile(manifest.build(store));
+        updateProfile(*store, manifest.build(store));
     }
 };
 
@@ -849,7 +871,10 @@ struct CmdProfileDiffClosures : virtual StoreCommand, MixDefaultProfile
                 first = false;
                 logger->cout("Version %d -> %d:", prevGen->number, gen.number);
                 printClosureDiff(
-                    store, store->followLinksToStorePath(prevGen->path), store->followLinksToStorePath(gen.path), "  ");
+                    store,
+                    store->followLinksToStorePath(prevGen->path.string()),
+                    store->followLinksToStorePath(gen.path.string()),
+                    "  ");
             }
 
             prevGen = gen;

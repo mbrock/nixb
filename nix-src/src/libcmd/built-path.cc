@@ -117,10 +117,12 @@ RealisedPath::Set BuiltPath::toRealisedPaths(Store & store) const
                                 "the derivation '%s' has unrealised output '%s' (derived-path.cc/toRealisedPaths)",
                                 store.printStorePath(p.drvPath->outPath()),
                                 outputName);
-                        auto thisRealisation = store.queryRealisation(DrvOutput{*drvOutput, outputName});
-                        assert(thisRealisation); // We’ve built it, so we must
-                                                 // have the realisation
-                        res.insert(*thisRealisation);
+                        DrvOutput key{*drvOutput, outputName};
+                        auto thisRealisation = store.queryRealisation(key);
+                        if (thisRealisation)
+                            res.insert(Realisation{*thisRealisation, std::move(key)});
+                        else
+                            res.insert(outputPath);
                     } else {
                         res.insert(outputPath);
                     }

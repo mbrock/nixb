@@ -42,6 +42,28 @@ TEST(CanonPath, basic)
     }
 }
 
+TEST(CanonPath, nullBytes)
+{
+    std::string s = "/hello/world";
+    s[8] = '\0';
+    ASSERT_THROW(CanonPath("/").push(std::string(1, '\0')), BadCanonPath);
+    ASSERT_THROW(CanonPath(std::string_view(s)), BadCanonPath);
+    ASSERT_THROW(CanonPath(s, CanonPath::root), BadCanonPath);
+}
+
+TEST(CanonPath, fromFilename)
+{
+    ASSERT_THROW(CanonPath::fromFilename("."), BadCanonPath);
+    ASSERT_THROW(CanonPath::fromFilename(".."), BadCanonPath);
+    ASSERT_THROW(CanonPath::fromFilename(""), BadCanonPath);
+    ASSERT_THROW(CanonPath::fromFilename("/.."), BadCanonPath);
+    ASSERT_THROW(CanonPath::fromFilename("/."), BadCanonPath);
+    ASSERT_THROW(CanonPath::fromFilename("/abc"), BadCanonPath);
+    ASSERT_THROW(CanonPath::fromFilename("abc/d"), BadCanonPath);
+    ASSERT_THROW(CanonPath::fromFilename("/abc/d"), BadCanonPath);
+    ASSERT_EQ(CanonPath::fromFilename("abc").rel(), "abc");
+}
+
 TEST(CanonPath, from_existing)
 {
     CanonPath p0("foo//bar/");

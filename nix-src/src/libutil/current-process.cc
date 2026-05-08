@@ -7,10 +7,12 @@
 #include "nix/util/file-system.hh"
 #include "nix/util/processes.hh"
 #include "nix/util/signals.hh"
+#include "nix/util/environment-variables.hh"
 #include <math.h>
 
 #ifdef __APPLE__
 #  include <mach-o/dyld.h>
+#  include <mach/mach.h>
 #endif
 
 #ifdef __linux__
@@ -34,7 +36,7 @@ unsigned int getMaxCPU()
         if (!cgroupFS)
             return 0;
 
-        auto cpuFile = *cgroupFS + "/" + getCurrentCgroup() + "/cpu.max";
+        auto cpuFile = *cgroupFS / getCurrentCgroup().rel() / "cpu.max";
 
         auto cpuMax = readFile(cpuFile);
         auto cpuMaxParts = tokenizeString<std::vector<std::string>>(cpuMax, " \n");
@@ -65,13 +67,27 @@ void setStackSize(size_t stackSize)
     struct rlimit limit;
     if (getrlimit(RLIMIT_STACK, &limit) == 0 && static_cast<size_t>(limit.rlim_cur) < stackSize) {
         savedStackSize = limit.rlim_cur;
-        limit.rlim_cur = std::min(static_cast<rlim_t>(stackSize), limit.rlim_max);
+        if (limit.rlim_max < static_cast<rlim_t>(stackSize)) {
+            if (getEnv("_NIX_TEST_NO_ENVIRONMENT_WARNINGS") != "1") {
+                logger->log(
+                    lvlWarn,
+                    HintFmt(
+                        "Stack size hard limit is %1%, which is less than the desired %2%. If possible, increase the hard limit, e.g. with 'ulimit -Hs %3%'.",
+                        limit.rlim_max,
+                        stackSize,
+                        stackSize / 1024)
+                        .str());
+            }
+        }
+        auto requestedSize = std::min(static_cast<rlim_t>(stackSize), limit.rlim_max);
+        limit.rlim_cur = requestedSize;
         if (setrlimit(RLIMIT_STACK, &limit) != 0) {
             logger->log(
                 lvlError,
                 HintFmt(
-                    "Failed to increase stack size from %1% to %2% (maximum allowed stack size: %3%): %4%",
+                    "Failed to increase stack size from %1% to %2% (desired: %3%, maximum allowed: %4%): %5%",
                     savedStackSize,
+                    requestedSize,
                     stackSize,
                     limit.rlim_max,
                     std::strerror(errno))
@@ -101,15 +117,24 @@ void restoreProcessContext(bool restoreMounts)
         }
     }
 #endif
+
+#ifdef __APPLE__
+    /* Reset the Mach exception ports. Otherwise, if a crashpad_handler is attached to this process, it will be
+       inherited across execve() and receive spurious crash reports from unrelated programs (e.g. in `nix run`).
+       FIXME: it would be better to have Sentry tell crashpad_handler to quit, but it doesn't appear to have an API for
+       that. */
+    task_set_exception_ports(
+        mach_task_self(), EXC_MASK_ALL | EXC_MASK_CRASH, MACH_PORT_NULL, EXCEPTION_DEFAULT, THREAD_STATE_NONE);
+#endif
 }
 
 //////////////////////////////////////////////////////////////////////
 
-std::optional<Path> getSelfExe()
+std::optional<std::filesystem::path> getSelfExe()
 {
-    static auto cached = []() -> std::optional<Path> {
+    static auto cached = []() -> std::optional<std::filesystem::path> {
 #if defined(__linux__) || defined(__GNU__)
-        return readLink("/proc/self/exe");
+        return readLink(std::filesystem::path{"/proc/self/exe"});
 #elif defined(__APPLE__)
         char buf[1024];
         uint32_t size = sizeof(buf);
@@ -134,7 +159,12 @@ std::optional<Path> getSelfExe()
             return std::nullopt;
         }
 
-        return Path(path.begin(), path.end());
+        // FreeBSD's sysctl(KERN_PROC_PATHNAME) includes the null terminator in
+        // pathLen. Strip it to prevent Nix evaluation errors when the path is
+        // serialized to JSON and evaluated as a Nix string.
+        path.pop_back();
+
+        return std::string(path.begin(), path.end());
 #else
         return std::nullopt;
 #endif

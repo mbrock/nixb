@@ -1,7 +1,7 @@
 #pragma once
 ///@file
 
-#include "nix/util/signature/local-keys.hh"
+#include "nix/util/compression-settings.hh"
 #include "nix/store/store-api.hh"
 #include "nix/store/log-store.hh"
 
@@ -18,13 +18,19 @@ struct BinaryCacheStoreConfig : virtual StoreConfig
 {
     using StoreConfig::StoreConfig;
 
-    const Setting<std::string> compression{
-        this, "xz", "compression", "NAR compression method (`xz`, `bzip2`, `gzip`, `zstd`, or `none`)."};
+    Setting<CompressionAlgo> compression{
+        this,
+        CompressionAlgo::xz,
+        "compression",
+        R"(
+          NAR compression method. One of: `xz`, `bzip2`, `gzip`, `zstd`, `none`, `br`, `compress`, `grzip`, `lrzip`, `lz4`, `lzip`, `lzma` or `lzop`.
+          To use a particular compression method Nix has to be built with a version of libarchive that natively supports that compression algorithm.
+        )"};
 
-    const Setting<bool> writeNARListing{
+    Setting<bool> writeNARListing{
         this, false, "write-nar-listing", "Whether to write a JSON file that lists the files in each NAR."};
 
-    const Setting<bool> writeDebugInfo{
+    Setting<bool> writeDebugInfo{
         this,
         false,
         "index-debug-info",
@@ -33,24 +39,25 @@ struct BinaryCacheStoreConfig : virtual StoreConfig
           fetch debug info on demand
         )"};
 
-    const Setting<Path> secretKeyFile{this, "", "secret-key", "Path to the secret key used to sign the binary cache."};
+    Setting<AbsolutePath> secretKeyFile{
+        this, "", "secret-key", "Path to the secret key used to sign the binary cache."};
 
-    const Setting<std::string> secretKeyFiles{
+    Setting<std::string> secretKeyFiles{
         this, "", "secret-keys", "List of comma-separated paths to the secret keys used to sign the binary cache."};
 
-    const Setting<Path> localNarCache{
+    Setting<std::optional<AbsolutePath>> localNarCache{
         this,
-        "",
+        std::nullopt,
         "local-nar-cache",
         "Path to a local cache of NARs fetched from this binary cache, used by commands such as `nix store cat`."};
 
-    const Setting<bool> parallelCompression{
+    Setting<bool> parallelCompression{
         this,
         false,
         "parallel-compression",
         "Enable multi-threaded compression of NARs. This is currently only available for `xz` and `zstd`."};
 
-    const Setting<int> compressionLevel{
+    Setting<int> compressionLevel{
         this,
         -1,
         "compression-level",
@@ -65,7 +72,9 @@ struct BinaryCacheStoreConfig : virtual StoreConfig
  * @note subclasses must implement at least one of the two
  * virtual getFile() methods.
  */
-struct BinaryCacheStore : virtual Store, virtual LogStore
+struct alignas(8) /* Work around ASAN failures on i686-linux. */
+    BinaryCacheStore : virtual Store,
+                       virtual LogStore
 {
     using Config = BinaryCacheStoreConfig;
 
@@ -80,25 +89,50 @@ private:
 
 protected:
 
-    // The prefix under which realisation infos will be stored
-    const std::string realisationsPrefix = "realisations";
+    /**
+     * The prefix under which realisation infos will be stored
+     */
+    constexpr const static std::string realisationsPrefix = "realisations";
 
-    const std::string cacheInfoFile = "nix-cache-info";
+    constexpr const static std::string cacheInfoFile = "nix-cache-info";
 
     BinaryCacheStore(Config &);
 
+    /**
+     * Compute the path to the given realisation
+     *
+     * It's `${realisationsPrefix}/${drvOutput}.doi`.
+     */
+    std::string makeRealisationPath(const DrvOutput & id);
+
 public:
+
+    bool includeInProvenance() override
+    {
+        return true;
+    }
 
     virtual bool fileExists(const std::string & path) = 0;
 
     virtual void upsertFile(
-        const std::string & path, std::shared_ptr<std::basic_iostream<char>> istream, const std::string & mimeType) = 0;
+        const std::string & path, RestartableSource & source, const std::string & mimeType, uint64_t sizeHint) = 0;
 
     void upsertFile(
         const std::string & path,
         // FIXME: use std::string_view
         std::string && data,
-        const std::string & mimeType);
+        const std::string & mimeType,
+        uint64_t sizeHint);
+
+    void upsertFile(
+        const std::string & path,
+        // FIXME: use std::string_view
+        std::string && data,
+        const std::string & mimeType)
+    {
+        auto size = data.size();
+        upsertFile(path, std::move(data), mimeType, size);
+    }
 
     /**
      * Dump the contents of the specified file to a sink.
@@ -132,10 +166,7 @@ private:
     void writeNarInfo(ref<NarInfo> narInfo);
 
     ref<const ValidPathInfo> addToStoreCommon(
-        Source & narSource,
-        RepairFlag repair,
-        CheckSigsFlag checkSigs,
-        std::function<ValidPathInfo(HashResult)> mkInfo);
+        Source & narSource, RepairFlag repair, CheckSigsFlag checkSigs, fun<ValidPathInfo(HashResult)> mkInfo);
 
     /**
      * Same as `getFSAccessor`, but with a more preceise return type.
@@ -161,7 +192,8 @@ public:
         ContentAddressMethod hashMethod,
         HashAlgorithm hashAlgo,
         const StorePathSet & references,
-        RepairFlag repair) override;
+        RepairFlag repair,
+        std::shared_ptr<const Provenance> provenance) override;
 
     StorePath addToStore(
         std::string_view name,
@@ -175,7 +207,7 @@ public:
     void registerDrvOutput(const Realisation & info) override;
 
     void queryRealisationUncached(
-        const DrvOutput &, Callback<std::shared_ptr<const Realisation>> callback) noexcept override;
+        const DrvOutput &, Callback<std::shared_ptr<const UnkeyedRealisation>> callback) noexcept override;
 
     void narFromPath(const StorePath & path, Sink & sink) override;
 
@@ -183,7 +215,7 @@ public:
 
     std::shared_ptr<SourceAccessor> getFSAccessor(const StorePath &, bool requireValidPath = true) override;
 
-    void addSignatures(const StorePath & storePath, const StringSet & sigs) override;
+    void addSignatures(const StorePath & storePath, const std::set<Signature> & sigs) override;
 
     std::optional<std::string> getBuildLogExact(const StorePath & path) override;
 

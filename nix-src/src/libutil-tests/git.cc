@@ -224,48 +224,20 @@ TEST_F(GitTest, tree_sha256_write)
     });
 }
 
+namespace memory_source_accessor {
+
+extern ref<MemorySourceAccessor> exampleComplex();
+
+}
+
 TEST_F(GitTest, both_roundrip)
 {
-    using File = MemorySourceAccessor::File;
-
-    auto files = make_ref<MemorySourceAccessor>();
-    files->root = File::Directory{
-        .contents{
-            {
-                "foo",
-                File::Regular{
-                    .contents = "hello\n\0\n\tworld!",
-                },
-            },
-            {
-                "bar",
-                File::Directory{
-                    .contents =
-                        {
-                            {
-                                "baz",
-                                File::Regular{
-                                    .executable = true,
-                                    .contents = "good day,\n\0\n\tworld!",
-                                },
-                            },
-                            {
-                                "quux",
-                                File::Symlink{
-                                    .target = "/over/there",
-                                },
-                            },
-                        },
-                },
-            },
-        },
-    };
+    auto files = memory_source_accessor::exampleComplex();
 
     for (const auto hashAlgo : {HashAlgorithm::SHA1, HashAlgorithm::SHA256}) {
         std::map<Hash, std::string> cas;
 
-        std::function<DumpHook> dumpHook;
-        dumpHook = [&](const SourcePath & path) {
+        fun<DumpHook> dumpHook = [&](const SourcePath & path) {
             StringSink s;
             HashSink hashSink{hashAlgo};
             TeeSink s2{s, hashSink};
@@ -278,7 +250,7 @@ TEST_F(GitTest, both_roundrip)
             };
         };
 
-        auto root = dumpHook({files});
+        auto root = dumpHook(SourcePath{files});
 
         auto files2 = make_ref<MemorySourceAccessor>();
 

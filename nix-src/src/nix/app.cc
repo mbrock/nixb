@@ -90,7 +90,7 @@ UnresolvedApp InstallableValue::toApp(EvalState & state)
                         },
                         [&](const NixStringContextElem::Opaque & o) -> DerivedPath {
                             return DerivedPath::Opaque{
-                                .path = o.path,
+                                .path = state.devirtualize(o.path),
                             };
                         },
                         [&](const NixStringContextElem::Path & p) -> DerivedPath {
@@ -102,7 +102,7 @@ UnresolvedApp InstallableValue::toApp(EvalState & state)
 
         return UnresolvedApp{App{
             .context = std::move(context2),
-            .program = program,
+            .program = state.devirtualize(program, context),
         }};
     }
 
@@ -145,9 +145,9 @@ App UnresolvedApp::resolve(ref<Store> evalStore, ref<Store> store)
     auto res = unresolved;
 
     auto builtContext = build(evalStore, store);
-    res.program = resolveString(*store, unresolved.program, builtContext);
-    if (!store->isInStore(res.program))
-        throw Error("app program '%s' is not in the Nix store", res.program);
+    res.program = resolveString(*store, unresolved.program.string(), builtContext);
+    if (!store->isInStore(res.program.string()))
+        throw Error("app program '%s' is not in the Nix store", res.program.string());
 
     return res;
 }

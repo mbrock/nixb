@@ -1,5 +1,4 @@
 #include "nix/store/build/worker.hh"
-#include "nix/store/store-open.hh"
 #include "nix/store/build/substitution-goal.hh"
 #include "nix/store/nar-info.hh"
 #include "nix/util/finally.hh"
@@ -29,34 +28,12 @@ PathSubstitutionGoal::~PathSubstitutionGoal()
     cleanup();
 }
 
-Goal::Done PathSubstitutionGoal::doneSuccess(BuildResult::Success::Status status)
+Goal::Done PathSubstitutionGoal::doneFailure(ExitCode result, BuildResult::Failure failure)
 {
-    buildResult.inner = BuildResult::Success{
-        .status = status,
-    };
-
     logger->result(
-        getCurActivity(),
-        resBuildResult,
-        nlohmann::json(KeyedBuildResult(buildResult, DerivedPath::Opaque{storePath})));
+        getCurActivity(), resBuildResult, nlohmann::json(KeyedBuildResult({failure}, DerivedPath::Opaque{storePath})));
 
-    return amDone(ecSuccess);
-}
-
-Goal::Done PathSubstitutionGoal::doneFailure(ExitCode result, BuildResult::Failure::Status status, std::string errorMsg)
-{
-    debug(errorMsg);
-    buildResult.inner = BuildResult::Failure{
-        .status = status,
-        .errorMsg = std::move(errorMsg),
-    };
-
-    logger->result(
-        getCurActivity(),
-        resBuildResult,
-        nlohmann::json(KeyedBuildResult(buildResult, DerivedPath::Opaque{storePath})));
-
-    return amDone(result);
+    return Goal::doneFailure(result, std::move(failure));
 }
 
 Goal::Co PathSubstitutionGoal::init()
@@ -67,14 +44,14 @@ Goal::Co PathSubstitutionGoal::init()
 
     /* If the path already exists we're done. */
     if (!repair && worker.store.isValidPath(storePath)) {
-        co_return doneSuccess(BuildResult::Success::AlreadyValid);
+        co_return doneSuccess(BuildResult::Success{.status = BuildResult::Success::AlreadyValid});
     }
 
-    if (settings.readOnlyMode)
+    if (worker.store.config.getReadOnly())
         throw Error(
             "cannot substitute path '%s' - no write access to the Nix store", worker.store.printStorePath(storePath));
 
-    auto subs = settings.useSubstitutes ? getDefaultSubstituters() : std::list<ref<Store>>();
+    auto subs = worker.getSubstituters();
 
     bool substituterFailed = false;
     std::optional<Error> lastStoresException = std::nullopt;
@@ -178,7 +155,7 @@ Goal::Co PathSubstitutionGoal::init()
         worker.updateProgress();
     }
     if (lastStoresException.has_value()) {
-        if (!settings.tryFallback) {
+        if (!worker.settings.tryFallback) {
             throw *lastStoresException;
         } else
             logError(lastStoresException->info());
@@ -189,9 +166,12 @@ Goal::Co PathSubstitutionGoal::init()
        build. */
     co_return doneFailure(
         substituterFailed ? ecFailed : ecNoSubstituters,
-        BuildResult::Failure::NoSubstituters,
-        fmt("path '%s' is required, but there is no substituter that can build it",
-            worker.store.printStorePath(storePath)));
+        BuildResult::Failure{{
+            .status = BuildResult::Failure::NoSubstituters,
+            .msg = HintFmt(
+                "path '%s' is required, but there is no substituter that can build it",
+                worker.store.printStorePath(storePath)),
+        }});
 }
 
 Goal::Co PathSubstitutionGoal::tryToRun(
@@ -202,8 +182,11 @@ Goal::Co PathSubstitutionGoal::tryToRun(
     if (nrFailed > 0) {
         co_return doneFailure(
             nrNoSubstituters > 0 ? ecNoSubstituters : ecFailed,
-            BuildResult::Failure::DependencyFailed,
-            fmt("some references of path '%s' could not be realised", worker.store.printStorePath(storePath)));
+            BuildResult::Failure{{
+                .status = BuildResult::Failure::DependencyFailed,
+                .msg = HintFmt(
+                    "some references of path '%s' could not be realised", worker.store.printStorePath(storePath)),
+            }});
     }
 
     for (auto & i : info->references)
@@ -224,7 +207,7 @@ Goal::Co PathSubstitutionGoal::tryToRun(
     /* Make sure that we are allowed to start a substitution.  Note that even
        if maxSubstitutionJobs == 0, we still allow a substituter to run. This
        prevents infinite waiting. */
-    while (worker.getNrSubstitutions() >= std::max(1U, (unsigned int) settings.maxSubstitutionJobs)) {
+    while (worker.getNrSubstitutions() >= std::max(1U, (unsigned int) worker.settings.maxSubstitutionJobs)) {
         co_await waitForBuildSlot();
     }
 
@@ -237,7 +220,7 @@ Goal::Co PathSubstitutionGoal::tryToRun(
     outPipe.createAsyncPipe(worker.ioport.get());
 #endif
 
-    auto promise = std::promise<void>();
+    auto promise = std::promise<std::shared_ptr<const ValidPathInfo>>();
 
     thr = std::thread([this, &promise, &subPath, &sub]() {
         try {
@@ -252,9 +235,8 @@ Goal::Co PathSubstitutionGoal::tryToRun(
                 Logger::Fields{worker.store.printStorePath(storePath), sub->config.getHumanReadableURI()});
             PushActivity pact(act.id);
 
-            copyStorePath(*sub, worker.store, subPath, repair, sub->config.isTrusted ? NoCheckSigs : CheckSigs);
-
-            promise.set_value();
+            promise.set_value(
+                copyStorePath(*sub, worker.store, subPath, repair, sub->config.isTrusted ? NoCheckSigs : CheckSigs));
         } catch (...) {
             promise.set_exception(std::current_exception());
         }
@@ -272,26 +254,41 @@ Goal::Co PathSubstitutionGoal::tryToRun(
         true,
         false);
 
-    co_await Suspend{};
+    while (true) {
+        auto event = co_await WaitForChildEvent{};
+        if (std::get_if<ChildOutput>(&event)) {
+            // Substitution doesn't process child output
+        } else if (std::get_if<ChildEOF>(&event)) {
+            break;
+        } else if (std::get_if<TimedOut>(&event)) {
+            unreachable(); // Substitution doesn't use timeouts
+        }
+    }
 
     trace("substitute finished");
 
     thr.join();
     worker.childTerminated(this);
 
-    try {
-        promise.get_future().get();
-    } catch (std::exception & e) {
-        printError(e.what());
+    std::shared_ptr<const Provenance> provenance;
 
+    try {
+        auto info = promise.get_future().get();
+        if (info)
+            provenance = info->provenance;
+    } catch (std::exception & e) {
         /* Cause the parent build to fail unless --fallback is given,
            or the substitute has disappeared. The latter case behaves
            the same as the substitute never having existed in the
            first place. */
         try {
             throw;
-        } catch (SubstituteGone &) {
+        } catch (SubstituteGone & sg) {
+            /* Missing NARs are expected when they've been garbage collected.
+               This is not a failure, so log as a warning instead of an error. */
+            logWarning({.msg = sg.info().msg});
         } catch (...) {
+            printError(e.what());
             substituterFailed = true;
         }
 
@@ -319,12 +316,12 @@ Goal::Co PathSubstitutionGoal::tryToRun(
 
     worker.updateProgress();
 
-    co_return doneSuccess(BuildResult::Success::Substituted);
-}
+    auto success = BuildResult::Success{.status = BuildResult::Success::Substituted, .provenance = provenance};
 
-void PathSubstitutionGoal::handleEOF(Descriptor fd)
-{
-    worker.wakeUp(shared_from_this());
+    logger->result(
+        getCurActivity(), resBuildResult, nlohmann::json(KeyedBuildResult({success}, DerivedPath::Opaque{storePath})));
+
+    co_return doneSuccess(std::move(success));
 }
 
 void PathSubstitutionGoal::cleanup()
@@ -333,7 +330,7 @@ void PathSubstitutionGoal::cleanup()
         if (thr.joinable()) {
             // FIXME: signal worker thread to quit.
             thr.join();
-            worker.childTerminated(this);
+            worker.childTerminated(this, JobCategory::Substitution);
         }
 
         outPipe.close();

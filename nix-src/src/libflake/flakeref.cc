@@ -1,10 +1,40 @@
+#include <assert.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <filesystem>
+#include <ostream>
+#include <string_view>
+#include <vector>
+#include <optional>
+#include <regex>
+#include <string>
+#include <tuple>
+#include <utility>
+
 #include "nix/flake/flakeref.hh"
-#include "nix/store/store-api.hh"
 #include "nix/util/url.hh"
 #include "nix/util/url-parts.hh"
 #include "nix/fetchers/fetchers.hh"
+#include "nix/util/error.hh"
+#include "nix/util/file-system.hh"
+#include "nix/util/fmt.hh"
+#include "nix/util/logging.hh"
+#include "nix/util/strings.hh"
+#include "nix/util/util.hh"
+#include "nix/fetchers/attrs.hh"
+#include "nix/fetchers/registry.hh"
+#include "nix/store/outputs-spec.hh"
+#include "nix/util/ref.hh"
+#include "nix/util/types.hh"
+#include "nix/fetchers/fetch-settings.hh"
 
 namespace nix {
+class Store;
+struct SourceAccessor;
+
+namespace fetchers {
+struct Settings;
+} // namespace fetchers
 
 #if 0
 // 'dir' path elements cannot start with a '.'. We also reject
@@ -35,8 +65,8 @@ std::ostream & operator<<(std::ostream & str, const FlakeRef & flakeRef)
     return str;
 }
 
-FlakeRef FlakeRef::resolve(
-    const fetchers::Settings & fetchSettings, ref<Store> store, fetchers::UseRegistries useRegistries) const
+FlakeRef
+FlakeRef::resolve(const fetchers::Settings & fetchSettings, Store & store, fetchers::UseRegistries useRegistries) const
 {
     auto [input2, extraAttrs] = lookupInRegistries(fetchSettings, store, input, useRegistries);
     return FlakeRef(std::move(input2), fetchers::maybeGetStrAttr(extraAttrs, "dir").value_or(subdir));
@@ -45,7 +75,7 @@ FlakeRef FlakeRef::resolve(
 FlakeRef parseFlakeRef(
     const fetchers::Settings & fetchSettings,
     const std::string & url,
-    const std::optional<Path> & baseDir,
+    const std::optional<std::filesystem::path> & baseDir,
     bool allowMissing,
     bool isFlake,
     bool preserveRelativePaths)
@@ -61,7 +91,8 @@ static std::pair<FlakeRef, std::string>
 fromParsedURL(const fetchers::Settings & fetchSettings, ParsedURL && parsedURL, bool isFlake)
 {
     auto dir = getOr(parsedURL.query, "dir", "");
-    parsedURL.query.erase("dir");
+    if (!fetchSettings.nix219Compat)
+        parsedURL.query.erase("dir");
 
     std::string fragment;
     std::swap(fragment, parsedURL.fragment);
@@ -72,7 +103,7 @@ fromParsedURL(const fetchers::Settings & fetchSettings, ParsedURL && parsedURL, 
 std::pair<FlakeRef, std::string> parsePathFlakeRefWithFragment(
     const fetchers::Settings & fetchSettings,
     const std::string & url,
-    const std::optional<Path> & baseDir,
+    const std::optional<std::filesystem::path> & baseDir,
     bool allowMissing,
     bool isFlake,
     bool preserveRelativePaths)
@@ -83,7 +114,7 @@ std::pair<FlakeRef, std::string> parsePathFlakeRefWithFragment(
     auto succeeds = std::regex_match(url, match, pathFlakeRegex);
     if (!succeeds)
         throw Error("invalid flakeref '%s'", url);
-    auto path = match[1].str();
+    std::filesystem::path path = match[1].str();
     auto query = decodeQuery(match[3].str(), /*lenient=*/true);
     auto fragment = percentDecode(match[5].str());
 
@@ -92,60 +123,62 @@ std::pair<FlakeRef, std::string> parsePathFlakeRefWithFragment(
            to 'baseDir'). If so, search upward to the root of the
            repo (i.e. the directory containing .git). */
 
-        path = absPath(path, baseDir, true);
+        path = absPath(path, get(baseDir), true);
 
         if (isFlake) {
 
             if (!S_ISDIR(lstat(path).st_mode)) {
-                if (baseNameOf(path) == "flake.nix") {
+                if (path.filename() == "flake.nix") {
                     // Be gentle with people who accidentally write `/foo/bar/flake.nix` instead of `/foo/bar`
+                    auto parentPath = path.parent_path();
                     warn(
-                        "Path '%s' should point at the directory containing the 'flake.nix' file, not the file itself. "
-                        "Pretending that you meant '%s'",
-                        path,
-                        dirOf(path));
-                    path = dirOf(path);
+                        "Path %s should point at the directory containing the 'flake.nix' file, not the file itself. "
+                        "Pretending that you meant %s",
+                        PathFmt(path),
+                        PathFmt(parentPath));
+                    path = parentPath;
                 } else {
-                    throw BadURL("path '%s' is not a flake (because it's not a directory)", path);
+                    throw BadURL("path %s is not a flake (because it's not a directory)", PathFmt(path));
                 }
             }
 
-            if (!allowMissing && !pathExists(path + "/flake.nix")) {
-                notice("path '%s' does not contain a 'flake.nix', searching up", path);
+            if (!allowMissing && !pathExists(path / "flake.nix")) {
+                notice("path %s does not contain a 'flake.nix', searching up", PathFmt(path));
 
                 // Save device to detect filesystem boundary
                 dev_t device = lstat(path).st_dev;
                 bool found = false;
                 while (path != "/") {
-                    if (pathExists(path + "/flake.nix")) {
+                    if (pathExists(path / "flake.nix")) {
                         found = true;
                         break;
-                    } else if (pathExists(path + "/.git"))
+                    } else if (pathExists(path / ".git"))
                         throw Error(
-                            "path '%s' is not part of a flake (neither it nor its parent directories contain a 'flake.nix' file)",
-                            path);
+                            "path %s is not part of a flake (neither it nor its parent directories contain a 'flake.nix' file)",
+                            PathFmt(path));
                     else {
                         if (lstat(path).st_dev != device)
-                            throw Error("unable to find a flake before encountering filesystem boundary at '%s'", path);
+                            throw Error(
+                                "unable to find a flake before encountering filesystem boundary at %s", PathFmt(path));
                     }
-                    path = dirOf(path);
+                    path = path.parent_path();
                 }
                 if (!found)
                     throw BadURL("could not find a flake.nix file");
             }
 
-            if (!allowMissing && !pathExists(path + "/flake.nix"))
-                throw BadURL("path '%s' is not a flake (because it doesn't contain a 'flake.nix' file)", path);
+            if (!allowMissing && !pathExists(path / "flake.nix"))
+                throw BadURL("path %s is not a flake (because it doesn't contain a 'flake.nix' file)", PathFmt(path));
 
             auto flakeRoot = path;
             std::string subdir;
 
             while (flakeRoot != "/") {
-                if (pathExists(flakeRoot + "/.git")) {
+                if (pathExists(flakeRoot / ".git")) {
                     auto parsedURL = ParsedURL{
                         .scheme = "git+file",
                         .authority = ParsedURL::Authority{},
-                        .path = splitString<std::vector<std::string>>(flakeRoot, "/"),
+                        .path = pathToUrlPath(flakeRoot),
                         .query = query,
                         .fragment = fragment,
                     };
@@ -156,19 +189,19 @@ std::pair<FlakeRef, std::string> parsePathFlakeRefWithFragment(
                         parsedURL.query.insert_or_assign("dir", subdir);
                     }
 
-                    if (pathExists(flakeRoot + "/.git/shallow"))
+                    if (pathExists(flakeRoot / ".git" / "shallow"))
                         parsedURL.query.insert_or_assign("shallow", "1");
 
                     return fromParsedURL(fetchSettings, std::move(parsedURL), isFlake);
                 }
 
-                subdir = std::string(baseNameOf(flakeRoot)) + (subdir.empty() ? "" : "/" + subdir);
-                flakeRoot = dirOf(flakeRoot);
+                subdir = flakeRoot.filename().string() + (subdir.empty() ? "" : "/" + subdir);
+                flakeRoot = flakeRoot.parent_path();
             }
         }
 
     } else {
-        if (!preserveRelativePaths && !isAbsolute(path))
+        if (!preserveRelativePaths && !path.is_absolute())
             throw BadURL("flake reference '%s' is not an absolute path", url);
     }
 
@@ -176,8 +209,8 @@ std::pair<FlakeRef, std::string> parsePathFlakeRefWithFragment(
         fetchSettings,
         {
             .scheme = "path",
-            .authority = ParsedURL::Authority{},
-            .path = splitString<std::vector<std::string>>(path, "/"),
+            .authority = path.is_absolute() ? std::optional{ParsedURL::Authority{}} : std::nullopt,
+            .path = pathToUrlPath(path),
             .query = query,
             .fragment = fragment,
         },
@@ -214,16 +247,16 @@ parseFlakeIdRef(const fetchers::Settings & fetchSettings, const std::string & ur
 std::optional<std::pair<FlakeRef, std::string>> parseURLFlakeRef(
     const fetchers::Settings & fetchSettings,
     const std::string & url,
-    const std::optional<Path> & baseDir,
+    const std::optional<std::filesystem::path> & baseDir,
     bool isFlake)
 {
     try {
         auto parsed = parseURL(url, /*lenient=*/true);
         if (baseDir && (parsed.scheme == "path" || parsed.scheme == "git+file")) {
             /* Here we know that the path must not contain encoded '/' or NUL bytes. */
-            auto path = renderUrlPathEnsureLegal(parsed.path);
-            if (!isAbsolute(path))
-                parsed.path = splitString<std::vector<std::string>>(absPath(path, *baseDir), "/");
+            auto path = urlPathToPath(parsed.path);
+            if (!path.is_absolute())
+                parsed.path = pathToUrlPath(absPath(path, get(baseDir)));
         }
         return fromParsedURL(fetchSettings, std::move(parsed), isFlake);
     } catch (BadURL &) {
@@ -234,7 +267,7 @@ std::optional<std::pair<FlakeRef, std::string>> parseURLFlakeRef(
 std::pair<FlakeRef, std::string> parseFlakeRefWithFragment(
     const fetchers::Settings & fetchSettings,
     const std::string & url,
-    const std::optional<Path> & baseDir,
+    const std::optional<std::filesystem::path> & baseDir,
     bool allowMissing,
     bool isFlake,
     bool preserveRelativePaths)
@@ -260,7 +293,7 @@ FlakeRef FlakeRef::fromAttrs(const fetchers::Settings & fetchSettings, const fet
 }
 
 std::pair<ref<SourceAccessor>, FlakeRef>
-FlakeRef::lazyFetch(const fetchers::Settings & fetchSettings, ref<Store> store) const
+FlakeRef::lazyFetch(const fetchers::Settings & fetchSettings, Store & store) const
 {
     auto [accessor, lockedInput] = input.getAccessor(fetchSettings, store);
     return {accessor, FlakeRef(std::move(lockedInput), subdir)};
@@ -318,7 +351,7 @@ FlakeRef FlakeRef::canonicalize() const
 std::tuple<FlakeRef, std::string, ExtendedOutputsSpec> parseFlakeRefWithFragmentAndExtendedOutputsSpec(
     const fetchers::Settings & fetchSettings,
     const std::string & url,
-    const std::optional<Path> & baseDir,
+    const std::optional<std::filesystem::path> & baseDir,
     bool allowMissing,
     bool isFlake)
 {

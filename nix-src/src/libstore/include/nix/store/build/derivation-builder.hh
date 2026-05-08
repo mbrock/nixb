@@ -1,12 +1,16 @@
 #pragma once
 ///@file
 
+#include <filesystem>
+#include <nlohmann/json_fwd.hpp>
+
 #include "nix/store/build-result.hh"
 #include "nix/store/derivation-options.hh"
 #include "nix/store/build/derivation-building-misc.hh"
 #include "nix/store/derivations.hh"
 #include "nix/store/parsed-derivations.hh"
 #include "nix/util/processes.hh"
+#include "nix/util/json-impls.hh"
 #include "nix/store/restricted-store.hh"
 #include "nix/store/build/derivation-env-desugar.hh"
 
@@ -16,14 +20,14 @@ namespace nix {
  * Denotes a build failure that stemmed from the builder exiting with a
  * failing exist status.
  */
-struct BuilderFailureError : BuildError
+struct BuilderFailureError final : CloneableError<BuilderFailureError, BuildError>
 {
     int builderStatus;
 
     std::string extraMsgAfter;
 
     BuilderFailureError(BuildResult::Failure::Status status, int builderStatus, std::string extraMsgAfter)
-        : BuildError{
+        : CloneableError{
             status,
               /* No message for now, because the caller will make for
                  us, with extra context */
@@ -40,11 +44,11 @@ struct BuilderFailureError : BuildError
  */
 struct ChrootPath
 {
-    Path source;
+    std::filesystem::path source;
     bool optional = false;
 };
 
-typedef std::map<Path, ChrootPath> PathsInChroot; // maps target path to source path
+typedef std::map<std::filesystem::path, ChrootPath> PathsInChroot; // maps target path to source path
 
 /**
  * Parameters by (mostly) `const` reference for `DerivationBuilder`.
@@ -54,19 +58,24 @@ struct DerivationBuilderParams
     /** The path of the derivation. */
     const StorePath & drvPath;
 
+    /**
+     * The provenance of the derivation, if known
+     */
+    const std::shared_ptr<const Provenance> drvProvenance;
+
     BuildResult & buildResult;
 
     /**
      * The derivation stored at drvPath.
      */
-    const Derivation & drv;
+    const BasicDerivation & drv;
 
     /**
      * The derivation options of `drv`.
      *
      * @todo this should be part of `Derivation`.
      */
-    const DerivationOptions & drvOptions;
+    const DerivationOptions<StorePath> & drvOptions;
 
     // The remainder is state held during the build.
 
@@ -76,7 +85,7 @@ struct DerivationBuilderParams
      */
     const StorePathSet & inputPaths;
 
-    const std::map<std::string, InitialOutput> & initialOutputs;
+    const std::map<std::string, InitialOutput> initialOutputs;
 
     const BuildMode & buildMode;
 
@@ -99,7 +108,7 @@ struct DerivationBuilderParams
     /**
      * The activity corresponding to the build.
      */
-    std::unique_ptr<Activity> & act;
+    ref<Activity> act;
 };
 
 /**
@@ -112,7 +121,7 @@ struct DerivationBuilderCallbacks
     /**
      * Open a log file and a pipe to it.
      */
-    virtual Path openLogFile() = 0;
+    virtual void openLogFile() = 0;
 
     /**
      * Close the log file.
@@ -184,9 +193,48 @@ struct DerivationBuilder : RestrictionContext
     virtual bool killChild() = 0;
 };
 
+/**
+ * Run a callback that may change process credentials (setuid, setgid, etc.)
+ * while preserving the parent-death signal.
+ *
+ * The parent-death signal setting is cleared by the Linux kernel upon changes
+ * to EUID, EGID.
+ *
+ * @note Does nothing on non-Linux systems.
+ * @see man PR_SET_PDEATHSIG
+ * @see https://github.com/golang/go/issues/9686
+ */
+void preserveDeathSignal(fun<void()> setCredentials);
+
+struct ExternalBuilder
+{
+    StringSet systems;
+    std::filesystem::path program;
+    std::vector<std::string> args;
+};
+
+struct DerivationBuilderDeleter
+{
+    void operator()(DerivationBuilder * builder) noexcept;
+};
+
+using DerivationBuilderUnique = std::unique_ptr<DerivationBuilder, DerivationBuilderDeleter>;
+
 #ifndef _WIN32 // TODO enable `DerivationBuilder` on Windows
-std::unique_ptr<DerivationBuilder> makeDerivationBuilder(
+DerivationBuilderUnique makeDerivationBuilder(
     LocalStore & store, std::unique_ptr<DerivationBuilderCallbacks> miscMethods, DerivationBuilderParams params);
+
+/**
+ * @param handler Must be chosen such that it supports the given
+ * derivation.
+ */
+DerivationBuilderUnique makeExternalDerivationBuilder(
+    LocalStore & store,
+    std::unique_ptr<DerivationBuilderCallbacks> miscMethods,
+    DerivationBuilderParams params,
+    const ExternalBuilder & handler);
 #endif
 
 } // namespace nix
+
+JSON_IMPL(nix::ExternalBuilder)
