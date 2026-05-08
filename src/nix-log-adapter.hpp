@@ -87,7 +87,10 @@ using Kind =
 
 } // namespace activity
 
-// Activity lifecycle events
+// Semantic event model shared by the live nix::Logger adapter and
+// replay of @nix internal-json logs. Keep this layer close to Nix's
+// activity/result vocabulary; UI summaries and success heuristics belong in
+// consumers.
 struct ActivityStarted
 {
     ActivityId id;

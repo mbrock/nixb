@@ -82,6 +82,10 @@ activity::Kind parse_activity_kind(
 std::optional<NixLogEvent> parse_result(
     const ActivityId id, const nix::ResultType type, const Fields & fields)
 {
+    // Nix result payloads are positional. The cases below are the result
+    // records currently consumed by the UI/replay path: progress is
+    // [done, expected, running, failed], phases and log lines carry text in
+    // fields[0]. Other result types are intentionally ignored here.
     switch (type) {
     case nix::resProgress:
         return ActivityProgress{

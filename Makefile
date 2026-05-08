@@ -1,4 +1,4 @@
-.PHONY: all setup build run clean watch
+.PHONY: all setup build test run clean watch
 
 export CLICOLOR_FORCE=1
 
@@ -11,6 +11,11 @@ build:
 	meson compile -C build
 	@echo "*** FINISHED"
 
+test: build
+	@echo "*** TESTING"
+	meson test -C build
+	@echo "*** FINISHED"
+
 run: build
 	./build/nxb
 
@@ -18,4 +23,4 @@ clean:
 	rm -rf build
 
 watch:
-	find src -name '*.cpp' -o -name '*.hpp' | entr -cs 'make build'
+	find src nxt -name '*.cpp' -o -name '*.hpp' | entr -cs 'make build'
