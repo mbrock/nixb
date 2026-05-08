@@ -30,6 +30,8 @@
 #include <string_view>
 #include <vector>
 
+#include <nlohmann/json.hpp>
+
 #include <nix/cmd/common-eval-args.hh>
 #include <nix/util/util.hh>
 #include <nix/cmd/installable-flake.hh>
@@ -294,12 +296,7 @@ resolve_installable(NixContext & ctx, const std::string & installable)
     nix::ExtendedOutputsSpec outputs_spec =
         nix::ExtendedOutputsSpec::Default();
 
-    nix::Strings defaults = {
-        "packages." + nix::settings.thisSystem.get() + ".default",
-        "defaultPackage." + nix::settings.thisSystem.get()};
-    nix::Strings prefixes = {
-        "packages." + nix::settings.thisSystem.get() + ".",
-        "legacyPackages." + nix::settings.thisSystem.get() + "."};
+    nix::StringSet roles = {"nix-build"};
 
     auto inst = nix::make_ref<nix::InstallableFlake>(
         nullptr,
@@ -307,9 +304,9 @@ resolve_installable(NixContext & ctx, const std::string & installable)
         std::move(flake_ref),
         fragment,
         outputs_spec,
-        defaults,
-        prefixes,
-        lock_flags);
+        roles,
+        lock_flags,
+        std::nullopt);
 
     nix::Installables installables = {inst};
     auto drv_set =
@@ -325,7 +322,7 @@ show_derivation(NixContext & ctx, const std::string & installable)
     std::vector<std::string> result;
     for (const auto & drv_path : resolve_installable(ctx, installable)) {
         auto drv = ctx.store()->readDerivation(drv_path);
-        result.push_back(drv.toJSON().dump(2));
+        result.push_back(nlohmann::json(drv).dump(2));
     }
     return result;
 }

@@ -114,7 +114,7 @@ struct TrivialStore : virtual nix::Store
 
     void queryRealisationUncached(
         const nix::DrvOutput &,
-        nix::Callback<std::shared_ptr<const nix::Realisation>>
+        nix::Callback<std::shared_ptr<const nix::UnkeyedRealisation>>
             callback) noexcept override
     {
         callback(nullptr);
@@ -163,7 +163,8 @@ struct TrivialStore : virtual nix::Store
         nix::ContentAddressMethod hashMethod,
         nix::HashAlgorithm hashAlgo,
         const nix::StorePathSet & refs,
-        nix::RepairFlag) override
+        nix::RepairFlag,
+        std::shared_ptr<const nix::Provenance>) override
     {
         print(
             fmt::format(
