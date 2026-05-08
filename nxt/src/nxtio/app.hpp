@@ -240,7 +240,7 @@ private:
         });
     }
 
-    std::shared_ptr<nxt::io_scheduler> scheduler_;
+    std::unique_ptr<nxt::io_scheduler> scheduler_;
     GlyphTable glyphs_;
     std::unique_ptr<TerminalCompositor> compositor_;
     SignalPipe signals_;

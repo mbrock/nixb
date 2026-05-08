@@ -14,7 +14,7 @@ namespace nxt::ui {
 
 UIRuntime::UIRuntime()
     : scheduler_(
-          nxt::io_scheduler::make_shared(nxt::io_scheduler::options{}))
+          nxt::io_scheduler::make_unique(nxt::io_scheduler::options{}))
 {
     signals_.watch(SIGINT, SIGTERM, SIGWINCH);
     refresh_terminal_size();

@@ -32,19 +32,22 @@
           # Custom dependencies not in nixpkgs
           libcoro = mkDerivation {
             pname = "libcoro";
-            version = "0.15.0";
+            version = "0.16.0";
             src = pkgs.fetchFromGitHub {
               owner = "jbaldwin";
               repo = "libcoro";
-              rev = "v0.15.0";
-              hash = "sha256-8SFT7jHmRBE9KbrGsiT+sP98tbYV+0N4HP8HTE6GXE4=";
+              rev = "v0.16.0";
+              hash = "sha256-UMc2FsFJ9hlPj8bS+vXw0/2EELBrpaISr4nwbkkecTc=";
+              fetchSubmodules = true;
             };
             nativeBuildInputs = [ pkgs.cmake ];
-            buildInputs = [ pkgs.c-ares pkgs.openssl ];
+            buildInputs = [ pkgs.openssl ];
             cmakeFlags = [
               "-DLIBCORO_BUILD_TESTS=OFF"
               "-DLIBCORO_BUILD_EXAMPLES=OFF"
-              "-DLIBCORO_EXTERNAL_DEPENDENCIES=ON"
+              "-DLIBCORO_EXTERNAL_DEPENDENCIES=OFF"
+              "-DLIBCORO_FEATURE_NETWORKING=ON"
+              "-DLIBCORO_FEATURE_TLS=ON"
             ];
           };
 
@@ -140,6 +143,7 @@
               pkgs.lld
 
               libcoro
+              pkgs.c-ares
               mp-units
               fmt
               pkgs.cli11

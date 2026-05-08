@@ -83,8 +83,76 @@ suite http_io_tests = [] {
         auto head = nxt::sync_wait(
             http::async_grab(transport, buffer, http::slurp("\r\n\r\n"sv)));
 
-        auto text = http::as_text(head);
+        auto text = http::as_text(head.bytes);
         expect(text == "HTTP/1.1 200 Hello\r\nServer: Comanche");
+        expect(http::as_text(head.leftover) == "hello");
+    };
+
+    "content-length reader yields leftover then refill chunks"_test = [] {
+        scripted_transport transport{{
+            "HTTP/1.1 200 OK\r\nContent-Length: 11\r\n\r\nhe",
+            "llo world",
+        }};
+        std::array<char, 4096> head_buffer{};
+        std::array<char, 4> body_buffer{};
+
+        auto head = nxt::sync_wait(
+            http::async_grab(
+                transport, head_buffer, http::slurp("\r\n\r\n"sv)));
+
+        expect(
+            http::as_text(head.bytes)
+            == "HTTP/1.1 200 OK\r\nContent-Length: 11");
+        expect(http::as_text(head.leftover) == "he");
+
+        std::string body;
+        auto on_chunk =
+            [&](std::span<const std::byte> chunk) -> nxt::task<> {
+            body += http::as_text(chunk);
+            co_return;
+        };
+
+        nxt::sync_wait(
+            http::read_content_length(
+                transport, body_buffer, head.leftover, 11, on_chunk));
+
+        expect(body == "hello world");
+    };
+
+    "chunked reader yields chunks across leftover and refills"_test = [] {
+        scripted_transport transport{{
+            "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhe",
+            "llo\r\n6\r\n world\r\n0\r\n\r\n",
+        }};
+        std::array<char, 4096> head_buffer{};
+        std::array<char, 64> line_buffer{};
+        std::array<char, 3> body_buffer{};
+
+        auto head = nxt::sync_wait(
+            http::async_grab(
+                transport, head_buffer, http::slurp("\r\n\r\n"sv)));
+
+        expect(
+            http::as_text(head.bytes)
+            == "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked");
+        expect(http::as_text(head.leftover) == "5\r\nhe");
+
+        std::string body;
+        auto on_chunk =
+            [&](std::span<const std::byte> chunk) -> nxt::task<> {
+            body += http::as_text(chunk);
+            co_return;
+        };
+
+        nxt::sync_wait(
+            http::read_chunked(
+                transport,
+                line_buffer,
+                body_buffer,
+                head.leftover,
+                on_chunk));
+
+        expect(body == "hello world");
     };
 };
 

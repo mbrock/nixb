@@ -1,4 +1,5 @@
 nxt_libcoro_dep = dependency('libcoro')
+nxt_libcares_dep = dependency('libcares')
 
 nxt_mdspan_args = [
   '-DMDSPAN_USE_BRACKET_OPERATOR=1',
@@ -36,6 +37,7 @@ nxt_core_dep = declare_dependency(
 nxt_runtime_deps = [
   nxt_core_dep,
   nxt_libcoro_dep,
+  nxt_libcares_dep,
 ]
 
 nxt_runtime_sources = files(
@@ -57,6 +59,12 @@ nxt_dep = declare_dependency(
 
 executable('tui_example',
   'src/nxt/tui_example.cpp',
+  include_directories : nxt_inc,
+  dependencies : [nxt_dep],
+)
+
+executable('nxthttp',
+  'src/nxtio/nxthttp.cpp',
   include_directories : nxt_inc,
   dependencies : [nxt_dep],
 )

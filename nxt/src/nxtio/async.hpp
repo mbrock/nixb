@@ -12,9 +12,9 @@
 #include <coro/coro.hpp>
 #include <coro/event.hpp>
 #include <coro/generator.hpp>
-#include <coro/io_scheduler.hpp>
 #include <coro/latch.hpp>
 #include <coro/queue.hpp>
+#include <coro/scheduler.hpp>
 #include <coro/semaphore.hpp>
 #include <coro/task.hpp>
 #include <coro/when_any.hpp>
@@ -39,7 +39,7 @@ using semaphore = coro::semaphore<max_value>;
 using event = coro::event;
 using latch = coro::latch;
 
-using io_scheduler = coro::io_scheduler;
+using io_scheduler = coro::scheduler;
 
 using poll_op = coro::poll_op;
 
