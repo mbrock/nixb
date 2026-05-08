@@ -14,12 +14,12 @@ namespace {
 
 inline std::size_t cols_from(width_t w)
 {
-    return w.numerical_value_in(ch);
+    return w.count();
 }
 
 inline std::size_t rows_from(height_t h)
 {
-    return h.numerical_value_in(ln);
+    return h.count();
 }
 
 auto row_major_mapping(const std::size_t rows, const std::size_t cols)

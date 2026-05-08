@@ -58,8 +58,8 @@ Writer & Writer::move_to(const ansi_row_t row, const ansi_col_t col)
 {
     // ansi_origin is at terminal position -1, so the offset from
     // ansi_origin directly gives us the 1-based ANSI coordinate.
-    const auto row_num = (row - ansi_origin_v).numerical_value_in(ln);
-    const auto col_num = (col - ansi_origin).numerical_value_in(ch);
+    const auto row_num = (row - ansi_origin_v).count();
+    const auto col_num = (col - ansi_origin).count();
     csi(fmt::format("{};{}", row_num, col_num), 'H');
     return *this;
 }
@@ -71,7 +71,7 @@ Writer & Writer::move_to(const Pos pos)
 
 Writer & Writer::move_up(const height_t n)
 {
-    const auto rows = n.numerical_value_in(ln);
+    const auto rows = n.count();
     if (rows > 0)
         csi(fmt::format("{}", rows), 'A');
     return *this;
@@ -79,7 +79,7 @@ Writer & Writer::move_up(const height_t n)
 
 Writer & Writer::move_down(const height_t n)
 {
-    const auto rows = n.numerical_value_in(ln);
+    const auto rows = n.count();
     if (rows > 0)
         csi(fmt::format("{}", rows), 'B');
     return *this;
@@ -87,7 +87,7 @@ Writer & Writer::move_down(const height_t n)
 
 Writer & Writer::move_right(const width_t n)
 {
-    const auto cols = n.numerical_value_in(ch);
+    const auto cols = n.count();
     if (cols > 0)
         csi(fmt::format("{}", cols), 'C');
     return *this;
@@ -95,7 +95,7 @@ Writer & Writer::move_right(const width_t n)
 
 Writer & Writer::move_left(const width_t n)
 {
-    const auto cols = n.numerical_value_in(ch);
+    const auto cols = n.count();
     if (cols > 0)
         csi(fmt::format("{}", cols), 'D');
     return *this;
@@ -110,7 +110,7 @@ Writer & Writer::move(const Size delta)
 
 Writer & Writer::move_to_column(const ansi_col_t col)
 {
-    const auto col_num = (col - ansi_origin).numerical_value_in(ch);
+    const auto col_num = (col - ansi_origin).count();
     csi(fmt::format("{}", col_num), 'G');
     return *this;
 }
@@ -154,8 +154,8 @@ Writer & Writer::clear_line_to_cursor()
 Writer & Writer::set_scroll_region(const row_t top, const row_t bottom)
 {
     // Convert terminal row_t to 1-based ANSI row via ansi_origin_v
-    const auto top_row = (top - ansi_origin_v).numerical_value_in(ln);
-    const auto bottom_row = (bottom - ansi_origin_v).numerical_value_in(ln);
+    const auto top_row = (top - ansi_origin_v).count();
+    const auto bottom_row = (bottom - ansi_origin_v).count();
     csi(fmt::format("{};{}", top_row, bottom_row), 'r');
     return *this;
 }
@@ -168,7 +168,7 @@ Writer & Writer::reset_scroll_region()
 
 Writer & Writer::scroll_up(const height_t n)
 {
-    const auto rows = n.numerical_value_in(ln);
+    const auto rows = n.count();
     if (rows > 0)
         csi(fmt::format("{}", rows), 'S');
     return *this;
@@ -176,7 +176,7 @@ Writer & Writer::scroll_up(const height_t n)
 
 Writer & Writer::scroll_down(const height_t n)
 {
-    const auto rows = n.numerical_value_in(ln);
+    const auto rows = n.count();
     if (rows > 0)
         csi(fmt::format("{}", rows), 'T');
     return *this;
@@ -397,8 +397,8 @@ void print_csi(fmt::format_string<Args...> fmt_str, Args &&... args)
 
 void move_to(const ansi_row_t row, const ansi_col_t col)
 {
-    const auto row_num = (row - ansi_origin_v).numerical_value_in(ln);
-    const auto col_num = (col - ansi_origin).numerical_value_in(ch);
+    const auto row_num = (row - ansi_origin_v).count();
+    const auto col_num = (col - ansi_origin).count();
     print_csi("{};{}H", row_num, col_num);
 }
 
@@ -447,8 +447,8 @@ void end_synchronized_update()
 
 void set_scroll_region(const row_t top, const row_t bottom)
 {
-    const auto top_row = (top - ansi_origin_v).numerical_value_in(ln);
-    const auto bottom_row = (bottom - ansi_origin_v).numerical_value_in(ln);
+    const auto top_row = (top - ansi_origin_v).count();
+    const auto bottom_row = (bottom - ansi_origin_v).count();
     print_csi("{};{}r", top_row, bottom_row);
 }
 
@@ -459,14 +459,14 @@ void reset_scroll_region()
 
 void scroll_up(const height_t n)
 {
-    const auto rows = n.numerical_value_in(ln);
+    const auto rows = n.count();
     if (rows > 0)
         print_csi("{}S", rows);
 }
 
 void scroll_down(const height_t n)
 {
-    const auto rows = n.numerical_value_in(ln);
+    const auto rows = n.count();
     if (rows > 0)
         print_csi("{}T", rows);
 }

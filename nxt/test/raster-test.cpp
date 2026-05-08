@@ -240,11 +240,11 @@ suite ansi_tests = [] {
         // Terminal (0,0) -> ANSI (1,1)
         auto to_ansi_col = [](int t) {
             return (to_ansi(terminal_origin + t * ch) - ansi_origin)
-                .numerical_value_in(ch);
+                .count();
         };
         auto to_ansi_row = [](int t) {
             return (to_ansi(terminal_origin_v + t * ln) - ansi_origin_v)
-                .numerical_value_in(ln);
+                .count();
         };
 
         expect(to_ansi_col(0) == 1_i);

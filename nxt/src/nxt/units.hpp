@@ -1,120 +1,391 @@
 #pragma once
 
-/// Terminal grid units using mp-units for type-safe 2D layout.
+/// Terminal grid geometry.
 ///
-/// This header defines the foundational unit system for terminal
-/// coordinates:
-/// - Dimensions: horizontal (X) and vertical (Y)
-/// - Units: ch (character width) and ln (line height)
-/// - Quantities: width_t, height_t for displacements
-/// - Points: col_t, row_t for absolute positions (affine space)
-/// - Composites: Size (2D extent) and Pos (2D point)
+/// This is intentionally much smaller than a general units library. It models
+/// the dimensions nxt actually needs: columns, rows, ratios, percentages, and
+/// terminal positions.
 
-#include <mp-units/framework.h>
+#include <compare>
+#include <cstddef>
+#include <type_traits>
 
 namespace nxt {
 
-using namespace mp_units;
+struct ch_unit
+{};
+struct ln_unit
+{};
+struct one_unit
+{};
+struct percent_unit
+{};
 
-// ============================================================================
-// Base Dimensions
-// ============================================================================
+/// Character-cell width unit.
+inline constexpr ch_unit ch{};
 
-inline constexpr struct dim_horizontal final : base_dimension<"X">
+/// Terminal line-height unit.
+inline constexpr ln_unit ln{};
+
+/// Dimensionless ratio unit.
+inline constexpr one_unit one{};
+
+/// Percent unit. A value of `100 * percent` is equivalent to `1 * one`.
+inline constexpr percent_unit percent{};
+
+struct width_t
 {
-} dim_horizontal;
+    std::size_t v{};
 
-inline constexpr struct dim_vertical final : base_dimension<"Y">
+    [[nodiscard]] constexpr std::size_t count() const noexcept
+    {
+        return v;
+    }
+
+    constexpr width_t & operator+=(width_t other) noexcept
+    {
+        v += other.v;
+        return *this;
+    }
+
+    constexpr width_t & operator-=(width_t other) noexcept
+    {
+        v -= other.v;
+        return *this;
+    }
+
+    friend constexpr bool operator==(width_t, width_t) noexcept = default;
+    friend constexpr auto operator<=>(width_t, width_t) noexcept = default;
+};
+
+struct height_t
 {
-} dim_vertical;
+    std::size_t v{};
 
-// ============================================================================
-// Quantity Specifications
-// ============================================================================
+    [[nodiscard]] constexpr std::size_t count() const noexcept
+    {
+        return v;
+    }
 
-QUANTITY_SPEC(horizontal_extent, dim_horizontal);
-QUANTITY_SPEC(vertical_extent, dim_vertical);
+    constexpr height_t & operator+=(height_t other) noexcept
+    {
+        v += other.v;
+        return *this;
+    }
 
-// ============================================================================
-// Units
-// ============================================================================
+    constexpr height_t & operator-=(height_t other) noexcept
+    {
+        v -= other.v;
+        return *this;
+    }
 
-/// Character width unit (horizontal grid cell)
-inline constexpr struct ch final
-    : named_unit<"ch", kind_of<horizontal_extent>>
+    friend constexpr bool operator==(height_t, height_t) noexcept = default;
+    friend constexpr auto operator<=>(height_t, height_t) noexcept = default;
+};
+
+struct ratio_t
 {
-} ch;
+    double v{};
 
-/// Line height unit (vertical grid cell)
-inline constexpr struct ln final
-    : named_unit<"ln", kind_of<vertical_extent>>
+    [[nodiscard]] constexpr double value() const noexcept
+    {
+        return v;
+    }
+
+    constexpr ratio_t & operator+=(ratio_t other) noexcept
+    {
+        v += other.v;
+        return *this;
+    }
+
+    friend constexpr bool operator==(ratio_t, ratio_t) noexcept = default;
+    friend constexpr auto operator<=>(ratio_t, ratio_t) noexcept = default;
+};
+
+struct percent_t
 {
-} ln;
+    double v{};
 
-// ============================================================================
-// Displacement Types (Vectors)
-// ============================================================================
+    [[nodiscard]] constexpr double value() const noexcept
+    {
+        return v;
+    }
 
-/// Horizontal displacement (number of characters)
-using width_t = quantity<ch, std::size_t>;
+    [[nodiscard]] constexpr ratio_t ratio() const noexcept
+    {
+        return {v / 100.0};
+    }
 
-/// Vertical displacement (number of lines)
-using height_t = quantity<ln, std::size_t>;
+    friend constexpr bool operator==(percent_t, percent_t) noexcept = default;
+    friend constexpr auto operator<=>(percent_t, percent_t) noexcept = default;
+};
 
-// ============================================================================
-// Dimensionless Quantities
-// ============================================================================
+template<typename T>
+concept numeric = std::is_arithmetic_v<T>;
 
-/// Ratio for flex factors (0.0 to 1.0)
-using ratio_t = quantity<one, double>;
-
-/// Percentage (0% to 100%)
-using percent_t = quantity<percent, double>;
-
-// ============================================================================
-// Affine Space (Points vs Vectors)
-// ============================================================================
-
-/// Absolute origin for horizontal terminal coordinates
-inline constexpr struct terminal_origin final
-    : absolute_point_origin<horizontal_extent>
+template<numeric T>
+[[nodiscard]] constexpr bool operator>(ratio_t a, T b) noexcept
 {
-} terminal_origin;
+    return a.v > static_cast<double>(b);
+}
 
-/// Absolute origin for vertical terminal coordinates
-inline constexpr struct terminal_origin_v final
-    : absolute_point_origin<vertical_extent>
+template<numeric T>
+[[nodiscard]] constexpr bool operator>=(ratio_t a, T b) noexcept
 {
-} terminal_origin_v;
+    return a.v >= static_cast<double>(b);
+}
 
-// ANSI cursor positioning is 1-based. Define relative origins at
-// the "imaginary" ANSI position 0 (terminal position -1), so that
-// terminal position 0 naturally maps to ANSI position 1.
-inline constexpr struct ansi_origin final
-    : relative_point_origin<terminal_origin - 1 * ch>
+template<numeric T>
+[[nodiscard]] constexpr bool operator<(ratio_t a, T b) noexcept
 {
-} ansi_origin;
+    return a.v < static_cast<double>(b);
+}
 
-inline constexpr struct ansi_origin_v final
-    : relative_point_origin<terminal_origin_v - 1 * ln>
+template<numeric T>
+[[nodiscard]] constexpr bool operator<=(ratio_t a, T b) noexcept
 {
-} ansi_origin_v;
+    return a.v <= static_cast<double>(b);
+}
 
-/// Column position (absolute X coordinate in terminal)
-using col_t = quantity_point<ch, terminal_origin>;
+template<numeric T>
+[[nodiscard]] constexpr width_t operator*(T n, ch_unit) noexcept
+{
+    return {static_cast<std::size_t>(n)};
+}
 
-/// Row position (absolute Y coordinate in terminal)
-using row_t = quantity_point<ln, terminal_origin_v>;
+template<numeric T>
+[[nodiscard]] constexpr height_t operator*(T n, ln_unit) noexcept
+{
+    return {static_cast<std::size_t>(n)};
+}
 
-/// Column/row in ANSI 1-based space
-using ansi_col_t = quantity_point<ch, ansi_origin>;
-using ansi_row_t = quantity_point<ln, ansi_origin_v>;
+template<numeric T>
+[[nodiscard]] constexpr ratio_t operator*(T n, one_unit) noexcept
+{
+    return {static_cast<double>(n)};
+}
 
-// ============================================================================
-// Composite Types
-// ============================================================================
+template<numeric T>
+[[nodiscard]] constexpr percent_t operator*(T n, percent_unit) noexcept
+{
+    return {static_cast<double>(n)};
+}
 
-/// 2D extent/displacement (width x height)
+[[nodiscard]] constexpr width_t operator+(width_t a, width_t b) noexcept
+{
+    return {a.v + b.v};
+}
+
+[[nodiscard]] constexpr width_t operator-(width_t a, width_t b) noexcept
+{
+    return {a.v - b.v};
+}
+
+[[nodiscard]] constexpr width_t operator*(width_t a, double b) noexcept
+{
+    return {static_cast<std::size_t>(static_cast<double>(a.v) * b)};
+}
+
+[[nodiscard]] constexpr width_t operator*(double a, width_t b) noexcept
+{
+    return b * a;
+}
+
+[[nodiscard]] constexpr height_t operator+(height_t a, height_t b) noexcept
+{
+    return {a.v + b.v};
+}
+
+[[nodiscard]] constexpr height_t operator-(height_t a, height_t b) noexcept
+{
+    return {a.v - b.v};
+}
+
+[[nodiscard]] constexpr height_t operator*(height_t a, double b) noexcept
+{
+    return {static_cast<std::size_t>(static_cast<double>(a.v) * b)};
+}
+
+[[nodiscard]] constexpr height_t operator*(double a, height_t b) noexcept
+{
+    return b * a;
+}
+
+[[nodiscard]] constexpr ratio_t operator+(ratio_t a, ratio_t b) noexcept
+{
+    return {a.v + b.v};
+}
+
+[[nodiscard]] constexpr ratio_t operator-(ratio_t a, ratio_t b) noexcept
+{
+    return {a.v - b.v};
+}
+
+[[nodiscard]] constexpr percent_t operator/(percent_t a, double b) noexcept
+{
+    return {a.v / b};
+}
+
+[[nodiscard]] constexpr percent_t operator*(percent_t a, double b) noexcept
+{
+    return {a.v * b};
+}
+
+[[nodiscard]] constexpr percent_t operator*(double a, percent_t b) noexcept
+{
+    return b * a;
+}
+
+[[nodiscard]] constexpr percent_t operator+(percent_t a, percent_t b) noexcept
+{
+    return {a.v + b.v};
+}
+
+[[nodiscard]] constexpr percent_t operator-(percent_t a, percent_t b) noexcept
+{
+    return {a.v - b.v};
+}
+
+[[nodiscard]] constexpr bool operator>=(percent_t a, ratio_t b) noexcept
+{
+    return a.ratio().v >= b.v;
+}
+
+[[nodiscard]] constexpr bool operator>(percent_t a, ratio_t b) noexcept
+{
+    return a.ratio().v > b.v;
+}
+
+[[nodiscard]] constexpr bool operator<=(percent_t a, ratio_t b) noexcept
+{
+    return a.ratio().v <= b.v;
+}
+
+[[nodiscard]] constexpr bool operator<(percent_t a, ratio_t b) noexcept
+{
+    return a.ratio().v < b.v;
+}
+
+struct terminal_origin_t
+{};
+struct terminal_origin_v_t
+{};
+struct ansi_origin_t
+{};
+struct ansi_origin_v_t
+{};
+
+inline constexpr terminal_origin_t terminal_origin{};
+inline constexpr terminal_origin_v_t terminal_origin_v{};
+inline constexpr ansi_origin_t ansi_origin{};
+inline constexpr ansi_origin_v_t ansi_origin_v{};
+
+struct col_t
+{
+    std::size_t v{};
+
+    [[nodiscard]] constexpr std::size_t index() const noexcept
+    {
+        return v;
+    }
+
+    constexpr col_t & operator+=(width_t dx) noexcept
+    {
+        v += dx.v;
+        return *this;
+    }
+
+    friend constexpr bool operator==(col_t, col_t) noexcept = default;
+    friend constexpr auto operator<=>(col_t, col_t) noexcept = default;
+};
+
+struct row_t
+{
+    std::size_t v{};
+
+    [[nodiscard]] constexpr std::size_t index() const noexcept
+    {
+        return v;
+    }
+
+    constexpr row_t & operator+=(height_t dy) noexcept
+    {
+        v += dy.v;
+        return *this;
+    }
+
+    friend constexpr bool operator==(row_t, row_t) noexcept = default;
+    friend constexpr auto operator<=>(row_t, row_t) noexcept = default;
+};
+
+using ansi_col_t = col_t;
+using ansi_row_t = row_t;
+
+[[nodiscard]] constexpr col_t
+operator+(terminal_origin_t, width_t dx) noexcept
+{
+    return {dx.v};
+}
+
+[[nodiscard]] constexpr row_t
+operator+(terminal_origin_v_t, height_t dy) noexcept
+{
+    return {dy.v};
+}
+
+[[nodiscard]] constexpr col_t operator+(col_t p, width_t dx) noexcept
+{
+    return {p.v + dx.v};
+}
+
+[[nodiscard]] constexpr col_t operator-(col_t p, width_t dx) noexcept
+{
+    return {p.v - dx.v};
+}
+
+[[nodiscard]] constexpr width_t operator-(col_t a, col_t b) noexcept
+{
+    return {a.v - b.v};
+}
+
+[[nodiscard]] constexpr width_t
+operator-(col_t p, terminal_origin_t) noexcept
+{
+    return {p.v};
+}
+
+[[nodiscard]] constexpr width_t operator-(col_t p, ansi_origin_t) noexcept
+{
+    return {p.v + 1};
+}
+
+[[nodiscard]] constexpr row_t operator+(row_t p, height_t dy) noexcept
+{
+    return {p.v + dy.v};
+}
+
+[[nodiscard]] constexpr row_t operator-(row_t p, height_t dy) noexcept
+{
+    return {p.v - dy.v};
+}
+
+[[nodiscard]] constexpr height_t operator-(row_t a, row_t b) noexcept
+{
+    return {a.v - b.v};
+}
+
+[[nodiscard]] constexpr height_t
+operator-(row_t p, terminal_origin_v_t) noexcept
+{
+    return {p.v};
+}
+
+[[nodiscard]] constexpr height_t
+operator-(row_t p, ansi_origin_v_t) noexcept
+{
+    return {p.v + 1};
+}
+
 struct Size
 {
     width_t w{0 * ch};
@@ -129,117 +400,94 @@ struct Size
     constexpr Size() = default;
 };
 
-/// 2D point in terminal space (column, row)
 struct Pos
 {
     col_t x = terminal_origin + 0 * ch;
     row_t y = terminal_origin_v + 0 * ln;
 
-    /// Create position at the origin (0, 0)
-    static constexpr Pos origin()
+    [[nodiscard]] static constexpr Pos origin() noexcept
     {
         return {};
     }
 
-    /// Create position from displacement offsets
-    static constexpr Pos at(width_t dx, height_t dy)
+    [[nodiscard]] static constexpr Pos at(width_t dx, height_t dy) noexcept
     {
         return {terminal_origin + dx, terminal_origin_v + dy};
     }
 
-    /// Offset by horizontal displacement (point + vector = point)
-    constexpr Pos operator+(width_t dx) const
+    [[nodiscard]] constexpr Pos operator+(width_t dx) const noexcept
     {
         return {x + dx, y};
     }
 
-    /// Offset by vertical displacement (point + vector = point)
-    constexpr Pos operator+(height_t dy) const
+    [[nodiscard]] constexpr Pos operator+(height_t dy) const noexcept
     {
         return {x, y + dy};
     }
 
-    /// Offset by 2D displacement (point + vector = point)
-    constexpr Pos operator+(Size delta) const
+    [[nodiscard]] constexpr Pos operator+(Size delta) const noexcept
     {
         return {x + delta.w, y + delta.h};
     }
 
-    /// Difference of positions gives displacement (point - point =
-    /// vector)
-    friend constexpr Size operator-(Pos a, Pos b)
+    friend constexpr Size operator-(Pos a, Pos b) noexcept
     {
-        auto dx = (a.x - b.x).numerical_value_in(ch);
-        auto dy = (a.y - b.y).numerical_value_in(ln);
-        return {
-            static_cast<std::size_t>(dx) * ch,
-            static_cast<std::size_t>(dy) * ln};
+        return {a.x - b.x, a.y - b.y};
     }
 
-    /// +=
-    constexpr Pos & operator+=(Size delta)
+    constexpr Pos & operator+=(Size delta) noexcept
     {
         x += delta.w;
         y += delta.h;
         return *this;
     }
 
-    constexpr Pos & operator+=(width_t dx)
+    constexpr Pos & operator+=(width_t dx) noexcept
     {
         x += dx;
         return *this;
     }
 
-    constexpr Pos & operator+=(height_t dy)
+    constexpr Pos & operator+=(height_t dy) noexcept
     {
         y += dy;
         return *this;
     }
 
-    /// Get displacement from terminal origin
-    constexpr Size from_origin() const
+    [[nodiscard]] constexpr Size from_origin() const noexcept
     {
         return *this - Pos::origin();
     }
 
-    /// Extract raw column index (for legacy API interop)
-    [[nodiscard]] constexpr std::size_t col() const
+    [[nodiscard]] constexpr std::size_t col() const noexcept
     {
-        return static_cast<std::size_t>(
-            (x - terminal_origin).numerical_value_in(ch));
+        return x.index();
     }
 
-    /// Extract raw row index (for legacy API interop)
-    [[nodiscard]] constexpr std::size_t row() const
+    [[nodiscard]] constexpr std::size_t row() const noexcept
     {
-        return static_cast<std::size_t>(
-            (y - terminal_origin_v).numerical_value_in(ln));
+        return y.index();
     }
 
-    /// Equality comparison
-    friend constexpr bool operator==(Pos a, Pos b)
-    {
-        return a.x == b.x && a.y == b.y;
-    }
+    friend constexpr bool operator==(Pos, Pos) noexcept = default;
 };
 
-// Convert zero-based terminal coordinates to ANSI 1-based points
-[[nodiscard]] constexpr ansi_col_t to_ansi(col_t col)
+[[nodiscard]] constexpr ansi_col_t to_ansi(col_t col) noexcept
 {
-    return col.point_for(ansi_origin);
+    return col;
 }
 
-[[nodiscard]] constexpr ansi_row_t to_ansi(row_t row)
+[[nodiscard]] constexpr ansi_row_t to_ansi(row_t row) noexcept
 {
-    return row.point_for(ansi_origin_v);
+    return row;
 }
 
-[[nodiscard]] constexpr ansi_col_t to_ansi_x(Pos pos)
+[[nodiscard]] constexpr ansi_col_t to_ansi_x(Pos pos) noexcept
 {
     return to_ansi(pos.x);
 }
 
-[[nodiscard]] constexpr ansi_row_t to_ansi_y(Pos pos)
+[[nodiscard]] constexpr ansi_row_t to_ansi_y(Pos pos) noexcept
 {
     return to_ansi(pos.y);
 }

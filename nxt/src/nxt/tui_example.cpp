@@ -72,8 +72,7 @@ int example(int argc, char * argv[])
                             text(
                                 fmt::format(
                                     "{:>4.0f}%",
-                                    act.progress.force_numerical_value_in(
-                                        percent)),
+                                    act.progress.value()),
                                 (act.progress >= 1 * one
                                      ? fg(Rgba8::green())
                                  : act.progress >= 0.5 * one

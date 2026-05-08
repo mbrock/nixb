@@ -208,9 +208,7 @@ int run_tui_simulation_app(
                              fg(color)),
                         progress_bar(item.progress, color),
                         text(fmt::format(" {:>3.0f}%",
-                                         item.progress
-                                             .force_numerical_value_in(
-                                                 nxt::percent)),
+                                         item.progress.value()),
                              fg(color) | bold));
                 }));
         },

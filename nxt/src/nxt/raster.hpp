@@ -598,9 +598,9 @@ public:
     [[nodiscard]] std::span<const GlyphTable::GlyphId>
     glyph_span(height_t y, width_t x, std::size_t len) const noexcept
     {
-        const auto cols = width_.numerical_value_in(ch);
+        const auto cols = width_.count();
         const auto offset =
-            y.numerical_value_in(ln) * cols + x.numerical_value_in(ch);
+            y.count() * cols + x.count();
         return std::span{glyphs_storage_}.subspan(offset, len);
     }
 
@@ -618,14 +618,14 @@ public:
             fgs_2d(),
             bgs_2d(),
             ems_2d(),
-            y.numerical_value_in(ln));
+            y.count());
     }
 
     /// Iterate rows (just the row ranges)
     [[nodiscard]] auto rows() const
     {
         return std::views::iota(
-                   std::size_t{0}, height_.numerical_value_in(ln))
+                   std::size_t{0}, height_.count())
                | std::views::transform(
                    [this](std::size_t y) { return row(y * ln); });
     }
@@ -634,7 +634,7 @@ public:
     [[nodiscard]] auto indexed_rows() const
     {
         return std::views::iota(
-                   std::size_t{0}, height_.numerical_value_in(ln))
+                   std::size_t{0}, height_.count())
                | std::views::transform([this](std::size_t yi) {
                      const auto y = yi * ln;
                      return std::pair{y, row(y)};
@@ -667,7 +667,7 @@ private:
 inline auto zip_rows(const Raster & front, const Raster & back)
 {
     return std::views::iota(
-               std::size_t{0}, back.height().numerical_value_in(ln))
+               std::size_t{0}, back.height().count())
            | std::views::transform([&](std::size_t yi) {
                  const auto y = yi * ln;
                  return std::pair{

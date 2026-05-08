@@ -4,7 +4,6 @@
 
 #include <algorithm>
 #include <concepts>
-#include <mp-units/framework.h>
 #include <span>
 #include <string>
 #include <string_view>
@@ -16,12 +15,30 @@ namespace nxt::tui {
 // ============================================================================
 
 template<auto Unit>
+struct hint_extent;
+
+template<>
+struct hint_extent<ch>
+{
+    using type = width_t;
+};
+
+template<>
+struct hint_extent<ln>
+{
+    using type = height_t;
+};
+
+template<auto Unit>
+using hint_extent_t = typename hint_extent<Unit>::type;
+
+template<auto Unit>
 struct SizeHint
 {
-    quantity<Unit, std::size_t> min{0 * Unit}; // Minimum size needed
+    hint_extent_t<Unit> min{0 * Unit}; // Minimum size needed
     ratio_t flex{0.0 * one}; // Flex grow factor (0 = don't grow)
 
-    static constexpr SizeHint fixed(quantity<Unit, std::size_t> n)
+    static constexpr SizeHint fixed(hint_extent_t<Unit> n)
     {
         return {n, 0.0 * one};
     }
@@ -199,7 +216,7 @@ inline col_t render_span(RasterView & r, Pos pos, const Span & s)
 // Repeat a single-char string to fill a width
 inline std::string repeat(std::string_view glyph, width_t w)
 {
-    auto n = w.numerical_value_ref_in(ch);
+    auto n = w.count();
     std::string result;
     result.reserve(glyph.size() * n);
     for (std::size_t i = 0; i < n; ++i)
@@ -320,9 +337,9 @@ inline std::string bar_string(percent_t pct, width_t width)
     static constexpr std::array<std::string_view, 9> partials = {
         "", "▏", "▎", "▍", "▌", "▋", "▊", "▉", "█"};
 
-    auto w = width.numerical_value_ref_in(ch);
+    auto w = width.count();
     auto fraction =
-        std::clamp(pct.numerical_value_in(percent), 0.0, 100.0) / 100.0;
+        std::clamp(pct.value(), 0.0, 100.0) / 100.0;
     double fill = fraction * w;
     std::size_t full = static_cast<std::size_t>(fill);
     std::size_t partial = static_cast<std::size_t>((fill - full) * 8 + 0.5);
@@ -384,7 +401,7 @@ struct Row
             },
             children);
         return HeightHint::fixed(
-            max_min.numerical_value_in(ln) > 0 ? max_min
+            max_min.count() > 0 ? max_min
                                                : height_t{1 * ln});
     }
 
@@ -414,7 +431,7 @@ struct Row
                 (
                     [&] {
                         auto child_size = Size{widths[i], size.h};
-                        if (widths[i].numerical_value_in(ch) > 0) {
+                        if (widths[i].count() > 0) {
                             auto sub =
                                 subraster(raster, cursor, child_size);
                             c.render(sub, child_size);
@@ -448,8 +465,9 @@ private:
                 auto flex_val = hints[i].flex;
                 auto total_flex_val = total_flex;
                 if (flex_val > 0)
-                    result[i] += value_cast<width_t>(
-                        remaining * flex_val / total_flex_val);
+                    result[i] += remaining
+                                 * (flex_val.value()
+                                    / total_flex_val.value());
             }
         }
 
@@ -521,7 +539,7 @@ struct Column
                 (
                     [&] {
                         auto child_size = Size{size.w, heights[i]};
-                        if (heights[i].numerical_value_in(ln) > 0) {
+                        if (heights[i].count() > 0) {
                             auto sub =
                                 subraster(raster, cursor, child_size);
                             c.render(sub, child_size);
@@ -556,8 +574,9 @@ private:
                 auto flex_val = hints[i].flex;
                 auto total_flex_val = total_flex;
                 if (flex_val > 0)
-                    result[i] += value_cast<height_t>(
-                        remaining * flex_val / total_flex_val);
+                    result[i] += remaining
+                                 * (flex_val.value()
+                                    / total_flex_val.value());
             }
         }
 

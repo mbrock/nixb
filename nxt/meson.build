@@ -1,11 +1,6 @@
 nxt_fmt_dep = dependency('fmt')
-nxt_boost_dep = dependency('boost')
 nxt_libcoro_dep = dependency('libcoro')
-nxt_tbb_dep = dependency('tbb')
 
-nxt_mpunits_dep = dependency('mp-units',
-                             method : 'cmake',
-                             modules : ['mp-units::mp-units'])
 nxt_mdspan_dep = dependency('mdspan',
                             method : 'cmake',
                             modules : ['std::mdspan'])
@@ -20,10 +15,7 @@ nxt_inc = include_directories('src')
 
 nxt_core_deps = [
   nxt_fmt_dep,
-  nxt_boost_dep,
-  nxt_mpunits_dep,
   nxt_mdspan_dep,
-  nxt_tbb_dep,
 ]
 
 nxt_core_sources = files(

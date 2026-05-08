@@ -126,8 +126,8 @@ void UIRuntime::cleanup()
 
     // Clear from HUD area to bottom using raw row numbers to avoid coord
     // issues
-    auto term_rows = static_cast<int>(term_h.numerical_value_in(ln));
-    auto hud_rows = static_cast<int>(hud_h.numerical_value_in(ln));
+    auto term_rows = static_cast<int>(term_h.count());
+    auto hud_rows = static_cast<int>(hud_h.count());
     auto start_row =
         std::max(0, term_rows - hud_rows - 1); // extra row for spacer
     // Clear rows start_row through term_rows-1 (0-indexed)

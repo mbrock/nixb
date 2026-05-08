@@ -15,12 +15,12 @@ constexpr std::string_view separator_glyph = "▔";
 [[nodiscard]] int row_index(const row_t row)
 {
     return static_cast<int>(
-        (row - terminal_origin_v).numerical_value_in(ln));
+        (row - terminal_origin_v).count());
 }
 
 [[nodiscard]] int row_count(const height_t rows)
 {
-    return static_cast<int>(rows.numerical_value_in(ln));
+    return static_cast<int>(rows.count());
 }
 
 [[nodiscard]] height_t lines(const int count)
@@ -261,7 +261,7 @@ void TerminalCompositor::present_frame(std::ostream & out)
             separator_row_for(hud_height_, term_height_)});
         w.reset();
         for (std::size_t col = 0;
-             col < back_.width().numerical_value_in(ch);
+             col < back_.width().count();
              ++col)
             w.text(separator_glyph);
         w.reset();

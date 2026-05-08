@@ -27,6 +27,7 @@ nix_cmd_dep = dependency('nix-cmd')
 
 fmt_dep = dependency('fmt')
 nlohmann_json_dep = dependency('nlohmann_json')
+tbb_dep = dependency('tbb')
 
 #add_project_arguments('-ftime-trace', language : 'cpp')
 
@@ -56,6 +57,7 @@ executable('nxb',
     nix_cmd_dep,
     nix_util_dep,
     nlohmann_json_dep,
+    tbb_dep,
   ],
   cpp_args : nix_warning_args,
   link_args : ['-rdynamic'],

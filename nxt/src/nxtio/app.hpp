@@ -15,12 +15,6 @@
 #include "nxtio/signal-pipe.hpp"
 #include "nxt/units.hpp"
 
-#include <mp-units/framework.h>
-#include <mp-units/framework/construction_helpers.h>
-#include <mp-units/systems/isq/base_quantities.h>
-#include <mp-units/systems/si/chrono.h>
-#include <mp-units/systems/si/units.h>
-
 namespace nxt::ui {
 
 using TermSize = nxt::Size;
@@ -219,7 +213,7 @@ private:
         }
 
         auto target_rows = static_cast<double>(
-            target_h.numerical_value_in(ln));
+            target_h.count());
 
         if (wants_fullscreen || !has_smoothed_hud_height_) {
             smoothed_hud_rows_ = target_rows;
@@ -236,7 +230,7 @@ private:
             std::round(smoothed_hud_rows_));
         hud_rows = std::min(
             hud_rows,
-            static_cast<std::size_t>(term_h.numerical_value_in(ln)));
+            static_cast<std::size_t>(term_h.count()));
 
         update_hud_height(hud_rows * ln);
 
