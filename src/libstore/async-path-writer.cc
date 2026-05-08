@@ -1,5 +1,6 @@
 #include "nix/store/async-path-writer.hh"
 #include "nix/util/archive.hh"
+#include "nix/util/provenance.hh"
 
 #include <thread>
 #include <future>
@@ -18,6 +19,7 @@ struct AsyncPathWriterImpl : AsyncPathWriter
         Hash hash;
         StorePathSet references;
         RepairFlag repair;
+        std::shared_ptr<const Provenance> provenance;
         std::promise<void> promise;
     };
 
@@ -69,8 +71,12 @@ struct AsyncPathWriterImpl : AsyncPathWriter
         workerThread.join();
     }
 
-    StorePath
-    addPath(std::string contents, std::string name, StorePathSet references, RepairFlag repair, bool readOnly) override
+    StorePath addPath(
+        std::string contents,
+        std::string name,
+        StorePathSet references,
+        RepairFlag repair,
+        std::shared_ptr<const Provenance> provenance) override
     {
         auto hash = hashString(HashAlgorithm::SHA256, contents);
 
@@ -81,22 +87,21 @@ struct AsyncPathWriterImpl : AsyncPathWriter
                 .references = references,
             });
 
-        if (!readOnly) {
-            auto state(state_.lock());
-            std::promise<void> promise;
-            state->futures.insert_or_assign(storePath, promise.get_future());
-            state->items.push_back(
-                Item{
-                    .storePath = storePath,
-                    .contents = std::move(contents),
-                    .name = std::move(name),
-                    .hash = hash,
-                    .references = std::move(references),
-                    .repair = repair,
-                    .promise = std::move(promise),
-                });
-            wakeupCV.notify_all();
-        }
+        auto state(state_.lock());
+        std::promise<void> promise;
+        state->futures.insert_or_assign(storePath, promise.get_future());
+        state->items.push_back(
+            Item{
+                .storePath = storePath,
+                .contents = std::move(contents),
+                .name = std::move(name),
+                .hash = hash,
+                .references = std::move(references),
+                .repair = repair,
+                .provenance = provenance,
+                .promise = std::move(promise),
+            });
+        wakeupCV.notify_all();
 
         return storePath;
     }
@@ -152,6 +157,7 @@ struct AsyncPathWriterImpl : AsyncPathWriter
 
         for (auto & item : items) {
             StringSource source(item.contents);
+            store->addTempRoot(item.storePath);
             auto storePath = store->addToStoreFromDump(
                 source,
                 item.storePath.name(),
@@ -159,7 +165,8 @@ struct AsyncPathWriterImpl : AsyncPathWriter
                 ContentAddressMethod::Raw::Text,
                 HashAlgorithm::SHA256,
                 item.references,
-                item.repair);
+                item.repair,
+                item.provenance);
             assert(storePath == item.storePath);
         }
     }

@@ -39,8 +39,8 @@ testTmpDir=$(pwd)/nix-shell
 mkdir -p "$testTmpDir"
 # shellcheck disable=SC2016
 output=$(TMPDIR="$testTmpDir" nix-shell --pure "$shellDotNix" -A shellDrv --run 'echo $NIX_BUILD_TOP')
-[[ "$output" =~ ${testTmpDir}.* ]] || {
-    echo "expected $output =~ ${testTmpDir}.*" >&2
+[[ "$output" == "${testTmpDir}"/* ]] || {
+    echo "expected $output == ${testTmpDir}/*" >&2
     exit 1
 }
 
@@ -175,7 +175,7 @@ cat >"$TEST_ROOT"/marco/polo/default.nix <<EOF
 (import $TEST_ROOT/lookup-test/shell.nix {}).polo
 EOF
 chmod a+x "$TEST_ROOT"/marco/polo/default.nix
-(cd "$TEST_ROOT"/marco && ./polo/default.nix | grepQuiet "Polo")
+(cd "$TEST_ROOT"/marco && ./polo/default.nix < /dev/null | grepQuiet "Polo")
 
 # https://github.com/NixOS/nix/issues/11892
 mkdir "$TEST_ROOT"/issue-11892
@@ -279,3 +279,7 @@ assert (!(args ? inNixShell));
 (import $shellDotNix { }).shellDrv
 EOF
 nix-shell "$TEST_ROOT"/shell-ellipsis.nix --run "true"
+
+# `nix develop` should also work with fixed-output derivations
+# shellcheck disable=SC2016
+nix develop -f "$shellDotNix" fixed -c bash -c '[[ $FOO == "was a fixed-output derivation" ]]'

@@ -11,7 +11,7 @@
   fromImage ? null,
   bundleNixpkgs ? true,
   channelName ? "nixpkgs",
-  channelURL ? "https://nixos.org/channels/nixpkgs-unstable",
+  channelURL ? "https://channels.nixos.org/nixpkgs-unstable",
   extraPkgs ? [ ],
   maxLayers ? 70,
   nixConf ? { },
@@ -362,7 +362,6 @@ dockerTools.buildLayeredImageWithNixDb {
 
   extraCommands = ''
     rm -rf nix-support
-    ln -s /nix/var/nix/profiles nix/var/nix/gcroots/profiles
   '';
   fakeRootCommands = ''
     chmod 1777 tmp

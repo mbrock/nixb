@@ -3,6 +3,7 @@
 
 #include <set>
 #include <future>
+#include "nix/util/fun.hh"
 #include "nix/util/sync.hh"
 
 using std::set;
@@ -10,7 +11,7 @@ using std::set;
 namespace nix {
 
 template<typename T>
-using GetEdgesAsync = std::function<void(const T &, std::function<void(std::promise<set<T>> &)>)>;
+using GetEdgesAsync = fun<void(const T &, std::function<void(std::promise<set<T>> &)>)>;
 
 template<typename T>
 void computeClosure(const set<T> startElts, set<T> & res, GetEdgesAsync<T> getEdgesAsync)
@@ -24,11 +25,9 @@ void computeClosure(const set<T> startElts, set<T> & res, GetEdgesAsync<T> getEd
 
     Sync<State> state_(State{0, res, 0});
 
-    std::function<void(const T &)> enqueue;
-
     std::condition_variable done;
 
-    enqueue = [&](const T & current) -> void {
+    auto enqueue = [&](this auto & enqueue, const T & current) -> void {
         {
             auto state(state_.lock());
             if (state->exc)

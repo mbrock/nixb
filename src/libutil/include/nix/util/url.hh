@@ -1,6 +1,7 @@
 #pragma once
 ///@file
 
+#include <filesystem>
 #include <ranges>
 #include <span>
 
@@ -228,6 +229,11 @@ struct ParsedURL
      */
     std::string renderPath(bool encode = false) const;
 
+    /**
+     * Like to_string(), but removes query strings and passwords.
+     */
+    std::string renderSanitized() const;
+
     auto operator<=>(const ParsedURL & other) const noexcept = default;
 
     /**
@@ -258,14 +264,10 @@ std::string percentDecode(std::string_view in);
 std::string percentEncode(std::string_view s, std::string_view keep = "");
 
 /**
- * Get the path part of the URL as an absolute or relative Path.
- *
- * @throws if any path component contains an slash (which would have
- * been escaped `%2F` in the rendered URL). This is because OS file
- * paths have no escape sequences --- file names cannot contain a
- * `/`.
+ * Render URL path segments to a string by joining with `/`.
+ * Does not percent-encode the segments.
  */
-Path renderUrlPathEnsureLegal(const std::vector<std::string> & urlPath);
+std::string renderUrlPathNoPctEncoding(std::span<const std::string> urlPath);
 
 /**
  * Percent encode path. `%2F` for "interior slashes" is the most
@@ -283,7 +285,7 @@ std::string encodeQuery(const StringMap & query);
 /**
  * Parse a URL into a ParsedURL.
  *
- * @parm lenient Also allow some long-supported Nix URIs that are not quite compliant with RFC3986.
+ * @param lenient Also allow some long-supported Nix URIs that are not quite compliant with RFC3986.
  * Here are the deviations:
  * - Fragments can contain unescaped (not URL encoded) '^', '"' or space literals.
  * - Queries may contain unescaped '"' or spaces.
@@ -330,10 +332,13 @@ struct ParsedUrlScheme
 
 ParsedUrlScheme parseUrlScheme(std::string_view scheme);
 
-/* Detects scp-style uris (e.g. git@github.com:NixOS/nix) and fixes
-   them by removing the `:` and assuming a scheme of `ssh://`. Also
-   changes absolute paths into file:// URLs. */
-ParsedURL fixGitURL(const std::string & url);
+/**
+ * Detects scp-style uris (e.g. `git@github.com:NixOS/nix`) and fixes
+ * them by removing the `:` and assuming a scheme of `ssh://`. Also
+ * drops `git+` from the scheme (e.g. `git+https://` to `https://`)
+ * and changes absolute paths into `file://` URLs.
+ */
+ParsedURL fixGitURL(std::string url);
 
 /**
  * Whether a string is valid as RFC 3986 scheme name.
@@ -343,6 +348,22 @@ ParsedURL fixGitURL(const std::string & url);
  * Does not check whether the scheme is understood, as that's context-dependent.
  */
 bool isValidSchemeName(std::string_view scheme);
+
+/**
+ * Convert a filesystem path to a URL path vector.
+ *
+ * On Windows, converts backslashes to forward slashes and prepends a `/`
+ * before the drive letter (e.g., `C:\foo\bar` becomes `/C:/foo/bar`).
+ */
+std::vector<std::string> pathToUrlPath(const std::filesystem::path & path);
+
+/**
+ * Convert a URL path vector to a native filesystem path.
+ *
+ * On Windows, strips the leading `/` before the drive letter and converts
+ * to native format (e.g., `/C:/foo/bar` becomes `C:\foo\bar`).
+ */
+std::filesystem::path urlPathToPath(std::span<const std::string> urlPath);
 
 /**
  * Either a ParsedURL or a verbatim string. This is necessary because in certain cases URI must be passed
@@ -408,6 +429,17 @@ struct VerbatimURL
                 [](const ParsedURL & url) -> std::string_view { return url.scheme; }},
             raw);
     }
+
+    /**
+     * Get the last non-empty path segment from the URL.
+     *
+     * This is useful for extracting filenames from URLs.
+     * For example, "https://example.com/path/to/file.txt?query=value"
+     * returns "file.txt".
+     *
+     * @return The last non-empty path segment, or std::nullopt if no such segment exists.
+     */
+    std::optional<std::string> lastPathSegment() const;
 };
 
 std::ostream & operator<<(std::ostream & os, const VerbatimURL & url);

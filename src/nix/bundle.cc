@@ -7,16 +7,12 @@
 #include "nix/expr/eval-inline.hh"
 #include "nix/store/globals.hh"
 
-namespace nix::fs {
-using namespace std::filesystem;
-}
-
 using namespace nix;
 
 struct CmdBundle : InstallableValueCommand
 {
     std::string bundler = "github:NixOS/bundlers";
-    std::optional<Path> outLink;
+    std::optional<std::filesystem::path> outLink;
 
     CmdBundle()
     {
@@ -58,21 +54,9 @@ struct CmdBundle : InstallableValueCommand
         return catSecondary;
     }
 
-    // FIXME: cut&paste from CmdRun.
-    Strings getDefaultFlakeAttrPaths() override
+    StringSet getRoles() override
     {
-        Strings res{"apps." + settings.thisSystem.get() + ".default", "defaultApp." + settings.thisSystem.get()};
-        for (auto & s : SourceExprCommand::getDefaultFlakeAttrPaths())
-            res.push_back(s);
-        return res;
-    }
-
-    Strings getDefaultFlakeAttrPathPrefixes() override
-    {
-        Strings res{"apps." + settings.thisSystem.get() + "."};
-        for (auto & s : SourceExprCommand::getDefaultFlakeAttrPathPrefixes())
-            res.push_back(s);
-        return res;
+        return {"nix-run"};
     }
 
     void run(ref<Store> store, ref<InstallableValue> installable) override
@@ -90,9 +74,9 @@ struct CmdBundle : InstallableValueCommand
             std::move(bundlerFlakeRef),
             bundlerName,
             std::move(extendedOutputsSpec),
-            {"bundlers." + settings.thisSystem.get() + ".default", "defaultBundler." + settings.thisSystem.get()},
-            {"bundlers." + settings.thisSystem.get() + "."},
-            lockFlags};
+            {"nix-bundler"},
+            lockFlags,
+            getDefaultFlakeSchemas()};
 
         auto vRes = evalState->allocValue();
         evalState->callFunction(*bundler.toValue(*evalState).first, *val, *vRes, noPos);
@@ -134,7 +118,7 @@ struct CmdBundle : InstallableValueCommand
         }
 
         // TODO: will crash if not a localFSStore?
-        store.dynamic_pointer_cast<LocalFSStore>()->addPermRoot(outPath, absPath(*outLink));
+        store.dynamic_pointer_cast<LocalFSStore>()->addPermRoot(outPath, absPath(*outLink).string());
     }
 };
 

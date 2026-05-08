@@ -7,8 +7,9 @@
 
 namespace nix {
 
-PosixSourceAccessor::PosixSourceAccessor(std::filesystem::path && argRoot)
+PosixSourceAccessor::PosixSourceAccessor(std::filesystem::path && argRoot, bool trackLastModified)
     : root(std::move(argRoot))
+    , trackLastModified(trackLastModified)
 {
     assert(root.empty() || root.is_absolute());
     displayPrefix = root.string();
@@ -19,11 +20,11 @@ PosixSourceAccessor::PosixSourceAccessor()
 {
 }
 
-SourcePath PosixSourceAccessor::createAtRoot(const std::filesystem::path & path)
+SourcePath PosixSourceAccessor::createAtRoot(const std::filesystem::path & path, bool trackLastModified)
 {
     std::filesystem::path path2 = absPath(path);
     return {
-        make_ref<PosixSourceAccessor>(path2.root_path()),
+        make_ref<PosixSourceAccessor>(path2.root_path(), trackLastModified),
         CanonPath{path2.relative_path().string()},
     };
 }
@@ -38,7 +39,7 @@ std::filesystem::path PosixSourceAccessor::makeAbsPath(const CanonPath & path)
                            : root / path.rel();
 }
 
-void PosixSourceAccessor::readFile(const CanonPath & path, Sink & sink, std::function<void(uint64_t)> sizeCallback)
+void PosixSourceAccessor::readFile(const CanonPath & path, Sink & sink, fun<void(uint64_t)> sizeCallback)
 {
     assertNoSymlinks(path);
 
@@ -54,29 +55,11 @@ void PosixSourceAccessor::readFile(const CanonPath & path, Sink & sink, std::fun
     if (!fd)
         throw SysError("opening file '%1%'", ap.string());
 
-    struct stat st;
-    if (fstat(fromDescriptorReadOnly(fd.get()), &st) == -1)
-        throw SysError("statting file");
+    auto size = getFileSize(fd.get());
 
-    sizeCallback(st.st_size);
+    sizeCallback(size);
 
-    off_t left = st.st_size;
-
-    std::array<unsigned char, 64 * 1024> buf;
-    while (left) {
-        checkInterrupt();
-        ssize_t rd = read(fromDescriptorReadOnly(fd.get()), buf.data(), (size_t) std::min(left, (off_t) buf.size()));
-        if (rd == -1) {
-            if (errno != EINTR)
-                throw SysError("reading from file '%s'", showPath(path));
-        } else if (rd == 0)
-            throw SysError("unexpected end-of-file reading '%s'", showPath(path));
-        else {
-            assert(rd <= left);
-            sink({(char *) buf.data(), (size_t) rd});
-            left -= rd;
-        }
-    }
+    drainFD(fd.get(), sink, {.expectedSize = size});
 }
 
 bool PosixSourceAccessor::pathExists(const CanonPath & path)
@@ -86,14 +69,14 @@ bool PosixSourceAccessor::pathExists(const CanonPath & path)
     return nix::pathExists(makeAbsPath(path).string());
 }
 
-std::optional<struct stat> PosixSourceAccessor::cachedLstat(const CanonPath & path)
-{
-    using Cache = boost::concurrent_flat_map<Path, std::optional<struct stat>>;
-    static Cache cache;
+using Cache = boost::concurrent_flat_map<std::string, std::optional<PosixStat>>;
+static Cache cache;
 
-    // Note: we convert std::filesystem::path to Path because the
+std::optional<PosixStat> PosixSourceAccessor::cachedLstat(const CanonPath & path)
+{
+    // Note: we convert std::filesystem::path to std::string because the
     // former is not hashable on libc++.
-    Path absPath = makeAbsPath(path).string();
+    std::string absPath = makeAbsPath(path).string();
 
     if (auto res = getConcurrent(cache, absPath))
         return *res;
@@ -107,6 +90,11 @@ std::optional<struct stat> PosixSourceAccessor::cachedLstat(const CanonPath & pa
     return st;
 }
 
+void PosixSourceAccessor::invalidateCache(const CanonPath & path)
+{
+    cache.erase(makeAbsPath(path).string());
+}
+
 std::optional<SourceAccessor::Stat> PosixSourceAccessor::maybeLstat(const CanonPath & path)
 {
     if (auto parent = path.parent())
@@ -114,9 +102,12 @@ std::optional<SourceAccessor::Stat> PosixSourceAccessor::maybeLstat(const CanonP
     auto st = cachedLstat(path);
     if (!st)
         return std::nullopt;
-    // This makes the accessor thread-unsafe, but we only seem to use the actual value in a single threaded context in
-    // `src/libfetchers/path.cc`.
-    mtime = std::max(mtime, st->st_mtime);
+
+    /* The contract is that trackLastModified implies that the caller uses the accessor
+       from a single thread. Thus this is not a CAS loop. */
+    if (trackLastModified)
+        mtime = std::max(mtime, st->st_mtime);
+
     return Stat{
         .type = S_ISREG(st->st_mode)   ? tRegular
                 : S_ISDIR(st->st_mode) ? tDirectory
@@ -179,7 +170,7 @@ SourceAccessor::DirEntries PosixSourceAccessor::readDirectory(const CanonPath & 
                 if (e.code() == std::errc::permission_denied || e.code() == std::errc::operation_not_permitted)
                     return std::nullopt;
                 else
-                    throw;
+                    throw SystemError(e.code(), "getting status of '%s'", PathFmt(entry.path()));
             }
         }();
         res.emplace(entry.path().filename().string(), type);
@@ -191,7 +182,7 @@ std::string PosixSourceAccessor::readLink(const CanonPath & path)
 {
     if (auto parent = path.parent())
         assertNoSymlinks(*parent);
-    return nix::readLink(makeAbsPath(path).string());
+    return nix::readLink(makeAbsPath(path)).string();
 }
 
 std::optional<std::filesystem::path> PosixSourceAccessor::getPhysicalPath(const CanonPath & path)
@@ -204,7 +195,7 @@ void PosixSourceAccessor::assertNoSymlinks(CanonPath path)
     while (!path.isRoot()) {
         auto st = cachedLstat(path);
         if (st && S_ISLNK(st->st_mode))
-            throw Error("path '%s' is a symlink", showPath(path));
+            throw SymlinkNotAllowed(path, "path '%s' is a symlink", showPath(path));
         path.pop();
     }
 }
@@ -215,8 +206,8 @@ ref<SourceAccessor> getFSSourceAccessor()
     return rootFS;
 }
 
-ref<SourceAccessor> makeFSSourceAccessor(std::filesystem::path root)
+ref<SourceAccessor> makeFSSourceAccessor(std::filesystem::path root, bool trackLastModified)
 {
-    return make_ref<PosixSourceAccessor>(std::move(root));
+    return make_ref<PosixSourceAccessor>(std::move(root), trackLastModified);
 }
 } // namespace nix

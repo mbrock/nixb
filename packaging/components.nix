@@ -124,7 +124,7 @@ let
       +
         lib.optionalString
           (
-            !stdenv.hostPlatform.isWindows
+            !(stdenv.hostPlatform.isWindows || stdenv.hostPlatform.isCygwin)
             # build failure
             && !stdenv.hostPlatform.isStatic
             # LTO breaks exception handling on x86-64-darwin.
@@ -146,12 +146,14 @@ let
     ];
   };
 
-  mesonBuildLayer = finalAttrs: prevAttrs: {
+  mesonBuildLayer = finalAttrs: prevAttrs: rec {
     nativeBuildInputs = prevAttrs.nativeBuildInputs or [ ] ++ [
       pkg-config
     ];
     separateDebugInfo = !stdenv.hostPlatform.isStatic;
-    hardeningDisable = lib.optional stdenv.hostPlatform.isStatic "pie";
+    # needed by separateDebugInfo
+    # SEE: https://github.com/NixOS/nixpkgs/pull/394674/commits/a4d355342976e9e9823fb94f133bc43ebec9da5b
+    __structuredAttrs = separateDebugInfo;
   };
 
   mesonLibraryLayer = finalAttrs: prevAttrs: {
@@ -195,6 +197,25 @@ let
       mesonFlags = [ (lib.mesonBool "b_asneeded" false) ] ++ prevAttrs.mesonFlags or [ ];
     };
 
+  enableSanitizersLayer =
+    finalAttrs: prevAttrs:
+    let
+      sanitizers = lib.optional scope.withASan "address" ++ lib.optional scope.withUBSan "undefined";
+    in
+    {
+      mesonFlags =
+        (prevAttrs.mesonFlags or [ ])
+        ++ lib.optionals (lib.length sanitizers > 0) (
+          [
+            (lib.mesonOption "b_sanitize" (lib.concatStringsSep "," sanitizers))
+          ]
+          ++ (lib.optionals stdenv.cc.isClang [
+            # https://www.github.com/mesonbuild/meson/issues/764
+            (lib.mesonBool "b_lundef" false)
+          ])
+        );
+    };
+
   nixDefaultsLayer = finalAttrs: prevAttrs: {
     strictDeps = prevAttrs.strictDeps or true;
     enableParallelBuilding = true;
@@ -236,6 +257,16 @@ in
   inherit maintainers;
 
   inherit filesetToSource;
+
+  /**
+    Whether meson components are built with [AddressSanitizer](https://clang.llvm.org/docs/AddressSanitizer.html).
+  */
+  withASan = false;
+
+  /**
+    Whether meson components are built with [UndefinedBehaviorSanitizer](https://clang.llvm.org/docs/UndefinedBehaviorSanitizer.html).
+  */
+  withUBSan = false;
 
   /**
     A user-provided extension function to apply to each component derivation.
@@ -323,6 +354,7 @@ in
     setVersionLayer
     mesonLayer
     fixupStaticLayer
+    enableSanitizersLayer
     scope.mesonComponentOverrides
   ];
   mkMesonExecutable = mkPackageBuilder [
@@ -333,6 +365,7 @@ in
     mesonLayer
     mesonBuildLayer
     fixupStaticLayer
+    enableSanitizersLayer
     scope.mesonComponentOverrides
   ];
   mkMesonLibrary = mkPackageBuilder [
@@ -344,6 +377,7 @@ in
     mesonBuildLayer
     mesonLibraryLayer
     fixupStaticLayer
+    enableSanitizersLayer
     scope.mesonComponentOverrides
   ];
 
@@ -375,6 +409,8 @@ in
 
   nix-cmd = callPackage ../src/libcmd/package.nix { };
 
+  nix-nswrapper = callPackage ../src/nswrapper/package.nix { };
+
   /**
     The Nix command line interface. Note that this does not include its tests, whereas `nix-everything` does.
   */
@@ -388,6 +424,15 @@ in
     The manual as would be published on https://nix.dev/reference/nix-manual
   */
   nix-manual = callPackage ../doc/manual/package.nix { version = fineVersion; };
+
+  /**
+    Manpages only (no HTML manual, no mdbook dependency)
+  */
+  nix-manual-manpages-only = callPackage ../doc/manual/package.nix {
+    version = fineVersion;
+    buildHtmlManual = false;
+  };
+
   /**
     Doxygen pages for C++ code
   */
@@ -396,6 +441,11 @@ in
     Doxygen pages for the public C API
   */
   nix-external-api-docs = callPackage ../src/external-api-docs/package.nix { version = fineVersion; };
+
+  /**
+    JSON schema validation checks
+  */
+  nix-json-schema-checks = callPackage ../src/json-schema-checks/package.nix { };
 
   nix-perl-bindings = callPackage ../src/perl/package.nix { };
 
@@ -449,7 +499,7 @@ in
 
       Example:
       ```
-      overrideScope (finalScope: prevScope: { aws-sdk-cpp = null; })
+      overrideScope (finalScope: prevScope: { aws-crt-cpp = null; })
       ```
     */
     overrideScope = f: (scope.overrideScope f).nix-everything;

@@ -14,6 +14,7 @@
 %x INPATH
 %x INPATH_SLASH
 %x PATH_START
+%x REPL_BINDINGS_MODE
 
 %top {
 #include "parser-tab.hh" // YYSTYPE
@@ -113,6 +114,13 @@ URI         [a-zA-Z][a-zA-Z0-9\+\-\.]*\:[a-zA-Z0-9\%\/\?\:\@\&\=\+\$\,\-\_\.\!\~
 
 %%
 
+ /* REPL bindings mode: inject REPL_BINDINGS token at start, then switch to normal lexing */
+<REPL_BINDINGS_MODE>.|\n {
+  yyless(0);
+  yylloc->unstash();
+  POP_STATE();
+  return REPL_BINDINGS;
+}
 
 if          { return IF; }
 then        { return THEN; }
@@ -142,11 +150,11 @@ or          { return OR_KW; }
               return PIPE_INTO;
             }
 
-{ID}        { yylval->id = {yytext, (size_t) yyleng}; return ID; }
+{ID}        { yylval->emplace<StringToken>(yytext, (size_t) yyleng); return ID; }
 {INT}       { errno = 0;
               std::optional<int64_t> numMay = string2Int<int64_t>(yytext);
               if (numMay.has_value()) {
-                  yylval->n = NixInt{*numMay};
+                  yylval->emplace<NixInt>(*numMay);
               } else {
                   throw ParseError(ErrorInfo{
                       .msg = HintFmt("invalid integer '%1%'", yytext),
@@ -156,7 +164,7 @@ or          { return OR_KW; }
               return INT_LIT;
             }
 {FLOAT}     { errno = 0;
-              yylval->nf = strtod(yytext, 0);
+              yylval->emplace<NixFloat>(strtod(yytext, 0));
               if (errno != 0)
                   throw ParseError(ErrorInfo{
                       .msg = HintFmt("invalid float '%1%'", yytext),
@@ -183,7 +191,7 @@ or          { return OR_KW; }
                 /* It is impossible to match strings ending with '$' with one
                    regex because trailing contexts are only valid at the end
                    of a rule. (A sane but undocumented limitation.) */
-                yylval->str = unescapeStr(yytext, yyleng, [&]() { return state->positions[CUR_POS]; });
+                yylval->emplace<StringToken>(unescapeStr(yytext, yyleng, [&]() { return state->positions[CUR_POS]; }));
                 return STR;
               }
 <STRING>\$\{  { PUSH_STATE(DEFAULT); return DOLLAR_CURLY; }
@@ -198,27 +206,27 @@ or          { return OR_KW; }
 
 \'\'(\ *\n)?     { PUSH_STATE(IND_STRING); return IND_STRING_OPEN; }
 <IND_STRING>([^\$\']|\$[^\{\']|\'[^\'\$])+ {
-                   yylval->str = {yytext, (size_t) yyleng, true};
-                   forceNoNullByte(yylval->str, [&]() { return state->positions[CUR_POS]; });
+                   yylval->emplace<StringToken>(yytext, (size_t) yyleng, true);
+                   forceNoNullByte(yylval->as<StringToken>(), [&]() { return state->positions[CUR_POS]; });
                    return IND_STR;
                  }
 <IND_STRING>\'\'\$ |
 <IND_STRING>\$   {
-                   yylval->str = {"$", 1};
+                   yylval->emplace<StringToken>("$", 1);
                    return IND_STR;
                  }
 <IND_STRING>\'\'\' {
-                   yylval->str = {"''", 2};
+                   yylval->emplace<StringToken>("''", 2);
                    return IND_STR;
                  }
 <IND_STRING>\'\'\\{ANY} {
-                   yylval->str = unescapeStr(yytext + 2, yyleng - 2, [&]() { return state->positions[CUR_POS]; });
+                   yylval->emplace<StringToken>(unescapeStr(yytext + 2, yyleng - 2, [&]() { return state->positions[CUR_POS]; }));
                    return IND_STR;
                  }
 <IND_STRING>\$\{ { PUSH_STATE(DEFAULT); return DOLLAR_CURLY; }
 <IND_STRING>\'\' { POP_STATE(); return IND_STRING_CLOSE; }
 <IND_STRING>\'   {
-                   yylval->str = {"'", 1};
+                   yylval->emplace<StringToken>("'", 1);
                    return IND_STR;
                  }
 
@@ -232,15 +240,23 @@ or          { return OR_KW; }
 <PATH_START>{PATH_SEG} {
   POP_STATE();
   PUSH_STATE(INPATH_SLASH);
-  yylval->path = {yytext, (size_t) yyleng};
+  yylval->emplace<StringToken>(yytext, (size_t) yyleng);
   return PATH;
 }
 
 <PATH_START>{HPATH_START} {
   POP_STATE();
   PUSH_STATE(INPATH_SLASH);
-  yylval->path = {yytext, (size_t) yyleng};
+  yylval->emplace<StringToken>(yytext, (size_t) yyleng);
   return HPATH;
+}
+
+<PATH_START>{ANY} |
+<PATH_START><<EOF>> {
+  /* This should be unreachable: PATH_START is only entered after matching
+     PATH_SEG or HPATH_START, and we rewind to re-parse those same patterns.
+     This rule exists to satisfy flex's %option nodefault requirement. */
+  unreachable();
 }
 
 {PATH} {
@@ -248,7 +264,7 @@ or          { return OR_KW; }
     PUSH_STATE(INPATH_SLASH);
   else
     PUSH_STATE(INPATH);
-  yylval->path = {yytext, (size_t) yyleng};
+  yylval->emplace<StringToken>(yytext, (size_t) yyleng);
   return PATH;
 }
 {HPATH} {
@@ -256,7 +272,7 @@ or          { return OR_KW; }
     PUSH_STATE(INPATH_SLASH);
   else
     PUSH_STATE(INPATH);
-  yylval->path = {yytext, (size_t) yyleng};
+  yylval->emplace<StringToken>(yytext, (size_t) yyleng);
   return HPATH;
 }
 
@@ -272,7 +288,7 @@ or          { return OR_KW; }
       PUSH_STATE(INPATH_SLASH);
   else
       PUSH_STATE(INPATH);
-  yylval->str = {yytext, (size_t) yyleng};
+  yylval->emplace<StringToken>(yytext, (size_t) yyleng);
   return STR;
 }
 <INPATH>{ANY} |
@@ -294,8 +310,8 @@ or          { return OR_KW; }
   });
 }
 
-{SPATH}     { yylval->path = {yytext, (size_t) yyleng}; return SPATH; }
-{URI}       { yylval->uri = {yytext, (size_t) yyleng}; return URI; }
+{SPATH}     { yylval->emplace<StringToken>(yytext, (size_t) yyleng); return SPATH; }
+{URI}       { yylval->emplace<StringToken>(yytext, (size_t) yyleng); return URI; }
 
 %{
 // Doc comment rule
@@ -331,3 +347,17 @@ or          { return OR_KW; }
             }
 
 %%
+
+#include <type_traits>
+
+// Verify that the forward declaration in parser.y matches flex's definition
+static_assert(std::is_same_v<yyscan_t, void *>);
+
+namespace nix {
+
+void setReplBindingsMode(yyscan_t scanner)
+{
+    yy_push_state(REPL_BINDINGS_MODE, scanner);
+}
+
+}

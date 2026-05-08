@@ -14,6 +14,10 @@
 #include <nlohmann/json.hpp>
 #include <iostream>
 
+#include <boost/uuid/uuid.hpp>
+#include <boost/uuid/time_generator_v7.hpp>
+#include <boost/uuid/uuid_io.hpp>
+
 namespace nix {
 
 LoggerSettings loggerSettings;
@@ -150,16 +154,21 @@ public:
 
 Verbosity verbosity = lvlInfo;
 
-void writeToStderr(std::string_view s)
+static void writeFullLogging(Descriptor fd, std::string_view s)
 {
     try {
-        writeFull(getStandardError(), s, false);
+        writeFull(fd, s, false);
     } catch (SystemError & e) {
-        /* Ignore failing writes to stderr.  We need to ignore write
-           errors to ensure that cleanup code that logs to stderr runs
-           to completion if the other side of stderr has been closed
-           unexpectedly. */
+        /* Ignore failing logging writes.  We need to ignore write
+           errors to ensure that cleanup code that writes logs runs
+           to completion if the other side of the logging fd has
+           been closed unexpectedly. */
     }
+}
+
+void writeToStderr(std::string_view s)
+{
+    writeFullLogging(getStandardError(), s);
 }
 
 std::unique_ptr<Logger> makeSimpleLogger(bool printBuildLogs)
@@ -206,6 +215,16 @@ void to_json(nlohmann::json & json, std::shared_ptr<const Pos> pos)
     }
 }
 
+static std::string getSessionId()
+{
+    if (!loggerSettings.sessionId.get().empty())
+        return loggerSettings.sessionId.get();
+
+    // Generate a UUIDv7 as the session ID.
+    static std::string uuid = boost::uuids::to_string(boost::uuids::time_generator_v7()());
+    return uuid;
+}
+
 struct JSONLogger : Logger
 {
     Descriptor fd;
@@ -243,17 +262,19 @@ struct JSONLogger : Logger
 
     Sync<State> _state;
 
-    void write(const nlohmann::json & json)
+    void write(nlohmann::json json)
     {
-        auto line =
-            (includeNixPrefix ? "@nix " : "") + json.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
+        json["sid"] = getSessionId();
+
+        auto line = (includeNixPrefix ? "@nix " : "")
+                    + json.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace) + "\n";
 
         /* Acquire a lock to prevent log messages from clobbering each
            other. */
         try {
             auto state(_state.lock());
             if (state->enabled)
-                writeLine(fd, line);
+                writeFullLogging(fd, line);
         } catch (...) {
             bool enabled = false;
             std::swap(_state.lock()->enabled, enabled);
@@ -270,7 +291,7 @@ struct JSONLogger : Logger
         json["action"] = "msg";
         json["level"] = lvl;
         json["msg"] = s;
-        write(json);
+        write(std::move(json));
     }
 
     void logEI(const ErrorInfo & ei) override
@@ -297,7 +318,7 @@ struct JSONLogger : Logger
             json["trace"] = traces;
         }
 
-        write(json);
+        write(std::move(json));
     }
 
     void startActivity(
@@ -316,7 +337,7 @@ struct JSONLogger : Logger
         json["text"] = s;
         json["parent"] = parent;
         addFields(json, fields);
-        write(json);
+        write(std::move(json));
     }
 
     void stopActivity(ActivityId act) override
@@ -324,7 +345,7 @@ struct JSONLogger : Logger
         nlohmann::json json;
         json["action"] = "stop";
         json["id"] = act;
-        write(json);
+        write(std::move(json));
     }
 
     void result(ActivityId act, ResultType type, const Fields & fields) override
@@ -334,7 +355,7 @@ struct JSONLogger : Logger
         json["id"] = act;
         json["type"] = type;
         addFields(json, fields);
-        write(json);
+        write(std::move(json));
     }
 
     void result(ActivityId act, ResultType type, const nlohmann::json & j) override
@@ -344,7 +365,7 @@ struct JSONLogger : Logger
         json["id"] = act;
         json["type"] = type;
         json["payload"] = j;
-        write(json);
+        write(std::move(json));
     }
 };
 
@@ -370,17 +391,17 @@ std::unique_ptr<Logger> makeJSONLogger(const std::filesystem::path & path, bool 
                          ? connect(path)
                          : toDescriptor(open(path.string().c_str(), O_CREAT | O_APPEND | O_WRONLY, 0644));
     if (!fd)
-        throw SysError("opening log file %1%", path);
+        throw SysError("opening log file %1%", PathFmt(path));
 
     return std::make_unique<JSONFileLogger>(std::move(fd), includeNixPrefix);
 }
 
 void applyJSONLogger()
 {
-    if (!loggerSettings.jsonLogPath.get().empty()) {
+    if (auto & opt = loggerSettings.jsonLogPath.get()) {
         try {
             std::vector<std::unique_ptr<Logger>> loggers;
-            loggers.push_back(makeJSONLogger(std::filesystem::path(loggerSettings.jsonLogPath.get()), false));
+            loggers.push_back(makeJSONLogger(*opt, false));
             try {
                 logger = makeTeeLogger(std::move(logger), std::move(loggers));
             } catch (...) {

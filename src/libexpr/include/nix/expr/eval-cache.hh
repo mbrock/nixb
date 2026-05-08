@@ -4,6 +4,7 @@
 #include "nix/util/sync.hh"
 #include "nix/util/hash.hh"
 #include "nix/expr/eval.hh"
+#include "nix/expr/attr-path.hh"
 
 #include <functional>
 #include <variant>
@@ -13,7 +14,7 @@ namespace nix::eval_cache {
 struct AttrDb;
 class AttrCursor;
 
-struct CachedEvalError : EvalError
+struct CachedEvalError : CloneableError<CachedEvalError, EvalError>
 {
     const ref<AttrCursor> cursor;
     const Symbol attr;
@@ -34,8 +35,14 @@ class EvalCache : public std::enable_shared_from_this<EvalCache>
     friend struct CachedEvalError;
 
     std::shared_ptr<AttrDb> db;
+
+public:
     EvalState & state;
-    typedef std::function<Value *()> RootLoader;
+
+    std::function<AttrPath(AttrPath &&)> cleanupAttrPath = [](AttrPath && attrPath) { return std::move(attrPath); };
+
+private:
+    typedef fun<Value *()> RootLoader;
     RootLoader rootLoader;
     RootValue value;
 
@@ -98,7 +105,10 @@ class AttrCursor : public std::enable_shared_from_this<AttrCursor>
     friend class EvalCache;
     friend struct CachedEvalError;
 
+public:
     ref<EvalCache> root;
+
+private:
     using Parent = std::optional<std::pair<ref<AttrCursor>, Symbol>>;
     Parent parent;
     RootValue _value;
@@ -124,9 +134,13 @@ public:
         Value * value = nullptr,
         std::optional<std::pair<AttrId, AttrValue>> && cachedValue = {});
 
-    std::vector<Symbol> getAttrPath() const;
+    AttrPath getAttrPath() const;
 
-    std::vector<Symbol> getAttrPath(Symbol name) const;
+    AttrPath getAttrPathRaw() const;
+
+    AttrPath getAttrPath(Symbol name) const;
+
+    AttrPath getAttrPathRaw(Symbol name) const;
 
     std::string getAttrPathStr() const;
 
@@ -146,7 +160,7 @@ public:
      * Get an attribute along a chain of attrsets. Note that this does
      * not auto-call functors or functions.
      */
-    OrSuggestions<ref<AttrCursor>> findAlongAttrPath(const std::vector<Symbol> & attrPath);
+    OrSuggestions<ref<AttrCursor>> findAlongAttrPath(const AttrPath & attrPath);
 
     std::string getString();
 

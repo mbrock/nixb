@@ -50,19 +50,28 @@ mandir = get_option('mandir')
 mandir = fs.is_absolute(mandir) ? mandir : prefix / mandir
 configdata.set_quoted('NIX_MAN_DIR', mandir)
 
+sentry_required = get_option('sentry')
+configdata.set('HAVE_SENTRY', sentry_required.enabled().to_int())
+if sentry_required.enabled()
+  crashpad_handler_path = get_option('crashpad-handler')
+  assert(
+    crashpad_handler_path != '',
+    'crashpad-handler path must be set when sentry is enabled',
+  )
+  configdata.set_quoted('CRASHPAD_HANDLER_PATH', crashpad_handler_path)
+endif
+
 config_priv_h = configure_file(
   configuration : configdata,
   output : 'cli-config-private.hh',
 )
 
 subdir('nix-meson-build-support/common')
-subdir('nix-meson-build-support/asan-options')
 subdir('nix-meson-build-support/generate-header')
 
 nix_sources = [ config_priv_h ] + files(
   'add-to-store.cc',
   'app.cc',
-  'asan-options.cc',
   'build.cc',
   'bundle.cc',
   'cat.cc',
@@ -70,6 +79,7 @@ nix_sources = [ config_priv_h ] + files(
   'config.cc',
   'copy.cc',
   'crash-handler.cc',
+  'crash.cc',
   'derivation-add.cc',
   'derivation-show.cc',
   'derivation.cc',
@@ -96,6 +106,8 @@ nix_sources = [ config_priv_h ] + files(
   'path-info.cc',
   'prefetch.cc',
   'profile.cc',
+  'provenance.cc',
+  'ps.cc',
   'realisation.cc',
   'registry.cc',
   'repl.cc',
@@ -117,6 +129,7 @@ nix_sources = [ config_priv_h ] + files(
 if host_machine.system() != 'windows'
   nix_sources += files(
     'unix/daemon.cc',
+    'unix/store-roots-daemon.cc',
   )
 endif
 
@@ -190,7 +203,7 @@ this_exe = executable(
   sources,
   dependencies : deps_private_subproject + deps_private + deps_other,
   include_directories : include_dirs,
-  link_args : linker_export_flags,
+  link_args : linker_export_flags + (sentry_required.enabled() ? [ '-lsentry' ] : []),
   install : true,
   cpp_pch : do_pch ? [ 'pch/precompiled-headers.hh' ] : [],
 )
@@ -233,6 +246,7 @@ foreach linkname : nix_symlinks
     env : {'MSYS' : 'winsymlinks:lnk'},
     # TODO(Ericson2314): Don't do this once we have the `meson.override_find_program` working)
     build_by_default : true,
+    depends : this_exe,
   )
   # TODO(Ericson3214): Doesn't yet work
   #meson.override_find_program(linkname, t)
@@ -254,6 +268,7 @@ custom_target(
   env : {'MSYS' : 'winsymlinks:lnk'},
   # TODO(Ericson2314): Don't do this once we have the `meson.override_find_program` working)
   build_by_default : true,
+  depends : this_exe,
 )
 # TODO(Ericson3214): Doesn't yet work
 #meson.override_find_program(linkname, t)

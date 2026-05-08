@@ -28,11 +28,15 @@ subdir('nix-meson-build-support/subprojects')
 rapidcheck = dependency('rapidcheck')
 deps_public += rapidcheck
 
+gtest = dependency('gtest')
+deps_public += gtest
+
 subdir('nix-meson-build-support/common')
-subdir('nix-meson-build-support/asan-options')
 
 sources = files(
   'derived-path.cc',
+  'https-store.cc',
+  'libstore-network.cc',
   'outputs-spec.cc',
   'path.cc',
   'test-main.cc',
@@ -52,7 +56,7 @@ this_library = library(
   # TODO: Remove `-lrapidcheck` when https://github.com/emil-e/rapidcheck/pull/326
   #       is available. See also ../libutil/build.meson
   link_args : linker_export_flags + [ '-lrapidcheck' ],
-  prelink : true, # For C++ static initializers
+  prelink : prelink, # For C++ static initializers
   install : true,
 )
 

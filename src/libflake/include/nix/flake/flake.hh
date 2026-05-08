@@ -5,10 +5,12 @@
 #include "nix/flake/flakeref.hh"
 #include "nix/flake/lockfile.hh"
 #include "nix/expr/value.hh"
+#include "nix/expr/eval-cache.hh"
 
 namespace nix {
 
 class EvalState;
+struct Provenance;
 
 namespace flake {
 
@@ -94,6 +96,11 @@ struct Flake
     SourcePath path;
 
     /**
+     * Cached provenance of `flake.nix` (equivalent to `path.getProvenance()`).
+     */
+    std::shared_ptr<const Provenance> provenance;
+
+    /**
      * Pretend that `lockedRef` is dirty.
      */
     bool forceDirty = false;
@@ -141,7 +148,7 @@ struct LockedFlake
      */
     std::map<ref<Node>, SourcePath> nodePaths;
 
-    std::optional<Fingerprint> getFingerprint(ref<Store> store, const fetchers::Settings & fetchSettings) const;
+    std::optional<Fingerprint> getFingerprint(Store & store, const fetchers::Settings & fetchSettings) const;
 };
 
 struct LockFlags
@@ -206,18 +213,18 @@ struct LockFlags
     /**
      * The path to a lock file to write to instead of the `flake.lock` file in the top-level flake
      */
-    std::optional<Path> outputLockFilePath;
+    std::optional<std::filesystem::path> outputLockFilePath;
 
     /**
      * Flake inputs to be overridden.
      */
-    std::map<InputAttrPath, FlakeRef> inputOverrides;
+    std::map<NonEmptyInputAttrPath, FlakeRef> inputOverrides;
 
     /**
      * Flake inputs to be updated. This means that any existing lock
      * for those inputs will be ignored.
      */
-    std::set<InputAttrPath> inputUpdates;
+    std::set<NonEmptyInputAttrPath> inputUpdates;
 
     /**
      * Whether to require a locked input.
@@ -225,8 +232,30 @@ struct LockFlags
     bool requireLockable = true;
 };
 
+/**
+ * Return a `Flake` object representing the flake read from the
+ * `flake.nix` file in `rootDir`.
+ */
+Flake readFlake(
+    EvalState & state,
+    const FlakeRef & originalRef,
+    const FlakeRef & resolvedRef,
+    const FlakeRef & lockedRef,
+    const SourcePath & rootDir,
+    const InputAttrPath & lockRootPath);
+
+/*
+ * Compute an in-memory lock file for the specified top-level flake, and optionally write it to file, if the flake is
+ * writable.
+ */
 LockedFlake
 lockFlake(const Settings & settings, EvalState & state, const FlakeRef & flakeRef, const LockFlags & lockFlags);
+
+LockedFlake lockFlake(
+    const Settings & settings, EvalState & state, const FlakeRef & topRef, const LockFlags & lockFlags, Flake flake);
+
+LockedFlake
+lockFlake(const Settings & settings, EvalState & state, const SourcePath & flakeDir, const LockFlags & lockFlags);
 
 void callFlake(EvalState & state, const LockedFlake & lockedFlake, Value & v);
 
@@ -239,12 +268,5 @@ void emitTreeAttrs(
     Value & v,
     bool emptyRevFallback = false,
     bool forceDirty = false);
-
-/**
- * An internal builtin similar to `fetchTree`, except that it
- * always treats the input as final (i.e. no attributes can be
- * added/removed/changed).
- */
-void prim_fetchFinalTree(EvalState & state, const PosIdx pos, Value ** args, Value & v);
 
 } // namespace nix

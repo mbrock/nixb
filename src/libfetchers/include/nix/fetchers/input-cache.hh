@@ -1,3 +1,5 @@
+#pragma once
+
 #include "nix/fetchers/fetchers.hh"
 
 namespace nix::fetchers {
@@ -16,7 +18,7 @@ struct InputCache
     };
 
     CachedResult
-    getAccessor(const Settings & settings, ref<Store> store, const Input & originalInput, UseRegistries useRegistries);
+    getAccessor(const Settings & settings, Store & store, const Input & originalInput, UseRegistries useRegistries);
 
     struct CachedInput
     {

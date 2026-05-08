@@ -17,7 +17,11 @@ thread_local bool Executor::amWorkerThread{false};
 
 unsigned int Executor::getEvalCores(const EvalSettings & evalSettings)
 {
-    return evalSettings.evalCores == 0UL ? Settings::getDefaultCores() : evalSettings.evalCores;
+    /* Note: the default number of cores is currently limited to 32
+       due to scalability bottlenecks. */
+    return evalSettings.evalProfilerMode != EvalProfilerMode::disabled ? 1
+           : evalSettings.evalCores == 0UL                             ? std::min(32U, Settings::getDefaultCores())
+                                                                       : evalSettings.evalCores;
 }
 
 Executor::Executor(const EvalSettings & evalSettings)
@@ -30,8 +34,16 @@ Executor::Executor(const EvalSettings & evalSettings)
 {
     debug("executor using %d threads", evalCores);
     auto state(state_.lock());
+    // FIXME: create worker threads on demand?
     for (size_t n = 0; n < evalCores; ++n)
-        createWorker(*state);
+        try {
+            createWorker(*state);
+        } catch (boost::thread_resource_error & e) {
+            if (n == 0)
+                throw Error("could not create any evaluator worker threads: %s", e.what());
+            warn("could only create %d evaluator worker threads: %s", n, e.what());
+            break;
+        }
 }
 
 Executor::~Executor()
@@ -110,7 +122,7 @@ void Executor::worker()
     }
 }
 
-std::vector<std::future<void>> Executor::spawn(std::vector<std::pair<work_t, uint8_t>> && items)
+std::vector<std::future<void>> Executor::spawn(WorkItems && items)
 {
     if (items.empty())
         return {};
@@ -146,7 +158,7 @@ FutureVector::~FutureVector()
     }
 }
 
-void FutureVector::spawn(std::vector<std::pair<Executor::work_t, uint8_t>> && work)
+void FutureVector::spawn(Executor::WorkItems && work)
 {
     auto futures = executor.spawn(std::move(work));
     auto state(state_.lock());
@@ -172,7 +184,7 @@ void FutureVector::finishAll()
             } catch (...) {
                 if (ex) {
                     if (!getInterrupted())
-                        ignoreExceptionExceptInterrupt();
+                        logExceptionExceptInterrupt();
                 } else
                     ex = std::current_exception();
             }
@@ -272,11 +284,12 @@ static void prim_parallel(EvalState & state, const PosIdx pos, Value ** args, Va
 {
     state.forceList(*args[0], pos, "while evaluating the first argument passed to builtins.parallel");
 
-    if (state.executor->evalCores > 1) {
-        std::vector<std::pair<Executor::work_t, uint8_t>> work;
+    if (state.executor->enabled) {
+        Executor::WorkItems work;
         for (auto value : args[0]->listView())
             if (!value->isFinished())
-                work.emplace_back([value(allocRootValue(value)), &state, pos]() { state.forceValue(**value, pos); }, 0);
+                state.addWork(
+                    work, 0, [value(allocRootValue(value)), &state, pos]() { state.forceValue(**value, pos); });
         state.executor->spawn(std::move(work));
     }
 
@@ -292,7 +305,7 @@ static RegisterPrimOp r_parallel({
     .doc = R"(
       Start evaluation of the values `xs` in the background and return `x`.
     )",
-    .fun = prim_parallel,
+    .impl = prim_parallel,
     .experimentalFeature = Xp::ParallelEval,
 });
 

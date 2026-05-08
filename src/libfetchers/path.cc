@@ -19,7 +19,7 @@ struct PathInputScheme : InputScheme
 
         Input input{};
         input.attrs.insert_or_assign("type", "path");
-        input.attrs.insert_or_assign("path", renderUrlPathEnsureLegal(url.path));
+        input.attrs.insert_or_assign("path", urlPathToPath(url.path).string());
 
         for (auto & [name, value] : url.query)
             if (name == "rev" || name == "narHash")
@@ -40,20 +40,42 @@ struct PathInputScheme : InputScheme
         return "path";
     }
 
-    StringSet allowedAttrs() const override
+    std::string schemeDescription() const override
     {
-        return {
-            "path",
+        // TODO
+        return "";
+    }
+
+    const std::map<std::string, AttributeInfo> & allowedAttrs() const override
+    {
+        static const std::map<std::string, AttributeInfo> attrs = {
+            {
+                "path",
+                {},
+            },
             /* Allow the user to pass in "fake" tree info
                attributes. This is useful for making a pinned tree work
                the same as the repository from which is exported (e.g.
                path:/nix/store/...-source?lastModified=1585388205&rev=b0c285...).
              */
-            "rev",
-            "revCount",
-            "lastModified",
-            "narHash",
+            {
+                "rev",
+                {},
+            },
+            {
+                "revCount",
+                {},
+            },
+            {
+                "lastModified",
+                {},
+            },
+            {
+                "narHash",
+                {},
+            },
         };
+        return attrs;
     }
 
     std::optional<Input> inputFromAttrs(const Settings & settings, const Attrs & attrs) const override
@@ -92,10 +114,10 @@ struct PathInputScheme : InputScheme
         writeFile(getAbsPath(input) / path.rel(), contents);
     }
 
-    std::optional<std::string> isRelative(const Input & input) const override
+    std::optional<std::filesystem::path> isRelative(const Input & input) const override
     {
-        auto path = getStrAttr(input.attrs, "path");
-        if (isAbsolute(path))
+        std::filesystem::path path = getStrAttr(input.attrs, "path");
+        if (path.is_absolute())
             return std::nullopt;
         else
             return path;
@@ -108,54 +130,45 @@ struct PathInputScheme : InputScheme
 
     std::filesystem::path getAbsPath(const Input & input) const
     {
-        auto path = getStrAttr(input.attrs, "path");
+        std::filesystem::path path = getStrAttr(input.attrs, "path");
 
-        if (isAbsolute(path))
+        if (path.is_absolute())
             return canonPath(path);
 
         throw Error("cannot fetch input '%s' because it uses a relative path", input.to_string());
     }
 
-    std::pair<ref<SourceAccessor>, Input>
-    getAccessor(const Settings & settings, ref<Store> store, const Input & _input) const override
+    std::optional<std::pair<ref<SourceAccessor>, Input>>
+    getAccessor(const Settings & settings, Store & store, const Input & _input, bool fastOnly) const override
     {
+        // Note: fastOnly is ignored because the path fetcher is always fast.
+
         Input input(_input);
-        auto path = getStrAttr(input.attrs, "path");
 
         auto absPath = getAbsPath(input);
 
         // FIXME: check whether access to 'path' is allowed.
-        auto storePath = store->maybeParseStorePath(absPath.string());
 
-        if (storePath)
-            store->addTempRoot(*storePath);
+        auto accessor = makeFSSourceAccessor(absPath);
 
-        time_t mtime = 0;
-        if (!storePath || storePath->name() != "source" || !store->isValidPath(*storePath)) {
-            Activity act(*logger, lvlTalkative, actUnknown, fmt("copying %s to the store", absPath));
-            // FIXME: try to substitute storePath.
-            auto src = sinkToSource(
-                [&](Sink & sink) { mtime = dumpPathAndGetMtime(absPath.string(), sink, defaultPathFilter); });
-            storePath = store->addToStoreFromDump(*src, "source");
+        auto storePath = store.maybeParseStorePath(absPath.string());
+
+        if (storePath) {
+            store.addTempRoot(*storePath);
+
+            // To prevent `fetchToStore()` copying the path again to Nix
+            // store, pre-create an entry in the fetcher cache.
+            auto info = store.maybeQueryPathInfo(*storePath);
+            if (info) {
+                accessor->fingerprint = fmt("path:%s", info->narHash.to_string(HashFormat::SRI, true));
+                settings.getCache()->upsert(
+                    makeSourcePathToHashCacheKey(
+                        *accessor->fingerprint, ContentAddressMethod::Raw::NixArchive, CanonPath::root),
+                    {{"hash", info->narHash.to_string(HashFormat::SRI, true)}});
+            }
         }
 
-        auto accessor = ref{store->getFSAccessor(*storePath)};
-
-        // To prevent `fetchToStore()` copying the path again to Nix
-        // store, pre-create an entry in the fetcher cache.
-        auto info = store->queryPathInfo(*storePath);
-        accessor->fingerprint =
-            fmt("path:%s", store->queryPathInfo(*storePath)->narHash.to_string(HashFormat::SRI, true));
-        settings.getCache()->upsert(
-            makeSourcePathToHashCacheKey(*accessor->fingerprint, ContentAddressMethod::Raw::NixArchive, "/"),
-            {{"hash", info->narHash.to_string(HashFormat::SRI, true)}});
-
-        /* Trust the lastModified value supplied by the user, if
-           any. It's not a "secure" attribute so we don't care. */
-        if (!input.getLastModified())
-            input.attrs.insert_or_assign("lastModified", uint64_t(mtime));
-
-        return {accessor, std::move(input)};
+        return {{accessor, std::move(input)}};
     }
 };
 

@@ -21,7 +21,7 @@ static void printValueAsXML(
     Value & v,
     XMLWriter & doc,
     NixStringContext & context,
-    PathSet & drvsSeen,
+    StringSet & drvsSeen,
     const PosIdx pos);
 
 static void posToXML(EvalState & state, XMLAttrs & xmlAttrs, const Pos & pos)
@@ -39,7 +39,7 @@ static void showAttrs(
     const Bindings & attrs,
     XMLWriter & doc,
     NixStringContext & context,
-    PathSet & drvsSeen)
+    StringSet & drvsSeen)
 {
     StringSet names;
 
@@ -61,10 +61,12 @@ static void printValueAsXML(
     Value & v,
     XMLWriter & doc,
     NixStringContext & context,
-    PathSet & drvsSeen,
+    StringSet & drvsSeen,
     const PosIdx pos)
 {
     checkInterrupt();
+
+    auto _level = state.addCallDepth(pos);
 
     if (strict)
         state.forceValue(v, pos);
@@ -82,7 +84,7 @@ static void printValueAsXML(
     case nString:
         /* !!! show the context? */
         copyContext(v, context);
-        doc.writeEmptyElement("string", singletonAttrs("value", v.c_str()));
+        doc.writeEmptyElement("string", singletonAttrs("value", v.string_view()));
         break;
 
     case nPath:
@@ -97,19 +99,19 @@ static void printValueAsXML(
         if (state.isDerivation(v)) {
             XMLAttrs xmlAttrs;
 
-            Path drvPath;
+            std::string drvPath;
             if (auto a = v.attrs()->get(state.s.drvPath)) {
                 if (strict)
                     state.forceValue(*a->value, a->pos);
                 if (a->value->type() == nString)
-                    xmlAttrs["drvPath"] = drvPath = a->value->c_str();
+                    xmlAttrs["drvPath"] = drvPath = a->value->string_view();
             }
 
             if (auto a = v.attrs()->get(state.s.outPath)) {
                 if (strict)
                     state.forceValue(*a->value, a->pos);
                 if (a->value->type() == nString)
-                    xmlAttrs["outPath"] = a->value->c_str();
+                    xmlAttrs["outPath"] = a->value->string_view();
             }
 
             XMLOpenElement _(doc, "derivation", xmlAttrs);
@@ -145,14 +147,14 @@ static void printValueAsXML(
             posToXML(state, xmlAttrs, state.positions[v.lambda().fun->pos]);
         XMLOpenElement _(doc, "function", xmlAttrs);
 
-        if (v.lambda().fun->hasFormals()) {
+        if (auto formals = v.lambda().fun->getFormals()) {
             XMLAttrs attrs;
             if (v.lambda().fun->arg)
                 attrs["name"] = state.symbols[v.lambda().fun->arg];
-            if (v.lambda().fun->formals->ellipsis)
+            if (formals->ellipsis)
                 attrs["ellipsis"] = "1";
             XMLOpenElement _(doc, "attrspat", attrs);
-            for (auto & i : v.lambda().fun->formals->lexicographicOrder(state.symbols))
+            for (auto & i : formals->lexicographicOrder(state.symbols))
                 doc.writeEmptyElement("attr", singletonAttrs("name", state.symbols[i.name]));
         } else
             doc.writeEmptyElement("varpat", singletonAttrs("name", state.symbols[v.lambda().fun->arg]));
@@ -169,11 +171,10 @@ static void printValueAsXML(
         break;
 
     case nThunk:
-        doc.writeEmptyElement("unevaluated");
-        break;
-
+    // Historically, a tried and then ignored value (e.g. through tryEval) was
+    // reverted to the original thunk.
     case nFailed:
-        doc.writeEmptyElement("failed");
+        doc.writeEmptyElement("unevaluated");
         break;
     }
 }
@@ -184,7 +185,7 @@ void ExternalValueBase::printValueAsXML(
     bool location,
     XMLWriter & doc,
     NixStringContext & context,
-    PathSet & drvsSeen,
+    StringSet & drvsSeen,
     const PosIdx pos) const
 {
     doc.writeEmptyElement("unevaluated");
@@ -201,7 +202,7 @@ void printValueAsXML(
 {
     XMLWriter doc(true, out);
     XMLOpenElement root(doc, "expr");
-    PathSet drvsSeen;
+    StringSet drvsSeen;
     printValueAsXML(state, strict, location, v, doc, context, drvsSeen, pos);
 }
 

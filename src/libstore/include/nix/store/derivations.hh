@@ -17,7 +17,7 @@
 namespace nix {
 
 struct StoreDirConfig;
-struct AsyncPathWriter;
+struct Provenance;
 
 /* Abstract syntax of derivations. */
 
@@ -135,13 +135,6 @@ struct DerivationOutput
      */
     std::optional<StorePath>
     path(const StoreDirConfig & store, std::string_view drvName, OutputNameView outputName) const;
-
-    nlohmann::json toJSON() const;
-    /**
-     * @param xpSettings Stop-gap to avoid globals during unit tests.
-     */
-    static DerivationOutput
-    fromJSON(const nlohmann::json & json, const ExperimentalFeatureSettings & xpSettings = experimentalFeatureSettings);
 };
 
 typedef std::map<std::string, DerivationOutput> DerivationOutputs;
@@ -282,10 +275,13 @@ struct BasicDerivation
      */
     StorePathSet inputSrcs;
     std::string platform;
-    Path builder;
+    /**
+     * Probably should be an absolute path in the path format that `platform` uses
+     */
+    std::string builder;
     Strings args;
     /**
-     * Must not contain the key `__json`, at least in order to serialize to A-Term.
+     * Must not contain the key `__json`, at least in order to serialize to ATerm.
      */
     StringPairs env;
     std::optional<StructuredAttrs> structuredAttrs;
@@ -349,6 +345,19 @@ struct Derivation : BasicDerivation
         DerivedPathMap<StringSet>::ChildNode::Map * actualInputs = nullptr) const;
 
     /**
+     * Determine whether this derivation should be resolved before building.
+     *
+     * Resolution is needed when:
+     * - Input-addressed derivations are deferred (depend on CA derivations)
+     * - Content-addressed derivations have input drvs and are either:
+     *   - Floating (non-fixed), which must always be resolved
+     *   - Fixed, which can optionally be resolved when ca-derivations is enabled
+     * - Impure derivations always need resolution
+     * - Any input derivations have outputs from dynamic derivations
+     */
+    bool shouldResolve() const;
+
+    /**
      * Return the underlying basic derivation but with these changes:
      *
      * 1. Input drvs are emptied, but the outputs of them that were used
@@ -366,7 +375,7 @@ struct Derivation : BasicDerivation
      */
     std::optional<BasicDerivation> tryResolve(
         Store & store,
-        std::function<std::optional<StorePath>(ref<const SingleDerivedPath> drvPath, const std::string & outputName)>
+        fun<std::optional<StorePath>(ref<const SingleDerivedPath> drvPath, const std::string & outputName)>
             queryResolutionChain) const;
 
     /**
@@ -376,8 +385,47 @@ struct Derivation : BasicDerivation
      * This is mainly a matter of checking the outputs, where our C++
      * representation supports all sorts of combinations we do not yet
      * allow.
+     *
+     * This overload does not validate the derivation name or add path
+     * context to errors. Use this when you don't have a `StorePath` or
+     * when you want to handle error context yourself.
+     *
+     * @param store The store to use for validation
+     */
+    void checkInvariants(Store & store) const;
+
+    /**
+     * This overload does everything the base `checkInvariants` does,
+     * but also validates that the derivation name matches the path, and
+     * improves any error messages that occur using the derivation path.
+     *
+     * @param store The store to use for validation
+     * @param drvPath The path to this derivation
      */
     void checkInvariants(Store & store, const StorePath & drvPath) const;
+
+    /**
+     * Fill in output paths as needed.
+     *
+     * For input-addressed derivations (ready or deferred), it computes
+     * the derivation hash modulo and based on the result:
+     *
+     * - If `Regular`: converts `Deferred` outputs to `InputAddressed`,
+     *   and ensures all `InputAddressed` outputs (whether preexisting
+     *   or newly computed) have the right computed paths. Likewise
+     *   defines (if absent or the empty string) or checks (if
+     *   preexisting and non-empty) environment variables for each
+     *   output with their path.
+     *
+     * - If `Deferred`: converts `InputAddressed` to `Deferred`.
+     *
+     * Also for fixed-output content-addressed derivations, likewise
+     * updates output paths in env vars.
+     *
+     * @param store The store to use for path computation
+     * @param drvName The derivation name (without .drv extension)
+     */
+    void fillInOutputPaths(Store & store);
 
     Derivation() = default;
 
@@ -391,9 +439,28 @@ struct Derivation : BasicDerivation
     {
     }
 
-    nlohmann::json toJSON() const;
-    static Derivation
-    fromJSON(const nlohmann::json & json, const ExperimentalFeatureSettings & xpSettings = experimentalFeatureSettings);
+    /**
+     * Parse a derivation from JSON, and also perform various
+     * conveniences such as:
+     *
+     * 1. Filling in output paths in as needed/required.
+     *
+     * 2. Checking invariants in general.
+     *
+     * In the future it might also do things like:
+     *
+     * - assist with the migration from older JSON formats.
+     *
+     * - (a somewhat example of the above) initialize
+     *   `DerivationOptions` from their traditional encoding inside the
+     *   `env` and `structuredAttrs`.
+     *
+     * @param store The store to use for path computation and validation
+     * @param json The JSON representation of the derivation
+     * @return A validated derivation with output paths filled in
+     * @throws Error if parsing fails, output paths can't be computed, or validation fails
+     */
+    static Derivation parseJsonAndValidate(Store & store, const nlohmann::json & json);
 
     bool operator==(const Derivation &) const = default;
     // TODO libc++ 16 (used by darwin) missing `std::map::operator <=>`, can't do yet.
@@ -403,19 +470,11 @@ struct Derivation : BasicDerivation
 class Store;
 
 /**
- * Write a derivation to the Nix store, and return its path.
+ * Compute the store path that would be used for a derivation without writing it.
+ *
+ * This is a pure computation based on the derivation content and store directory.
  */
-StorePath writeDerivation(Store & store, const Derivation & drv, RepairFlag repair = NoRepair, bool readOnly = false);
-
-/**
- * Asynchronously write a derivation to the Nix store, and return its path.
- */
-StorePath writeDerivation(
-    Store & store,
-    AsyncPathWriter & asyncPathWriter,
-    const Derivation & drv,
-    RepairFlag repair = NoRepair,
-    bool readOnly = false);
+StorePath computeStorePath(const StoreDirConfig & store, const Derivation & drv);
 
 /**
  * Read a derivation from a file.
@@ -546,7 +605,14 @@ void writeDerivation(Sink & out, const StoreDirConfig & store, const BasicDeriva
  */
 std::string hashPlaceholder(const OutputNameView outputName);
 
+/**
+ * The expected JSON version for derivation serialization.
+ * Used by `nix derivation show` and `nix derivation add`.
+ */
+constexpr unsigned expectedJsonVersionDerivation = 4;
+
 } // namespace nix
 
-JSON_IMPL(nix::DerivationOutput)
-JSON_IMPL(nix::Derivation)
+JSON_IMPL_WITH_XP_FEATURES(nix::DerivationOutput)
+JSON_IMPL_WITH_XP_FEATURES(nix::Derivation)
+JSON_IMPL_WITH_XP_FEATURES(nix::BasicDerivation)

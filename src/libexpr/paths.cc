@@ -10,9 +10,9 @@ SourcePath EvalState::rootPath(CanonPath path)
     return {rootFS, std::move(path)};
 }
 
-SourcePath EvalState::rootPath(PathView path)
+SourcePath EvalState::rootPath(std::string_view path)
 {
-    return {rootFS, CanonPath(absPath(path))};
+    return {rootFS, CanonPath(absPath(path).string())};
 }
 
 SourcePath EvalState::storePath(const StorePath & path)
@@ -109,8 +109,8 @@ StorePath EvalState::mountInput(
             (unsigned int) 102,
             "NAR hash mismatch in input '%s', expected '%s' but got '%s'",
             originalInput.to_string(),
-            getNarHash()->to_string(HashFormat::SRI, true),
-            originalInput.getNarHash()->to_string(HashFormat::SRI, true));
+            originalInput.getNarHash()->to_string(HashFormat::SRI, true),
+            getNarHash()->to_string(HashFormat::SRI, true));
 
     return storePath;
 }

@@ -24,6 +24,10 @@ subproject('libcmd')
 # Executables
 subproject('nix')
 
+if host_machine.system() == 'linux'
+  subproject('nswrapper')
+endif
+
 # Docs
 if get_option('doc-gen')
   subproject('internal-api-docs')
@@ -60,3 +64,6 @@ if get_option('unit-tests')
   subproject('libflake-tests')
 endif
 subproject('nix-functional-tests')
+if get_option('json-schema-checks')
+  subproject('json-schema-checks')
+endif

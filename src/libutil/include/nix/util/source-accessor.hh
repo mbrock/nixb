@@ -3,12 +3,14 @@
 #include <filesystem>
 
 #include "nix/util/canon-path.hh"
+#include "nix/util/fun.hh"
 #include "nix/util/hash.hh"
 #include "nix/util/ref.hh"
 
 namespace nix {
 
 struct Sink;
+struct Provenance;
 
 /**
  * Note there is a decent chance this type soon goes away because the problem is solved another way.
@@ -30,7 +32,11 @@ enum class SymlinkResolution {
     Full,
 };
 
-MakeError(FileNotFound, Error);
+MakeError(SourceAccessorError, Error);
+MakeError(FileNotFound, SourceAccessorError);
+MakeError(NotASymlink, SourceAccessorError);
+MakeError(NotADirectory, SourceAccessorError);
+MakeError(NotARegularFile, SourceAccessorError);
 
 /**
  * A read-only filesystem abstraction. This is used by the Nix
@@ -58,7 +64,7 @@ struct SourceAccessor : std::enable_shared_from_this<SourceAccessor>
      * targets of symlinks should only occasionally be done, and only
      * with care.
      */
-    virtual std::string readFile(const CanonPath & path);
+    std::string readFile(const CanonPath & path);
 
     /**
      * Write the contents of a file as a sink. `sizeCallback` must be
@@ -71,8 +77,7 @@ struct SourceAccessor : std::enable_shared_from_this<SourceAccessor>
      * @note subclasses of `SourceAccessor` need to implement at least
      * one of the `readFile()` variants.
      */
-    virtual void
-    readFile(const CanonPath & path, Sink & sink, std::function<void(uint64_t)> sizeCallback = [](uint64_t size) {});
+    virtual void readFile(const CanonPath & path, Sink & sink, fun<void(uint64_t)> sizeCallback = [](uint64_t size) {});
 
     virtual bool pathExists(const CanonPath & path);
 
@@ -209,6 +214,18 @@ struct SourceAccessor : std::enable_shared_from_this<SourceAccessor>
     {
         return std::nullopt;
     }
+
+    std::shared_ptr<const Provenance> provenance;
+
+    /**
+     * Return the provenance of the specified path, or `nullptr` if not available.
+     */
+    virtual std::shared_ptr<const Provenance> getProvenance(const CanonPath & path);
+
+    /**
+     * Invalidate any cached value the accessor may have for the specified path.
+     */
+    virtual void invalidateCache(const CanonPath & path) {}
 };
 
 /**
@@ -222,6 +239,24 @@ ref<SourceAccessor> makeEmptySourceAccessor();
  */
 MakeError(RestrictedPathError, Error);
 
+struct SymlinkNotAllowed final : public CloneableError<SymlinkNotAllowed, Error>
+{
+    CanonPath path;
+
+    SymlinkNotAllowed(CanonPath path)
+        : CloneableError("relative path '%s' points to a symlink, which is not allowed", path.rel())
+        , path(std::move(path))
+    {
+    }
+
+    template<typename... Args>
+    SymlinkNotAllowed(CanonPath path, const std::string & fs, Args &&... args)
+        : CloneableError(fs, std::forward<Args>(args)...)
+        , path(std::move(path))
+    {
+    }
+};
+
 /**
  * Return an accessor for the root filesystem.
  */
@@ -233,18 +268,12 @@ ref<SourceAccessor> getFSSourceAccessor();
  * elements, and that absolute symlinks are resolved relative to
  * `root`.
  */
-ref<SourceAccessor> makeFSSourceAccessor(std::filesystem::path root);
+ref<SourceAccessor> makeFSSourceAccessor(std::filesystem::path root, bool trackLastModified = false);
 
 /**
  * Construct an accessor that presents a "union" view of a vector of
  * underlying accessors. Earlier accessors take precedence over later.
  */
 ref<SourceAccessor> makeUnionSourceAccessor(std::vector<ref<SourceAccessor>> && accessors);
-
-/**
- * Creates a new source accessor which is confined to the subdirectory
- * of the given source accessor.
- */
-ref<SourceAccessor> projectSubdirSourceAccessor(ref<SourceAccessor>, CanonPath subdirectory);
 
 } // namespace nix

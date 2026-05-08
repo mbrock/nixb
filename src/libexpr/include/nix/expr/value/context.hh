@@ -9,14 +9,14 @@
 
 namespace nix {
 
-class BadNixStringContextElem : public Error
+class BadNixStringContextElem final : public CloneableError<BadNixStringContextElem, Error>
 {
 public:
     std::string_view raw;
 
     template<typename... Args>
     BadNixStringContextElem(std::string_view raw_, const Args &... args)
-        : Error("")
+        : CloneableError("")
     {
         raw = raw_;
         auto hf = HintFmt(args...);
@@ -24,6 +24,14 @@ public:
     }
 };
 
+/**
+ * @todo This should be renamed to `StringContextBuilderElem`, since:
+ *
+ * 1. We use `*Builder` for off-heap temporary data structures
+ *
+ * 2. The `Nix*` is totally redundant. (And my mistake from a long time
+ * ago.)
+ */
 struct NixStringContextElem
 {
     /**
@@ -99,8 +107,21 @@ struct NixStringContextElem
     static NixStringContextElem
     parse(std::string_view s, const ExperimentalFeatureSettings & xpSettings = experimentalFeatureSettings);
     std::string to_string() const;
+
+    /**
+     * Render for use in error messages and other user-facing output.
+     *
+     * Uses store paths and `DerivedPath` syntax, unlike `to_string()`
+     * which uses the internal encoding.
+     */
+    std::string display(const StoreDirConfig & store) const;
 };
 
+/**
+ * @todo This should be renamed to `StringContextBuilder`.
+ *
+ * @see NixStringContextElem for explanation why.
+ */
 typedef std::set<NixStringContextElem> NixStringContext;
 
 /**

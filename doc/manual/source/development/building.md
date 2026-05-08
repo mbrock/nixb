@@ -1,5 +1,9 @@
 # Building Nix
 
+> **Note**
+>
+> When checking out the repo on Windows, make sure you have the git setting `core.symlinks` enabled, before cloning, as there are symlinks in the repo.
+
 To build all dependencies and start a shell in which all environment variables are set up so that those dependencies can be found:
 
 ```console
@@ -143,6 +147,7 @@ For historic reasons and backward-compatibility, some CPU and OS identifiers are
 |-----------------------------|-------------------------|---------------------|
 | `x86`                       |                         | `i686`              |
 | `arm`                       |                         | `host_machine.cpu()`|
+| `arm64`                     |                         | `host_machine.cpu()`|
 | `ppc`                       | `little`                | `powerpcle`         |
 | `ppc64`                     | `little`                | `powerpc64le`       |
 | `ppc`                       | `big`                   | `powerpc`           |
@@ -172,7 +177,7 @@ You can use any of the other supported environments in place of `nix-cli-ccacheS
 ## Editor integration
 
 The `clangd` LSP server is installed by default on the `clang`-based `devShell`s.
-See [supported compilation environments](#compilation-environments) and instructions how to [set up a shell with flakes](#nix-with-flakes).
+See [supported compilation environments](#compilation-environments) and instructions how to [set up a shell](#building-nix).
 
 To use the LSP with your editor, you will want a `compile_commands.json` file telling `clangd` how we are compiling the code.
 Meson's configure always produces this inside the build directory.

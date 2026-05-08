@@ -1,4 +1,5 @@
 #include "nix/util/util.hh"
+#include "nix/util/serialise.hh"
 #include "nix/util/types.hh"
 #include "nix/util/file-system.hh"
 #include "nix/util/processes.hh"
@@ -11,12 +12,16 @@
 
 #include <numeric>
 
+using namespace std::string_view_literals;
+
 #ifdef _WIN32
 #  define FS_SEP L"\\"
-#  define FS_ROOT L"C:" FS_SEP // Need a mounted one, C drive is likely
+#  define FS_ROOT_NO_TRAILING_SLASH L"C:" // Need a mounted one, C drive is likely
+#  define FS_ROOT FS_ROOT_NO_TRAILING_SLASH FS_SEP
 #else
 #  define FS_SEP "/"
-#  define FS_ROOT FS_SEP
+#  define FS_ROOT_NO_TRAILING_SLASH FS_SEP
+#  define FS_ROOT FS_ROOT_NO_TRAILING_SLASH
 #endif
 
 #ifndef PATH_MAX
@@ -41,7 +46,7 @@ TEST(absPath, doesntChangeRoot)
 {
     auto p = absPath(std::filesystem::path{FS_ROOT});
 
-    ASSERT_EQ(p, FS_ROOT);
+    ASSERT_EQ(p, FS_ROOT_NO_TRAILING_SLASH);
 }
 
 TEST(absPath, turnsEmptyPathIntoCWD)
@@ -57,9 +62,10 @@ TEST(absPath, usesOptionalBasePathWhenGiven)
     OsChar _cwd[PATH_MAX + 1];
     OsChar * cwd = GET_CWD((OsChar *) &_cwd, PATH_MAX);
 
-    auto p = absPath(std::filesystem::path{""}.string(), std::filesystem::path{cwd}.string());
+    auto cwdPath = std::filesystem::path{cwd};
+    auto p = absPath("", &cwdPath);
 
-    ASSERT_EQ(p, std::filesystem::path{cwd}.string());
+    ASSERT_EQ(p, cwdPath);
 }
 
 TEST(absPath, isIdempotent)
@@ -112,33 +118,10 @@ TEST(canonPath, removesDots2)
 
 TEST(canonPath, requiresAbsolutePath)
 {
-    ASSERT_ANY_THROW(canonPath("."));
-    ASSERT_ANY_THROW(canonPath(".."));
-    ASSERT_ANY_THROW(canonPath("../"));
-    ASSERT_DEATH({ canonPath(""); }, "path != \"\"");
-}
-
-/* ----------------------------------------------------------------------------
- * dirOf
- * --------------------------------------------------------------------------*/
-
-TEST(dirOf, returnsEmptyStringForRoot)
-{
-    auto p = dirOf("/");
-
-    ASSERT_EQ(p, "/");
-}
-
-TEST(dirOf, returnsFirstPathComponent)
-{
-    auto p1 = dirOf("/dir/");
-    ASSERT_EQ(p1, "/dir");
-    auto p2 = dirOf("/dir");
-    ASSERT_EQ(p2, "/");
-    auto p3 = dirOf("/dir/..");
-    ASSERT_EQ(p3, "/dir");
-    auto p4 = dirOf("/dir/../");
-    ASSERT_EQ(p4, "/dir/..");
+    ASSERT_ANY_THROW(canonPath("."sv));
+    ASSERT_ANY_THROW(canonPath(".."sv));
+    ASSERT_ANY_THROW(canonPath("../"sv));
+    ASSERT_DEATH({ canonPath(""sv); }, "!path.empty\\(\\)");
 }
 
 /* ----------------------------------------------------------------------------
@@ -193,20 +176,42 @@ TEST(baseNameOf, absoluteNothingSlashNothing)
 
 TEST(isInDir, trivialCase)
 {
-    auto p1 = isInDir("/foo/bar", "/foo");
-    ASSERT_EQ(p1, true);
+    EXPECT_TRUE(isInDir(FS_ROOT "foo" FS_SEP "bar", FS_ROOT "foo"));
 }
 
 TEST(isInDir, notInDir)
 {
-    auto p1 = isInDir("/zes/foo/bar", "/foo");
-    ASSERT_EQ(p1, false);
+    EXPECT_FALSE(isInDir(FS_ROOT "zes" FS_SEP "foo" FS_SEP "bar", FS_ROOT "foo"));
 }
 
 TEST(isInDir, emptyDir)
 {
-    auto p1 = isInDir("/zes/foo/bar", "");
-    ASSERT_EQ(p1, false);
+    EXPECT_FALSE(isInDir(FS_ROOT "zes" FS_SEP "foo" FS_SEP "bar", ""));
+}
+
+TEST(isInDir, hiddenSubdirectory)
+{
+    EXPECT_TRUE(isInDir(FS_ROOT "foo" FS_SEP ".ssh", FS_ROOT "foo"));
+}
+
+TEST(isInDir, ellipsisEntry)
+{
+    EXPECT_TRUE(isInDir(FS_ROOT "foo" FS_SEP "...", FS_ROOT "foo"));
+}
+
+TEST(isInDir, sameDir)
+{
+    EXPECT_FALSE(isInDir(FS_ROOT "foo", FS_ROOT "foo"));
+}
+
+TEST(isInDir, sameDirDot)
+{
+    EXPECT_FALSE(isInDir(FS_ROOT "foo" FS_SEP ".", FS_ROOT "foo"));
+}
+
+TEST(isInDir, dotDotPrefix)
+{
+    EXPECT_FALSE(isInDir(FS_ROOT "foo" FS_SEP ".." FS_SEP "bar", FS_ROOT "foo"));
 }
 
 /* ----------------------------------------------------------------------------
@@ -215,8 +220,8 @@ TEST(isInDir, emptyDir)
 
 TEST(isDirOrInDir, trueForSameDirectory)
 {
-    ASSERT_EQ(isDirOrInDir("/nix", "/nix"), true);
-    ASSERT_EQ(isDirOrInDir("/", "/"), true);
+    ASSERT_EQ(isDirOrInDir(FS_ROOT "nix", FS_ROOT "nix"), true);
+    ASSERT_EQ(isDirOrInDir(FS_ROOT, FS_ROOT), true);
 }
 
 TEST(isDirOrInDir, trueForEmptyPaths)
@@ -226,17 +231,17 @@ TEST(isDirOrInDir, trueForEmptyPaths)
 
 TEST(isDirOrInDir, falseForDisjunctPaths)
 {
-    ASSERT_EQ(isDirOrInDir("/foo", "/bar"), false);
+    ASSERT_EQ(isDirOrInDir(FS_ROOT "foo", FS_ROOT "bar"), false);
 }
 
 TEST(isDirOrInDir, relativePaths)
 {
-    ASSERT_EQ(isDirOrInDir("/foo/..", "/foo"), false);
+    ASSERT_EQ(isDirOrInDir(FS_ROOT "foo" FS_SEP "..", FS_ROOT "foo"), false);
 }
 
 TEST(isDirOrInDir, relativePathsTwice)
 {
-    ASSERT_EQ(isDirOrInDir("/foo/..", "/foo/."), false);
+    ASSERT_EQ(isDirOrInDir(FS_ROOT "foo" FS_SEP "..", FS_ROOT "foo" FS_SEP "."), false);
 }
 
 /* ----------------------------------------------------------------------------
@@ -269,7 +274,7 @@ TEST(makeParentCanonical, noParent)
 
 TEST(makeParentCanonical, root)
 {
-    ASSERT_EQ(makeParentCanonical("/"), "/");
+    ASSERT_EQ(makeParentCanonical(FS_ROOT), FS_ROOT_NO_TRAILING_SLASH);
 }
 
 /* ----------------------------------------------------------------------------
@@ -278,6 +283,11 @@ TEST(makeParentCanonical, root)
 
 TEST(chmodIfNeeded, works)
 {
+#ifdef _WIN32
+    // Windows doesn't support Unix-style permission bits - lstat always
+    // returns the same mode regardless of what chmod sets.
+    GTEST_SKIP() << "Broken on Windows";
+#endif
     auto [autoClose_, tmpFile] = nix::createTempFile();
     auto deleteTmpFile = AutoDelete(tmpFile);
 
@@ -294,7 +304,7 @@ TEST(chmodIfNeeded, works)
 
 TEST(chmodIfNeeded, nonexistent)
 {
-    ASSERT_THROW(chmodIfNeeded("/schnitzel/darmstadt/pommes", 0755), SysError);
+    ASSERT_THROW(chmodIfNeeded("/schnitzel/darmstadt/pommes", 0755), SystemError);
 }
 
 /* ----------------------------------------------------------------------------
@@ -306,16 +316,56 @@ TEST(DirectoryIterator, works)
     auto tmpDir = nix::createTempDir();
     nix::AutoDelete delTmpDir(tmpDir, true);
 
-    nix::writeFile(tmpDir + "/somefile", "");
+    nix::writeFile(tmpDir / "somefile", "");
 
     for (auto path : DirectoryIterator(tmpDir)) {
-        ASSERT_EQ(path.path().string(), tmpDir + "/somefile");
+        ASSERT_EQ(path.path(), tmpDir / "somefile");
     }
 }
 
 TEST(DirectoryIterator, nonexistent)
 {
-    ASSERT_THROW(DirectoryIterator("/schnitzel/darmstadt/pommes"), SysError);
+    ASSERT_THROW(DirectoryIterator("/schnitzel/darmstadt/pommes"), SystemError);
+}
+
+/* ----------------------------------------------------------------------------
+ * createAnonymousTempFile
+ * --------------------------------------------------------------------------*/
+
+TEST(createAnonymousTempFile, works)
+{
+    auto fd = createAnonymousTempFile();
+    writeFull(fd.get(), "test");
+    lseek(fd.get(), 0, SEEK_SET);
+    FdSource source{fd.get()};
+    EXPECT_EQ(source.drain(), "test");
+    lseek(fd.get(), 0, SEEK_END);
+    writeFull(fd.get(), "test");
+    lseek(fd.get(), 0, SEEK_SET);
+    EXPECT_EQ(source.drain(), "testtest");
+}
+
+/* ----------------------------------------------------------------------------
+ * FdSource
+ * --------------------------------------------------------------------------*/
+
+TEST(FdSource, restartWorks)
+{
+    auto fd = createAnonymousTempFile();
+    writeFull(fd.get(), "hello world");
+    lseek(fd.get(), 0, SEEK_SET);
+    FdSource source{fd.get()};
+    EXPECT_EQ(source.drain(), "hello world");
+    source.restart();
+    EXPECT_EQ(source.drain(), "hello world");
+    EXPECT_EQ(source.drain(), "");
+}
+
+TEST(createTempDir, works)
+{
+    auto tmpDir = createTempDir();
+    nix::AutoDelete delTmpDir(tmpDir, /*recursive=*/true);
+    ASSERT_TRUE(std::filesystem::is_directory(tmpDir));
 }
 
 } // namespace nix

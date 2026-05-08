@@ -31,7 +31,7 @@ DerivationTrampolineGoal::DerivationTrampolineGoal(
 void DerivationTrampolineGoal::commonInit()
 {
     name =
-        fmt("outer obtaining drv from '%s' and then building outputs %s",
+        fmt("obtaining derivation from '%s' and then building outputs %s",
             drvReq->to_string(worker.store),
             std::visit(
                 overloaded{
@@ -58,17 +58,11 @@ static StorePath pathPartOfReq(const SingleDerivedPath & req)
 
 std::string DerivationTrampolineGoal::key()
 {
-    /* Ensure that derivations get built in order of their name,
-       i.e. a derivation named "aardvark" always comes before "baboon". And
-       substitution goals, derivation goals, and derivation building goals always happen before
-       derivation goals (due to "bt$"). */
-    return "bt$" + std::string(pathPartOfReq(*drvReq).name()) + "$" + DerivedPath::Built{
+    return "da$" + std::string(pathPartOfReq(*drvReq).name()) + "$" + DerivedPath::Built{
         .drvPath = drvReq,
         .outputs = wantedOutputs,
     }.to_string(worker.store);
 }
-
-void DerivationTrampolineGoal::timedOut(Error && ex) {}
 
 Goal::Co DerivationTrampolineGoal::init()
 {
@@ -104,7 +98,12 @@ Goal::Co DerivationTrampolineGoal::init()
     trace("outer load and build derivation");
 
     if (nrFailed != 0) {
-        co_return amDone(ecFailed, Error("cannot build missing derivation '%s'", drvReq->to_string(worker.store)));
+        co_return doneFailure(
+            ecFailed,
+            BuildResult::Failure{{
+                .status = BuildResult::Failure::DependencyFailed,
+                .msg = HintFmt("failed to obtain derivation of '%s'", drvReq->to_string(worker.store)),
+            }});
     }
 
     StorePath drvPath = resolveDerivedPath(worker.store, *drvReq);
@@ -151,8 +150,8 @@ Goal::Co DerivationTrampolineGoal::haveDerivation(StorePath drvPath, Derivation 
     /* Build this step! */
 
     for (auto & output : resolvedWantedOutputs) {
-        auto g = upcast_goal(worker.makeDerivationGoal(drvPath, drv, output, buildMode));
-        g->preserveException = true;
+        auto g = upcast_goal(worker.makeDerivationGoal(drvPath, drv, output, buildMode, false));
+        g->preserveFailure = true;
         /* We will finish with it ourselves, as if we were the derivational goal. */
         concreteDrvGoals.insert(std::move(g));
     }
@@ -170,7 +169,7 @@ Goal::Co DerivationTrampolineGoal::haveDerivation(StorePath drvPath, Derivation 
                 for (auto && [x, y] : successP2->builtOutputs)
                     successP->builtOutputs.insert_or_assign(x, y);
 
-    co_return amDone(g->exitCode, g->ex);
+    co_return amDone(g->exitCode);
 }
 
 } // namespace nix

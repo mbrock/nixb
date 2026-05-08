@@ -1,5 +1,7 @@
 #include <atomic>
+
 #include "nix/util/source-accessor.hh"
+#include "nix/util/provenance.hh"
 
 namespace nix {
 
@@ -54,7 +56,7 @@ std::string SourceAccessor::readFile(const CanonPath & path)
     return std::move(sink.s);
 }
 
-void SourceAccessor::readFile(const CanonPath & path, Sink & sink, std::function<void(uint64_t)> sizeCallback)
+void SourceAccessor::readFile(const CanonPath & path, Sink & sink, fun<void(uint64_t)> sizeCallback)
 {
     auto s = readFile(path);
     sizeCallback(s.size());
@@ -112,7 +114,7 @@ CanonPath SourceAccessor::resolveSymlinks(const CanonPath & path, SymlinkResolut
                     if (!linksAllowed--)
                         throw Error("infinite symlink recursion in path '%s'", showPath(path));
                     auto target = readLink(res);
-                    if (isAbsolute(target)) {
+                    if (std::filesystem::path(target).is_absolute()) {
                         res = CanonPath::root;
                     } else {
                         res.pop();
@@ -124,6 +126,11 @@ CanonPath SourceAccessor::resolveSymlinks(const CanonPath & path, SymlinkResolut
     }
 
     return res;
+}
+
+std::shared_ptr<const Provenance> SourceAccessor::getProvenance(const CanonPath & path)
+{
+    return provenance && !path.isRoot() ? std::make_shared<SubpathProvenance>(provenance, path) : provenance;
 }
 
 } // namespace nix

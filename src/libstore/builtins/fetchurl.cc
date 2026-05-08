@@ -4,6 +4,7 @@
 #include "nix/store/globals.hh"
 #include "nix/util/archive.hh"
 #include "nix/util/compression.hh"
+#include "nix/util/file-system.hh"
 
 namespace nix {
 
@@ -13,12 +14,12 @@ static void builtinFetchurl(const BuiltinBuilderContext & ctx)
        this to be stored in a file. It would be nice if we could just
        pass a pointer to the data. */
     if (ctx.netrcData != "") {
-        settings.netrcFile = "netrc";
-        writeFile(settings.netrcFile, ctx.netrcData, 0600);
+        fileTransferSettings.netrcFile = "netrc";
+        writeFile(fileTransferSettings.netrcFile.get(), ctx.netrcData, 0600);
     }
 
-    settings.caFile = "ca-certificates.crt";
-    writeFile(settings.caFile, ctx.caFileData, 0600);
+    fileTransferSettings.caFile = "ca-certificates.crt";
+    writeFile(*fileTransferSettings.caFile.get(), ctx.caFileData, 0600);
 
     auto out = get(ctx.drv.outputs, "out");
     if (!out)
@@ -33,12 +34,25 @@ static void builtinFetchurl(const BuiltinBuilderContext & ctx)
 
     /* Note: have to use a fresh fileTransfer here because we're in
        a forked process. */
+    debug("[pid=%d] builtin:fetchurl creating fresh FileTransfer instance", getpid());
     auto fileTransfer = makeFileTransfer();
 
     auto fetch = [&](const std::string & url) {
         auto source = sinkToSource([&](Sink & sink) {
             FileTransferRequest request(VerbatimURL{url});
             request.decompress = false;
+
+#if NIX_WITH_AWS_AUTH
+            // Use pre-resolved credentials if available
+            if (ctx.awsCredentials && request.uri.scheme() == "s3") {
+                debug("[pid=%d] Using pre-resolved AWS credentials from parent process", getpid());
+                request.usernameAuth = UsernameAuth{
+                    .username = ctx.awsCredentials->accessKeyId,
+                    .password = ctx.awsCredentials->secretAccessKey,
+                };
+                request.preResolvedAwsSessionToken = ctx.awsCredentials->sessionToken;
+            }
+#endif
 
             auto decompressor = makeDecompressionSink(unpack && hasSuffix(mainUrl, ".xz") ? "xz" : "none", sink);
             fileTransfer->download(std::move(request), *decompressor);
@@ -52,15 +66,14 @@ static void builtinFetchurl(const BuiltinBuilderContext & ctx)
 
         auto executable = ctx.drv.env.find("executable");
         if (executable != ctx.drv.env.end() && executable->second == "1") {
-            if (chmod(storePath.c_str(), 0755) == -1)
-                throw SysError("making '%1%' executable", storePath);
+            chmod(storePath, 0755);
         }
     };
 
     /* Try the hashed mirrors first. */
     auto dof = std::get_if<DerivationOutput::CAFixed>(&out->raw);
     if (dof && dof->ca.method.getFileIngestionMethod() == FileIngestionMethod::Flat)
-        for (auto hashedMirror : settings.hashedMirrors.get())
+        for (auto hashedMirror : ctx.hashedMirrors)
             try {
                 if (!hasSuffix(hashedMirror, "/"))
                     hashedMirror += '/';

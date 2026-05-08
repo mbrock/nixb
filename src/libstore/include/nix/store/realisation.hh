@@ -46,40 +46,41 @@ struct DrvOutput
 
     static DrvOutput parse(const std::string &);
 
-    GENERATE_CMP(DrvOutput, me->drvHash, me->outputName);
+    bool operator==(const DrvOutput &) const = default;
+    auto operator<=>(const DrvOutput &) const = default;
 };
 
-struct Realisation
+struct UnkeyedRealisation
 {
-    DrvOutput id;
     StorePath outPath;
 
-    StringSet signatures;
+    std::set<Signature> signatures;
 
-    /**
-     * The realisations that are required for the current one to be valid.
-     *
-     * When importing this realisation, the store will first check that all its
-     * dependencies exist, and map to the correct output path
-     */
-    std::map<DrvOutput, StorePath> dependentRealisations;
+    std::string fingerprint(const DrvOutput & key) const;
 
-    std::string fingerprint() const;
-    void sign(const Signer &);
-    bool checkSignature(const PublicKeys & publicKeys, const std::string & sig) const;
-    size_t checkSignatures(const PublicKeys & publicKeys) const;
+    void sign(const DrvOutput & key, const Signer &);
 
-    static std::set<Realisation> closure(Store &, const std::set<Realisation> &);
-    static void closure(Store &, const std::set<Realisation> &, std::set<Realisation> & res);
+    bool checkSignature(const DrvOutput & key, const PublicKeys & publicKeys, const Signature & sig) const;
 
-    bool isCompatibleWith(const Realisation & other) const;
+    size_t checkSignatures(const DrvOutput & key, const PublicKeys & publicKeys) const;
 
-    StorePath getPath() const
+    const StorePath & getPath() const
     {
         return outPath;
     }
 
-    GENERATE_CMP(Realisation, me->id, me->outPath);
+    // TODO sketchy that it avoids signatures
+    GENERATE_CMP(UnkeyedRealisation, me->outPath);
+};
+
+struct Realisation : UnkeyedRealisation
+{
+    DrvOutput id;
+
+    bool isCompatibleWith(const UnkeyedRealisation & other) const;
+
+    bool operator==(const Realisation &) const = default;
+    auto operator<=>(const Realisation &) const = default;
 };
 
 /**
@@ -103,12 +104,13 @@ struct OpaquePath
 {
     StorePath path;
 
-    StorePath getPath() const
+    const StorePath & getPath() const &
     {
         return path;
     }
 
-    GENERATE_CMP(OpaquePath, me->path);
+    bool operator==(const OpaquePath &) const = default;
+    auto operator<=>(const OpaquePath &) const = default;
 };
 
 /**
@@ -116,7 +118,7 @@ struct OpaquePath
  */
 struct RealisedPath
 {
-    /*
+    /**
      * A path is either the result of the realisation of a derivation or
      * an opaque blob that has been directly added to the store
      */
@@ -138,16 +140,13 @@ struct RealisedPath
     /**
      * Get the raw store path associated to this
      */
-    StorePath path() const;
+    const StorePath & path() const &;
 
-    void closure(Store & store, Set & ret) const;
-    static void closure(Store & store, const Set & startPaths, Set & ret);
-    Set closure(Store & store) const;
-
-    GENERATE_CMP(RealisedPath, me->raw);
+    bool operator==(const RealisedPath &) const = default;
+    auto operator<=>(const RealisedPath &) const = default;
 };
 
-class MissingRealisation : public Error
+class MissingRealisation final : public CloneableError<MissingRealisation, Error>
 {
 public:
     MissingRealisation(DrvOutput & outputId)
@@ -156,7 +155,7 @@ public:
     }
 
     MissingRealisation(std::string_view drv, OutputName outputName)
-        : Error(
+        : CloneableError(
               "cannot operate on output '%s' of the "
               "unbuilt derivation '%s'",
               outputName,
@@ -167,4 +166,6 @@ public:
 
 } // namespace nix
 
+JSON_IMPL(nix::DrvOutput)
+JSON_IMPL(nix::UnkeyedRealisation)
 JSON_IMPL(nix::Realisation)

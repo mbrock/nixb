@@ -1,10 +1,31 @@
 #include "nix/util/users.hh"
+#include "nix/util/logging.hh"
 #include "nix/store/globals.hh"
 #include "nix/store/profiles.hh"
 #include "nix/expr/eval.hh"
 #include "nix/expr/eval-settings.hh"
 
 namespace nix {
+
+void DeprecatedWarnSetting::assign(const bool & v)
+{
+    value = v;
+    warn("'%s' is deprecated, use '%s = %s' instead", name, targetName, v ? "warn" : "ignore");
+    if (!target.overridden)
+        target = v ? Diagnose::Warn : Diagnose::Ignore;
+}
+
+void DeprecatedWarnSetting::appendOrSet(bool newValue, bool append)
+{
+    assert(!append);
+    assign(newValue);
+}
+
+void DeprecatedWarnSetting::override(const bool & v)
+{
+    overridden = true;
+    assign(v);
+}
 
 /* Very hacky way to parse $NIX_PATH, which is colon-separated, but
    can contain URLs (e.g. "nixpkgs=https://bla...:foo=https://"). */
@@ -60,19 +81,20 @@ EvalSettings::EvalSettings(bool & readOnlyMode, EvalSettings::LookupPathHooks lo
 Strings EvalSettings::getDefaultNixPath()
 {
     Strings res;
-    auto add = [&](const Path & p, const std::string & s = std::string()) {
+    auto add = [&](const std::filesystem::path & p, const std::string & s = std::string()) {
         if (std::filesystem::exists(p)) {
             if (s.empty()) {
-                res.push_back(p);
+                res.push_back(p.string());
             } else {
-                res.push_back(s + "=" + p);
+                res.push_back(s + "=" + p.string());
             }
         }
     };
 
-    add(getNixDefExpr() + "/channels");
-    add(rootChannelsDir() + "/nixpkgs", "nixpkgs");
-    add(rootChannelsDir());
+    add(getNixDefExpr() / "channels");
+    auto profilesDirOpts = settings.getProfileDirsOptions();
+    add(rootChannelsDir(profilesDirOpts) / "nixpkgs", "nixpkgs");
+    add(rootChannelsDir(profilesDirOpts));
 
     return res;
 }
@@ -92,7 +114,7 @@ bool EvalSettings::isPseudoUrl(std::string_view s)
 std::string EvalSettings::resolvePseudoUrl(std::string_view url)
 {
     if (hasPrefix(url, "channel:")) {
-        auto realUrl = "https://nixos.org/channels/" + std::string(url.substr(8)) + "/nixexprs.tar.xz";
+        auto realUrl = "https://channels.nixos.org/" + std::string(url.substr(8)) + "/nixexprs.tar.xz";
         static bool haveWarned = false;
         warnOnce(
             haveWarned,
@@ -113,9 +135,9 @@ const std::string & EvalSettings::getCurrentSystem() const
     return evalSystem != "" ? evalSystem : settings.thisSystem.get();
 }
 
-Path getNixDefExpr()
+std::filesystem::path getNixDefExpr()
 {
-    return settings.useXDGBaseDirectories ? getStateDir() + "/defexpr" : getHome() + "/.nix-defexpr";
+    return settings.useXDGBaseDirectories ? getStateDir() / "defexpr" : getHome() / ".nix-defexpr";
 }
 
 } // namespace nix

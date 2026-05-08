@@ -9,6 +9,8 @@ headers = files(
   'common-eval-args.hh',
   'compatibility-settings.hh',
   'editor-for.hh',
+  'flake-schemas.hh',
+  'get-build-log.hh',
   'installable-attr-path.hh',
   'installable-derived-path.hh',
   'installable-flake.hh',
@@ -20,4 +22,5 @@ headers = files(
   'network-proxy.hh',
   'repl-interacter.hh',
   'repl.hh',
+  'unix-socket-server.hh',
 )

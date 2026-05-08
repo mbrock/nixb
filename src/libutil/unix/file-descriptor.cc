@@ -5,146 +5,54 @@
 
 #include <fcntl.h>
 #include <unistd.h>
-#include <poll.h>
+#include <span>
 
 #include "util-config-private.hh"
 #include "util-unix-config-private.hh"
 
 namespace nix {
 
-namespace {
-
-// This function is needed to handle non-blocking reads/writes. This is needed in the buildhook, because
-// somehow the json logger file descriptor ends up being non-blocking and breaks remote-building.
-// TODO: get rid of buildhook and remove this function again (https://github.com/NixOS/nix/issues/12688)
-void pollFD(int fd, int events)
+std::make_unsigned_t<off_t> getFileSize(Descriptor fd)
 {
-    struct pollfd pfd;
-    pfd.fd = fd;
-    pfd.events = events;
-    int ret = poll(&pfd, 1, -1);
-    if (ret == -1) {
-        throw SysError("poll on file descriptor failed");
-    }
-}
-} // namespace
-
-std::string readFile(int fd)
-{
-    struct stat st;
-    if (fstat(fd, &st) == -1)
-        throw SysError("statting file");
-
-    return drainFD(fd, true, st.st_size);
+    auto st = nix::fstat(fd);
+    return st.st_size;
 }
 
-void readFull(int fd, char * buf, size_t count)
+size_t read(Descriptor fd, std::span<std::byte> buffer)
 {
-    while (count) {
+    ssize_t n;
+    do {
         checkInterrupt();
-        ssize_t res = read(fd, buf, count);
-        if (res == -1) {
-            switch (errno) {
-            case EINTR:
-                continue;
-            case EAGAIN:
-                pollFD(fd, POLLIN);
-                continue;
-            }
-            throw SysError("reading from file");
-        }
-        if (res == 0)
-            throw EndOfFile("unexpected end-of-file");
-        count -= res;
-        buf += res;
-    }
+        n = ::read(fd, buffer.data(), buffer.size());
+    } while (n == -1 && errno == EINTR);
+    if (n == -1)
+        throw SysError("read of %1% bytes", buffer.size());
+    return static_cast<size_t>(n);
 }
 
-void writeFull(int fd, std::string_view s, bool allowInterrupts)
+size_t readOffset(Descriptor fd, off_t offset, std::span<std::byte> buffer)
 {
-    while (!s.empty()) {
+    ssize_t n;
+    do {
+        checkInterrupt();
+        n = pread(fd, buffer.data(), buffer.size(), offset);
+    } while (n == -1 && errno == EINTR);
+    if (n == -1)
+        throw SysError("pread of %1% bytes at offset %2%", buffer.size(), offset);
+    return static_cast<size_t>(n);
+}
+
+size_t write(Descriptor fd, std::span<const std::byte> buffer, bool allowInterrupts)
+{
+    ssize_t n;
+    do {
         if (allowInterrupts)
             checkInterrupt();
-        ssize_t res = write(fd, s.data(), s.size());
-        if (res == -1) {
-            switch (errno) {
-            case EINTR:
-                continue;
-            case EAGAIN:
-                pollFD(fd, POLLOUT);
-                continue;
-            }
-            throw SysError("writing to file");
-        }
-        if (res > 0)
-            s.remove_prefix(res);
-    }
-}
-
-std::string readLine(int fd, bool eofOk)
-{
-    std::string s;
-    while (1) {
-        checkInterrupt();
-        char ch;
-        // FIXME: inefficient
-        ssize_t rd = read(fd, &ch, 1);
-        if (rd == -1) {
-            switch (errno) {
-            case EINTR:
-                continue;
-            case EAGAIN: {
-                pollFD(fd, POLLIN);
-                continue;
-            }
-            default:
-                throw SysError("reading a line");
-            }
-        } else if (rd == 0) {
-            if (eofOk)
-                return s;
-            else
-                throw EndOfFile("unexpected EOF reading a line");
-        } else {
-            if (ch == '\n')
-                return s;
-            s += ch;
-        }
-    }
-}
-
-void drainFD(int fd, Sink & sink, bool block)
-{
-    // silence GCC maybe-uninitialized warning in finally
-    int saved = 0;
-
-    if (!block) {
-        saved = fcntl(fd, F_GETFL);
-        if (fcntl(fd, F_SETFL, saved | O_NONBLOCK) == -1)
-            throw SysError("making file descriptor non-blocking");
-    }
-
-    Finally finally([&]() {
-        if (!block) {
-            if (fcntl(fd, F_SETFL, saved) == -1)
-                throw SysError("making file descriptor blocking");
-        }
-    });
-
-    std::vector<unsigned char> buf(64 * 1024);
-    while (1) {
-        checkInterrupt();
-        ssize_t rd = read(fd, buf.data(), buf.size());
-        if (rd == -1) {
-            if (!block && (errno == EAGAIN || errno == EWOULDBLOCK))
-                break;
-            if (errno != EINTR)
-                throw SysError("reading from file");
-        } else if (rd == 0)
-            break;
-        else
-            sink({reinterpret_cast<char *>(buf.data()), (size_t) rd});
-    }
+        n = ::write(fd, buffer.data(), buffer.size());
+    } while (n == -1 && errno == EINTR);
+    if (n == -1)
+        throw SysError("write of %1% bytes", buffer.size());
+    return static_cast<size_t>(n);
 }
 
 //////////////////////////////////////////////////////////////////////
@@ -221,6 +129,19 @@ void unix::closeOnExec(int fd)
     int prev;
     if ((prev = fcntl(fd, F_GETFD, 0)) == -1 || fcntl(fd, F_SETFD, prev | FD_CLOEXEC) == -1)
         throw SysError("setting close-on-exec flag");
+}
+
+void syncDescriptor(Descriptor fd)
+{
+    int result =
+#if defined(__APPLE__)
+        ::fcntl(fd, F_FULLFSYNC)
+#else
+        ::fsync(fd)
+#endif
+        ;
+    if (result == -1)
+        throw NativeSysError("fsync file descriptor %1%", fd);
 }
 
 } // namespace nix

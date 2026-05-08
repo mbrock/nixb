@@ -45,7 +45,6 @@ config_priv_h = configure_file(
 )
 
 subdir('nix-meson-build-support/common')
-subdir('nix-meson-build-support/asan-options')
 
 sources = files(
   'derived-path.cc',
@@ -83,8 +82,38 @@ this_exe = executable(
 test(
   meson.project_name(),
   this_exe,
-  env : asan_test_options_env + {
+  env : {
     '_NIX_TEST_UNIT_DATA' : meson.current_source_dir() / 'data',
   },
   protocol : 'gtest',
 )
+
+# Build benchmarks if enabled
+if get_option('benchmarks')
+  gbenchmark = dependency('benchmark', required : true)
+
+  benchmark_sources = files(
+    'bench-main.cc',
+    'dynamic-attrs-bench.cc',
+    'get-drvs-bench.cc',
+    'regex-cache-bench.cc',
+  )
+
+  benchmark_exe = executable(
+    'nix-expr-benchmarks',
+    benchmark_sources,
+    config_priv_h,
+    dependencies : deps_private_subproject + deps_private + deps_other + [
+      gbenchmark,
+    ],
+    include_directories : include_dirs,
+    link_args : linker_export_flags,
+    install : true,
+    cpp_pch : do_pch ? [ 'pch/precompiled-headers.hh' ] : [],
+  )
+
+  benchmark(
+    'nix-expr-benchmarks',
+    benchmark_exe,
+  )
+endif

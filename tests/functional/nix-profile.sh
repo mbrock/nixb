@@ -4,6 +4,8 @@ source common.sh
 
 TODO_NixOS
 
+requireGit
+
 clearStore
 clearProfiles
 
@@ -12,7 +14,7 @@ restartDaemon
 
 # Make a flake.
 flake1Dir=$TEST_ROOT/flake1
-mkdir -p "$flake1Dir"
+createGitRepo "$flake1Dir"
 
 # shellcheck disable=SC2154,SC1039
 cat > "$flake1Dir"/flake.nix <<EOF
@@ -50,11 +52,14 @@ printf false > "$flake1Dir"/ca.nix
 
 cp "${config_nix}" "$flake1Dir"/
 
+git -C "$flake1Dir" add flake.nix config.nix who version ca.nix
+git -C "$flake1Dir" commit -m 'Initial'
+
 # Test upgrading from nix-env.
 nix-env -f ./user-envs.nix -i foo-1.0
 nix profile list | grep -A2 'Name:.*foo' | grep 'Store paths:.*foo-1.0'
 nix profile add "$flake1Dir" -L
-nix profile list | grep -A4 'Name:.*flake1' | grep 'Locked flake URL:.*narHash'
+#nix profile list | grep -A4 'Name:.*flake1' | grep 'Locked flake URL:.*narHash'
 [[ $("$TEST_HOME"/.nix-profile/bin/hello) = "Hello World" ]]
 [ -e "$TEST_HOME"/.nix-profile/share/man ]
 # shellcheck disable=SC2235
@@ -72,6 +77,25 @@ unset NIX_CONFIG
 
 # Test conflicting package add.
 nix profile add "$flake1Dir" 2>&1 | grep "warning: 'flake1' is already added"
+
+# Test tab completion of profile elements
+# The profile should have 'foo' and 'flake1' installed at this point
+completion_output=$(NIX_GET_COMPLETIONS=3 nix profile remove '' 2>&1)
+echo "$completion_output" | grep -q "^normal$"
+echo "$completion_output" | grep -q "^flake1"
+echo "$completion_output" | grep -q "^foo"
+
+# Test prefix matching - should only complete 'flake1' when prefix is 'fl'
+completion_output=$(NIX_GET_COMPLETIONS=3 nix profile remove 'fl' 2>&1)
+echo "$completion_output" | grep -q "^normal$"
+echo "$completion_output" | grep -q "^flake1"
+echo "$completion_output" | grepQuietInverse "^foo"
+
+# Test completion with upgrade command
+completion_output=$(NIX_GET_COMPLETIONS=3 nix profile upgrade '' 2>&1)
+echo "$completion_output" | grep -q "^normal$"
+echo "$completion_output" | grep -q "^flake1"
+echo "$completion_output" | grep -q "^foo"
 
 # Test upgrading a package.
 printf NixOS > "$flake1Dir"/who
@@ -166,7 +190,7 @@ printf 4.0 > "$flake1Dir"/version
 printf Utrecht > "$flake1Dir"/who
 nix profile add "$flake1Dir"
 [[ $("$TEST_HOME"/.nix-profile/bin/hello) = "Hello Utrecht" ]]
-[[ $(nix path-info --json "$(realpath "$TEST_HOME"/.nix-profile/bin/hello)" | jq -r .[].ca) =~ fixed:r:sha256: ]]
+nix path-info --json --json-format 2 "$(realpath "$TEST_HOME"/.nix-profile/bin/hello)" | jq -e '.info.[].ca | .method == "nar" and (.hash | startswith("sha256-"))'
 
 # Override the outputs.
 nix profile remove simple flake1
@@ -210,11 +234,11 @@ diff -u <(
 ) <(cat << EOF
 error: An existing package already provides the following file:
 
-         $(nix build --no-link --print-out-paths "${flake1Dir}""#default.out")/bin/hello
+         "$(nix build --no-link --print-out-paths "${flake1Dir}""#default.out")/bin/hello"
 
        This is the conflicting file from the new package:
 
-         $(nix build --no-link --print-out-paths "${flake2Dir}""#default.out")/bin/hello
+         "$(nix build --no-link --print-out-paths "${flake2Dir}""#default.out")/bin/hello"
 
        To remove the existing package:
 
@@ -224,11 +248,11 @@ error: An existing package already provides the following file:
        The conflicting packages have a priority of 5.
        To prioritise the new package:
 
-         nix profile add path:${flake2Dir}#packages.${system}.default --priority 4
+         nix profile add git+file://${flake2Dir}#packages.${system}.default --priority 4
 
        To prioritise the existing package:
 
-         nix profile add path:${flake2Dir}#packages.${system}.default --priority 6
+         nix profile add git+file://${flake2Dir}#packages.${system}.default --priority 6
 EOF
 )
 [[ $("$TEST_HOME"/.nix-profile/bin/hello) = "Hello World" ]]

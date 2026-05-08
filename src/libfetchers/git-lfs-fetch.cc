@@ -1,9 +1,11 @@
 #include "nix/fetchers/git-lfs-fetch.hh"
 #include "nix/fetchers/git-utils.hh"
 #include "nix/store/filetransfer.hh"
+#include "nix/util/os-string.hh"
 #include "nix/util/processes.hh"
 #include "nix/util/url.hh"
 #include "nix/util/users.hh"
+#include "nix/util/util.hh"
 #include "nix/util/hash.hh"
 #include "nix/store/ssh.hh"
 
@@ -59,24 +61,27 @@ static LfsApiInfo getLfsApi(const ParsedURL & url)
         auto args = getNixSshOpts();
 
         if (url.authority->port)
-            args.push_back(fmt("-p%d", *url.authority->port));
+            args.push_back(string_to_os_string(fmt("-p%d", *url.authority->port)));
 
         std::ostringstream hostnameAndUser;
         if (url.authority->user)
             hostnameAndUser << *url.authority->user << "@";
         hostnameAndUser << url.authority->host;
-        args.push_back(std::move(hostnameAndUser).str());
+        args.push_back(string_to_os_string(std::move(hostnameAndUser).str()));
 
-        args.push_back("--");
-        args.push_back("git-lfs-authenticate");
+        args.push_back(OS_STR("--"));
+        args.push_back(OS_STR("git-lfs-authenticate"));
         // FIXME %2F encode slashes? Does this command take/accept percent encoding?
-        args.push_back(url.renderPath(/*encode=*/false));
-        args.push_back("download");
+        args.push_back(string_to_os_string(url.renderPath(/*encode=*/false)));
+        args.push_back(OS_STR("download"));
 
         auto [status, output] = runProgram({.program = "ssh", .args = args});
 
         if (output.empty())
-            throw Error("git-lfs-authenticate: no output (cmd: 'ssh %s')", concatStringsSep(" ", args));
+            throw Error(
+                "git-lfs-authenticate: no output (cmd: 'ssh %s')",
+                concatMapStringsSep(
+                    " ", args, [](const OsString & s) { return escapeShellArgAlways(os_string_to_string(s)); }));
 
         auto queryResp = nlohmann::json::parse(output);
         auto headerIt = queryResp.find("header");
@@ -209,7 +214,7 @@ std::vector<nlohmann::json> Fetch::fetchUrls(const std::vector<Pointer> & pointe
     auto url = api.endpoint + "/objects/batch";
     const auto & authHeader = api.authHeader;
     FileTransferRequest request(parseURL(url));
-    request.post = true;
+    request.method = HttpMethod::Post;
     Headers headers;
     if (authHeader.has_value())
         headers.push_back({"Authorization", *authHeader});
@@ -219,7 +224,9 @@ std::vector<nlohmann::json> Fetch::fetchUrls(const std::vector<Pointer> & pointe
     nlohmann::json oidList = pointerToPayload(pointers);
     nlohmann::json data = {{"operation", "download"}};
     data["objects"] = oidList;
-    request.data = data.dump();
+    auto payload = data.dump();
+    StringSource source{payload};
+    request.data = {source};
 
     FileTransferResult result = getFileTransfer()->upload(request);
     auto responseString = result.data;
@@ -266,12 +273,12 @@ void Fetch::fetch(
         return;
     }
 
-    Path cacheDir = getCacheDir() + "/git-lfs";
+    auto cacheDir = getCacheDir() / "git-lfs";
     std::string key = hashString(HashAlgorithm::SHA256, pointerFilePath.rel()).to_string(HashFormat::Base16, false)
                       + "/" + pointer->oid;
-    Path cachePath = cacheDir + "/" + key;
+    auto cachePath = cacheDir / key;
     if (pathExists(cachePath)) {
-        debug("using cache entry %s -> %s", key, cachePath);
+        debug("using cache entry %s -> %s", key, PathFmt(cachePath));
         sink(readFile(cachePath));
         return;
     }
@@ -299,9 +306,9 @@ void Fetch::fetch(
         sizeCallback(size);
         downloadToSink(ourl, authHeader, sink, sha256, size);
 
-        debug("creating cache entry %s -> %s", key, cachePath);
-        if (!pathExists(dirOf(cachePath)))
-            createDirs(dirOf(cachePath));
+        debug("creating cache entry %s -> %s", key, PathFmt(cachePath));
+        if (!pathExists(cachePath.parent_path()))
+            createDirs(cachePath.parent_path());
         writeFile(cachePath, sink.s);
 
         debug("%s fetched with git-lfs", pointerFilePath);

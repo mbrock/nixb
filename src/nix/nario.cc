@@ -127,7 +127,7 @@ nlohmann::json listNar(Source & source)
             j["entries"] = nlohmann::json::object();
         }
 
-        void createRegularFile(const CanonPath & path, std::function<void(CreateRegularFileSink &)> func) override
+        void createRegularFile(const CanonPath & path, fun<void(CreateRegularFileSink &)> func) override
         {
             struct : CreateRegularFileSink
             {
@@ -275,7 +275,8 @@ struct CmdNarioList : Command, MixJSON, MixLongListing
                     source.skip(info.narSize);
 
                 if (json) {
-                    auto obj = info.toJSON(*this, true, HashFormat::SRI);
+                    // FIXME: make the JSON format configurable.
+                    auto obj = info.toJSON(this, true, PathInfoJsonFormat::V1);
                     if (contents)
                         obj.emplace("contents", *contents);
                     json->emplace(printStorePath(info.path), std::move(obj));
@@ -294,7 +295,8 @@ struct CmdNarioList : Command, MixJSON, MixLongListing
                 ContentAddressMethod hashMethod,
                 HashAlgorithm hashAlgo,
                 const StorePathSet & references,
-                RepairFlag repair) override
+                RepairFlag repair,
+                std::shared_ptr<const Provenance> provenance) override
             {
                 unsupported("addToStoreFromDump");
             }
@@ -305,7 +307,7 @@ struct CmdNarioList : Command, MixJSON, MixLongListing
             }
 
             void queryRealisationUncached(
-                const DrvOutput &, Callback<std::shared_ptr<const Realisation>> callback) noexcept override
+                const DrvOutput &, Callback<std::shared_ptr<const UnkeyedRealisation>> callback) noexcept override
             {
                 callback(nullptr);
             }

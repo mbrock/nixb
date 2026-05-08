@@ -1,36 +1,91 @@
+#include <stdint.h>
+#include <functional>
+#include <map>
+#include <optional>
+#include <set>
+#include <string>
+#include <utility>
+#include <variant>
+#include <vector>
+
 #include "nix/flake/flake-primops.hh"
+#include "nix/store/store-api.hh"
 #include "nix/expr/eval.hh"
 #include "nix/flake/flake.hh"
 #include "nix/flake/flakeref.hh"
 #include "nix/flake/settings.hh"
+#include "nix/expr/attr-set.hh"
+#include "nix/expr/eval-error.hh"
+#include "nix/expr/eval-inline.hh"
+#include "nix/expr/eval-settings.hh"
+#include "nix/expr/symbol-table.hh"
+#include "nix/expr/value.hh"
+#include "nix/fetchers/attrs.hh"
+#include "nix/fetchers/fetchers.hh"
+#include "nix/util/configuration.hh"
+#include "nix/util/error.hh"
+#include "nix/util/experimental-features.hh"
+#include "nix/util/pos-idx.hh"
+#include "nix/util/pos-table.hh"
+#include "nix/util/source-path.hh"
+#include "nix/util/types.hh"
+#include "nix/util/util.hh"
+#include "nix/util/mounted-source-accessor.hh"
 
 namespace nix::flake::primops {
 
 PrimOp getFlake(const Settings & settings)
 {
     auto prim_getFlake = [&settings](EvalState & state, const PosIdx pos, Value ** args, Value & v) {
-        std::string flakeRefS(
-            state.forceStringNoCtx(*args[0], pos, "while evaluating the argument passed to builtins.getFlake"));
-        auto flakeRef = nix::parseFlakeRef(state.fetchSettings, flakeRefS, {}, true);
-        if (state.settings.pureEval && !flakeRef.input.isLocked(state.fetchSettings))
-            throw Error(
-                "cannot call 'getFlake' on unlocked flake reference '%s', at %s (use --impure to override)",
-                flakeRefS,
-                state.positions[pos]);
+        state.forceValue(*args[0], pos);
 
-        callFlake(
-            state,
-            lockFlake(
-                settings,
-                state,
-                flakeRef,
-                LockFlags{
-                    .updateLockFile = false,
-                    .writeLockFile = false,
-                    .useRegistries = !state.settings.pureEval && settings.useRegistries,
-                    .allowUnlocked = !state.settings.pureEval,
-                }),
-            v);
+        LockFlags lockFlags{
+            .updateLockFile = false,
+            .writeLockFile = false,
+            .useRegistries = !state.settings.pureEval && settings.useRegistries,
+            .allowUnlocked = !state.settings.pureEval,
+        };
+
+        if (args[0]->type() == nPath) {
+            auto path = state.realisePath(pos, *args[0]);
+            callFlake(state, lockFlake(settings, state, path, lockFlags), v);
+        } else {
+            NixStringContext context;
+            std::string flakeRefS(
+                state.forceString(*args[0], context, pos, "while evaluating the argument passed to builtins.getFlake"));
+            auto rewrites = state.realiseContext(context);
+            flakeRefS = state.devirtualize(rewriteStrings(flakeRefS, rewrites), context);
+            if (hasContext(context))
+                // FIXME: this should really be an error.
+                warn(
+                    "In 'builtins.getFlake', the flakeref '%s' has string context, but that's not allowed. This may become a fatal error in the future.",
+                    flakeRefS);
+
+            auto flakeRef = nix::parseFlakeRef(state.fetchSettings, flakeRefS, {}, true);
+            if (state.settings.pureEval && !flakeRef.input.isLocked(state.fetchSettings))
+                throw Error(
+                    "cannot call 'getFlake' on unlocked flake reference '%s', at %s (use --impure to override)",
+                    flakeRefS,
+                    state.positions[pos]);
+
+            /* Backward compatibility hack: If this is a `path` flake and it's a virtual path that had
+             * `unsafeDiscardStringContext` applied to it, then treat it like the `nPath` case, i.e. call lockFlake() on
+             * the virtual path directly. This is necessary because the `path` fetcher doesn't see virtual paths. */
+            if (flakeRef.input.getType() == "path") {
+                if (auto sourcePath = flakeRef.input.getSourcePath();
+                    sourcePath && state.store->isInStore(sourcePath->string())) {
+                    auto [storePath, subPath] = state.store->toStorePath(sourcePath->string());
+                    if (auto mount = state.storeFS->getMount(CanonPath(state.store->printStorePath(storePath)))) {
+                        auto path = state.storePath(storePath) / CanonPath(subPath);
+                        if (!flakeRef.subdir.empty())
+                            path = path / flakeRef.subdir;
+                        return callFlake(state, lockFlake(settings, state, path, lockFlags), v);
+                    }
+                }
+            }
+
+            callFlake(state, lockFlake(settings, state, flakeRef, lockFlags), v);
+        }
     };
 
     return PrimOp{
@@ -51,7 +106,7 @@ PrimOp getFlake(const Settings & settings)
           (builtins.getFlake "github:edolstra/dwarffs").rev
           ```
         )",
-        .fun = prim_getFlake,
+        .impl = prim_getFlake,
     };
 }
 
@@ -66,7 +121,7 @@ static void prim_parseFlakeRef(EvalState & state, const PosIdx pos, Value ** arg
         auto & vv = binds.alloc(s);
         std::visit(
             overloaded{
-                [&vv](const std::string & value) { vv.mkString(value); },
+                [&vv, &state](const std::string & value) { vv.mkString(value, state.mem); },
                 [&vv](const uint64_t & value) { vv.mkInt(value); },
                 [&vv](const Explicit<bool> & value) { vv.mkBool(value.t); }},
             value);
@@ -92,14 +147,16 @@ nix::PrimOp parseFlakeRef({
       { dir = "lib"; owner = "NixOS"; ref = "23.05"; repo = "nixpkgs"; type = "github"; }
       ```
     )",
-    .fun = prim_parseFlakeRef,
+    .impl = prim_parseFlakeRef,
 });
 
 static void prim_flakeRefToString(EvalState & state, const PosIdx pos, Value ** args, Value & v)
 {
     state.forceAttrs(*args[0], noPos, "while evaluating the argument passed to builtins.flakeRefToString");
     fetchers::Attrs attrs;
+    NixStringContext context;
     for (const auto & attr : *args[0]->attrs()) {
+        state.forceValue(*attr.value, attr.pos);
         auto t = attr.value->type();
         if (t == nInt) {
             auto intValue = attr.value->integer().value;
@@ -116,7 +173,9 @@ static void prim_flakeRefToString(EvalState & state, const PosIdx pos, Value ** 
         } else if (t == nBool) {
             attrs.emplace(state.symbols[attr.name], Explicit<bool>{attr.value->boolean()});
         } else if (t == nString) {
-            attrs.emplace(state.symbols[attr.name], std::string(attr.value->string_view()));
+            auto s = state.forceString(
+                *attr.value, context, attr.pos, "while evaluating an attribute in 'builtins.flakeRefToString'");
+            attrs.emplace(state.symbols[attr.name], std::string(s));
         } else {
             state
                 .error<EvalError>(
@@ -128,7 +187,7 @@ static void prim_flakeRefToString(EvalState & state, const PosIdx pos, Value ** 
         }
     }
     auto flakeRef = FlakeRef::fromAttrs(state.fetchSettings, attrs);
-    v.mkString(flakeRef.to_string());
+    v.mkString(flakeRef.to_string(), context, state.mem);
 }
 
 nix::PrimOp flakeRefToString({
@@ -151,7 +210,7 @@ nix::PrimOp flakeRefToString({
       "github:NixOS/nixpkgs/23.05?dir=lib"
       ```
     )",
-    .fun = prim_flakeRefToString,
+    .impl = prim_flakeRefToString,
 });
 
 } // namespace nix::flake::primops

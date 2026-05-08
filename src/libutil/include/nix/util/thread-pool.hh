@@ -2,6 +2,7 @@
 ///@file
 
 #include "nix/util/error.hh"
+#include "nix/util/fun.hh"
 #include "nix/util/sync.hh"
 
 #include <queue>
@@ -31,12 +32,12 @@ public:
      *
      * \todo use std::packaged_task?
      */
-    typedef std::function<void()> work_t;
+    typedef fun<void()> work_t;
 
     /**
      * Enqueue a function to be executed by the thread pool.
      */
-    void enqueue(const work_t & t);
+    void enqueue(work_t t);
 
     /**
      * Execute work items until the queue is empty.
@@ -51,6 +52,12 @@ public:
      * otherwise ignored.
      */
     void process();
+
+    /**
+     * Shut down all worker threads and wait until they've exited.
+     * Active work items are finished, but any pending work items are discarded.
+     */
+    void shutdown();
 
 private:
 
@@ -72,8 +79,6 @@ private:
     std::condition_variable work;
 
     void doWork(bool mainThread);
-
-    void shutdown();
 };
 
 /**
@@ -84,8 +89,8 @@ private:
 template<typename T>
 void processGraph(
     const std::set<T> & nodes,
-    std::function<std::set<T>(const T &)> getEdges,
-    std::function<void(const T &)> processNode,
+    fun<std::set<T>(const T &)> getEdges,
+    fun<void(const T &)> processNode,
     bool discoverNodes = false,
     size_t maxThreads = 0)
 {

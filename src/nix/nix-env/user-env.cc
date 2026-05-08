@@ -9,21 +9,22 @@
 #include "nix/expr/eval-inline.hh"
 #include "nix/store/profiles.hh"
 #include "nix/expr/print-ambiguous.hh"
+#include "nix/expr/static-string-data.hh"
 
 #include <limits>
 #include <sstream>
 
 namespace nix {
 
-PackageInfos queryInstalled(EvalState & state, const Path & userEnv)
+PackageInfos queryInstalled(EvalState & state, const std::filesystem::path & userEnv)
 {
     PackageInfos elems;
-    if (pathExists(userEnv + "/manifest.json"))
-        throw Error("profile '%s' is incompatible with 'nix-env'; please use 'nix profile' instead", userEnv);
-    auto manifestFile = userEnv + "/manifest.nix";
+    if (pathExists(userEnv / "manifest.json"))
+        throw Error("profile %s is incompatible with 'nix-env'; please use 'nix profile' instead", PathFmt(userEnv));
+    auto manifestFile = userEnv / "manifest.nix";
     if (pathExists(manifestFile)) {
         Value v;
-        state.evalFile(state.rootPath(CanonPath(manifestFile)).resolveSymlinks(), v);
+        state.evalFile(state.rootPath(CanonPath(manifestFile.string())).resolveSymlinks(), v);
         Bindings & bindings = Bindings::emptyBindings;
         getDerivations(state, v, "", bindings, elems, false);
     }
@@ -31,7 +32,11 @@ PackageInfos queryInstalled(EvalState & state, const Path & userEnv)
 }
 
 bool createUserEnv(
-    EvalState & state, PackageInfos & elems, const Path & profile, bool keepDerivations, const std::string & lockToken)
+    EvalState & state,
+    PackageInfos & elems,
+    const std::filesystem::path & profile,
+    bool keepDerivations,
+    const std::string & lockToken)
 {
     /* Build the components in the user environment, if they don't
        exist already. */
@@ -58,21 +63,21 @@ bool createUserEnv(
 
         auto attrs = state.buildBindings(7 + outputs.size());
 
-        attrs.alloc(state.s.type).mkStringNoCopy("derivation");
-        attrs.alloc(state.s.name).mkString(i.queryName());
+        attrs.alloc(state.s.type).mkStringNoCopy("derivation"_sds);
+        attrs.alloc(state.s.name).mkString(i.queryName(), state.mem);
         auto system = i.querySystem();
         if (!system.empty())
-            attrs.alloc(state.s.system).mkString(system);
-        attrs.alloc(state.s.outPath).mkString(state.store->printStorePath(i.queryOutPath()));
+            attrs.alloc(state.s.system).mkString(system, state.mem);
+        attrs.alloc(state.s.outPath).mkString(state.store->printStorePath(i.queryOutPath()), state.mem);
         if (drvPath)
-            attrs.alloc(state.s.drvPath).mkString(state.store->printStorePath(*drvPath));
+            attrs.alloc(state.s.drvPath).mkString(state.store->printStorePath(*drvPath), state.mem);
 
         // Copy each output meant for installation.
         auto outputsList = state.buildList(outputs.size());
         for (const auto & [m, j] : enumerate(outputs)) {
-            (outputsList[m] = state.allocValue())->mkString(j.first);
+            (outputsList[m] = state.allocValue())->mkString(j.first, state.mem);
             auto outputAttrs = state.buildBindings(2);
-            outputAttrs.alloc(state.s.outPath).mkString(state.store->printStorePath(*j.second));
+            outputAttrs.alloc(state.s.outPath).mkString(state.store->printStorePath(*j.second), state.mem);
             attrs.alloc(j.first).mkAttrs(outputAttrs);
 
             /* This is only necessary when installing store paths, e.g.,
@@ -109,7 +114,7 @@ bool createUserEnv(
        environment. */
     auto manifestFile = ({
         std::ostringstream str;
-        printAmbiguous(state, manifest, str, nullptr, std::numeric_limits<int>::max());
+        printAmbiguous(state, manifest, str, nullptr);
         StringSource source{str.view()};
         state.store->addToStoreFromDump(
             source,
@@ -163,14 +168,14 @@ bool createUserEnv(
         PathLocks lock;
         lockProfile(lock, profile);
 
-        Path lockTokenCur = optimisticLockProfile(profile);
+        std::filesystem::path lockTokenCur = optimisticLockProfile(profile);
         if (lockToken != lockTokenCur) {
-            printInfo("profile '%1%' changed while we were busy; restarting", profile);
+            printInfo("profile %s changed while we were busy; restarting", PathFmt(profile));
             return false;
         }
 
         debug("switching to new user environment");
-        Path generation = createGeneration(*store2, profile, topLevelOut);
+        std::filesystem::path generation = createGeneration(*store2, profile, topLevelOut);
         switchLink(profile, generation);
     }
 

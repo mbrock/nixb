@@ -18,7 +18,7 @@ static void parallelForceDeep(EvalState & state, Value & v, PosIdx pos)
 {
     state.forceValue(v, pos);
 
-    std::vector<std::pair<Executor::work_t, uint8_t>> work;
+    Executor::WorkItems work;
 
     switch (v.type()) {
 
@@ -29,8 +29,9 @@ static void parallelForceDeep(EvalState & state, Value & v, PosIdx pos)
         if (v.attrs()->get(state.s.outPath))
             return;
         for (auto & a : *v.attrs())
-            work.emplace_back(
-                [value(allocRootValue(a.value)), pos(a.pos), &state]() { parallelForceDeep(state, **value, pos); }, 0);
+            state.addWork(work, 0, [value(allocRootValue(a.value)), pos(a.pos), &state]() {
+                parallelForceDeep(state, **value, pos);
+            });
         break;
     }
 
@@ -48,10 +49,10 @@ json printValueAsJSON(
     if (strict && state.executor->enabled && !Executor::amWorkerThread)
         parallelForceDeep(state, v, pos);
 
-    std::function<void(json & res, Value & v, PosIdx pos)> recurse;
-
-    recurse = [&](json & res, Value & v, PosIdx pos) {
+    auto recurse = [&](this const auto & recurse, json & res, Value & v, PosIdx pos) -> void {
         checkInterrupt();
+
+        auto _level = state.addCallDepth(pos);
 
         if (strict)
             state.forceValue(v, pos);
@@ -68,7 +69,7 @@ json printValueAsJSON(
 
         case nString: {
             copyContext(v, context);
-            res = v.c_str();
+            res = v.string_view();
             break;
         }
 
