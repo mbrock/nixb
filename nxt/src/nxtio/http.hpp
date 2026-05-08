@@ -1,16 +1,15 @@
 #pragma once
 
 #include <algorithm>
-#include <charconv>
 #include <concepts>
 #include <cstddef>
+#include <cstdint>
 #include <cstring>
-#include <iterator>
-#include <ranges>
+#include <optional>
 #include <span>
 #include <stdexcept>
+#include <string>
 #include <string_view>
-#include <system_error>
 
 #include "nxtio/async.hpp"
 
@@ -20,6 +19,28 @@ struct protocol_error : std::runtime_error
 {
     using std::runtime_error::runtime_error;
 };
+
+struct url
+{
+    bool tls = false;
+    std::string host;
+    std::string port;
+    std::string target = "/";
+};
+
+struct response_head
+{
+    std::string_view status_line;
+    std::optional<std::size_t> content_length;
+    bool chunked = false;
+};
+
+url parse_url(std::string_view text);
+std::uint16_t parse_port(std::string_view text);
+bool is_default_port(const url & url);
+response_head parse_response_head(std::span<const std::byte> bytes);
+std::string_view as_text(std::span<const std::byte> bytes);
+char as_char(std::byte byte);
 
 template<typename F>
 concept byte_slicer = requires(F slicer, std::span<const std::byte> bytes) {
@@ -71,45 +92,16 @@ private:
 class slurper
 {
 public:
-    explicit slurper(std::span<const std::byte> needle)
-        : needle_(needle)
-    {
-    }
-
+    explicit slurper(std::span<const std::byte> needle);
     [[nodiscard]] std::span<const std::byte>
-    operator()(std::span<const std::byte> bytes) const
-    {
-        auto match = std::ranges::search(bytes, needle_);
-        auto size = static_cast<std::size_t>(
-            std::distance(bytes.begin(), match.begin()));
-
-        return bytes.first(size);
-    }
-
-    std::size_t kerf() const
-    {
-        return needle_.size_bytes();
-    }
+    operator()(std::span<const std::byte> bytes) const;
+    std::size_t kerf() const;
 
 private:
     std::span<const std::byte> needle_;
 };
 
-inline slurper slurp(std::string_view needle)
-{
-    return slurper{std::as_bytes(std::span(needle))};
-}
-
-inline std::string_view as_text(std::span<const std::byte> bytes)
-{
-    return std::string_view{
-        reinterpret_cast<const char *>(bytes.data()), bytes.size_bytes()};
-}
-
-inline char as_char(const std::byte byte)
-{
-    return static_cast<char>(byte);
-}
+slurper slurp(std::string_view needle);
 
 class bytes_as_chars
 {
@@ -202,23 +194,7 @@ nxt::task<> read_content_length(
     }
 }
 
-inline std::size_t parse_chunk_size(std::span<const std::byte> line)
-{
-    auto text = as_text(line);
-    auto end = text.find(';');
-    auto size_text = text.substr(0, end);
-    if (size_text.empty())
-        throw protocol_error{"empty chunk size"};
-
-    auto size = std::size_t{0};
-    auto * first = size_text.data();
-    auto * last = first + size_text.size();
-    auto [ptr, ec] = std::from_chars(first, last, size, 16);
-    if (ec != std::errc{} || ptr != last)
-        throw protocol_error{"invalid chunk size"};
-
-    return size;
-}
+std::size_t parse_chunk_size(std::span<const std::byte> line);
 
 template<typename Transport>
 nxt::task<std::span<const std::byte>> read_expected_crlf(
@@ -283,6 +259,24 @@ nxt::task<> read_chunked(
 
         pending =
             co_await read_expected_crlf(transport, line_buffer, pending);
+    }
+}
+
+template<typename Transport, typename OnChunk>
+nxt::task<> read_until_eof(
+    Transport & transport,
+    std::span<char> buffer,
+    std::span<const std::byte> initial,
+    OnChunk on_chunk)
+{
+    if (!initial.empty())
+        co_await on_chunk(initial);
+
+    while (true) {
+        auto n = co_await transport.read_some(buffer);
+        if (n == 0)
+            co_return;
+        co_await on_chunk(std::as_bytes(buffer.first(n)));
     }
 }
 

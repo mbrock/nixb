@@ -53,6 +53,37 @@ suite http_io_tests = [] {
     using namespace nxt::io;
     using namespace std::literals;
 
+    "url parser recognizes http and https defaults"_test = [] {
+        auto http_url = http::parse_url("http://example.test/path"sv);
+        expect(!http_url.tls);
+        expect(http_url.host == "example.test");
+        expect(http_url.port == "80");
+        expect(http_url.target == "/path");
+
+        auto https_url = http::parse_url("https://example.test:8443"sv);
+        expect(https_url.tls);
+        expect(https_url.host == "example.test");
+        expect(https_url.port == "8443");
+        expect(https_url.target == "/");
+    };
+
+    "response head parser detects length and chunked bodies"_test = [] {
+        auto fixed = http::parse_response_head(
+            std::as_bytes(
+                std::span{"HTTP/1.1 200 OK\r\nContent-Length: 11\r\n"sv}));
+        expect(fixed.status_line == "HTTP/1.1 200 OK");
+        expect(fixed.content_length == 11_ul);
+        expect(!fixed.chunked);
+
+        auto chunked = http::parse_response_head(
+            std::as_bytes(
+                std::span{
+                    "HTTP/1.1 200 OK\r\nTransfer-Encoding: gzip, chunked\r\n"sv}));
+        expect(chunked.status_line == "HTTP/1.1 200 OK");
+        expect(!chunked.content_length);
+        expect(chunked.chunked);
+    };
+
     "http slurping"_test = [] {
         http::parse_buffer input(
             "HTTP/1.1 200 Hello\r\n"

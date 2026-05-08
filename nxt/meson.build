@@ -46,6 +46,7 @@ nxt_runtime_deps = [
 
 nxt_runtime_sources = files(
   'src/nxtio/app.cpp',
+  'src/nxtio/http.cpp',
   'src/nxtio/signal-pipe.cpp',
 )
 
