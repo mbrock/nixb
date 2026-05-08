@@ -91,14 +91,6 @@ std::string fit_label(std::string text, std::size_t width)
     return text.substr(0, width - 1) + "…";
 }
 
-nxb::percent_t percent_of(std::size_t done, std::size_t total)
-{
-    if (total == 0)
-        return 0.0 * nxb::percent;
-    return (100.0 * static_cast<double>(done)
-            / static_cast<double>(total)) * nxb::percent;
-}
-
 nxb::percent_t percent_of(int64_t done, int64_t total)
 {
     if (total <= 0)
@@ -206,50 +198,7 @@ int run_tui_simulation_app(
     return nxb::ui::run(
         std::move(initial),
         [](const TuiSimState& state) {
-            auto overall = percent_of(state.completed, state.total);
-            auto build_slots =
-                percent_of(state.active_builds, state.max_jobs);
-            auto sub_slots =
-                percent_of(state.active_subs, state.max_substitutions);
-
             return column(
-                styled_text(
-                    span("Nix Build ", fg(nxb::Rgba8::magenta()) | bold),
-                    span("Simulation", fg(nxb::Rgba8::blue()) | italic)),
-                row(
-                    text(fmt::format("{:<18}", "overall"),
-                         fg(nxb::Rgba8::white()) | bold),
-                    progress_bar(overall, nxb::Rgba8::green()),
-                    text(fmt::format(
-                             " {:>3.0f}% {}/{}",
-                             overall.force_numerical_value_in(nxb::percent),
-                             state.completed,
-                             state.total),
-                         fg(nxb::Rgba8::white()) | bold)),
-                row(
-                    text(fmt::format(
-                             "{:<18}",
-                             fmt::format("builds {}/{}",
-                                         state.active_builds,
-                                         state.max_jobs)),
-                         fg(nxb::Rgba8::yellow())),
-                    progress_bar(build_slots, nxb::Rgba8::yellow()),
-                    text(fmt::format(" {:>3.0f}%",
-                                     build_slots.force_numerical_value_in(
-                                         nxb::percent)),
-                         fg(nxb::Rgba8::yellow()) | bold)),
-                row(
-                    text(fmt::format(
-                             "{:<18}",
-                             fmt::format("subs {}/{}",
-                                         state.active_subs,
-                                         state.max_substitutions)),
-                         fg(nxb::Rgba8::cyan())),
-                    progress_bar(sub_slots, nxb::Rgba8::cyan()),
-                    text(fmt::format(" {:>3.0f}%",
-                                     sub_slots.force_numerical_value_in(
-                                         nxb::percent)),
-                         fg(nxb::Rgba8::cyan()) | bold)),
                 list(state.active, [](const auto& item) {
                     const auto color = item.substitution
                                            ? nxb::Rgba8::cyan()
@@ -263,10 +212,6 @@ int run_tui_simulation_app(
                                              .force_numerical_value_in(
                                                  nxb::percent)),
                              fg(color) | bold));
-                }),
-                list(state.recent, [](const auto& line) {
-                    return text(
-                        fit_label(line, 80), fg(nxb::Rgba8::bright_black()));
                 }));
         },
         [&graph, config, speed](
