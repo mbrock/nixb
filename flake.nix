@@ -33,13 +33,7 @@
           libcoro = mkDerivation {
             pname = "libcoro";
             version = "0.16.0";
-            src = pkgs.fetchFromGitHub {
-              owner = "jbaldwin";
-              repo = "libcoro";
-              rev = "v0.16.0";
-              hash = "sha256-UMc2FsFJ9hlPj8bS+vXw0/2EELBrpaISr4nwbkkecTc=";
-              fetchSubmodules = true;
-            };
+            src = ./vendor/libcoro;
             nativeBuildInputs = [ pkgs.cmake ];
             buildInputs = [ pkgs.openssl ];
             cmakeFlags = [
@@ -144,6 +138,7 @@
 
               libcoro
               pkgs.c-ares
+              pkgs.openssl
               mp-units
               fmt
               pkgs.cli11

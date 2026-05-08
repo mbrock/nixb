@@ -1,5 +1,7 @@
 nxt_libcoro_dep = dependency('libcoro')
 nxt_libcares_dep = dependency('libcares')
+nxt_libssl_dep = dependency('libssl')
+nxt_libcrypto_dep = dependency('libcrypto')
 
 nxt_mdspan_args = [
   '-DMDSPAN_USE_BRACKET_OPERATOR=1',
@@ -38,6 +40,8 @@ nxt_runtime_deps = [
   nxt_core_dep,
   nxt_libcoro_dep,
   nxt_libcares_dep,
+  nxt_libssl_dep,
+  nxt_libcrypto_dep,
 ]
 
 nxt_runtime_sources = files(

@@ -1,7 +1,10 @@
 #define LIBCORO_FEATURE_NETWORKING
+#define LIBCORO_FEATURE_TLS
 #include <coro/net/dns/resolver.hpp>
 #include <coro/net/tcp/client.hpp>
+#include <coro/net/tls/client.hpp>
 #undef LIBCORO_FEATURE_NETWORKING
+#undef LIBCORO_FEATURE_TLS
 
 #include <nxtio/async.hpp>
 #include <nxtio/http.hpp>
@@ -9,6 +12,7 @@
 #include <algorithm>
 #include <array>
 #include <charconv>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
@@ -20,6 +24,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 namespace {
 
@@ -59,20 +64,80 @@ private:
     coro::net::tcp::client client_;
 };
 
+class tls_transport
+{
+public:
+    tls_transport(
+        std::shared_ptr<coro::net::tls::context> ctx,
+        coro::net::tls::client client)
+        : ctx_(std::move(ctx))
+        , client_(std::move(client))
+    {
+    }
+
+    nxt::task<std::size_t> read_some(std::span<char> dst)
+    {
+        if (dst.empty())
+            co_return 0;
+
+        auto [status, bytes] = co_await client_.recv(dst);
+        if (status == coro::net::tls::recv_status::ok)
+            co_return bytes.size();
+        if (status == coro::net::tls::recv_status::closed)
+            co_return 0;
+
+        throw std::runtime_error{
+            "TLS read: " + coro::net::tls::to_string(status)};
+    }
+
+    nxt::task<> write_all(std::string_view bytes)
+    {
+        auto remaining = std::span<const char>{bytes.data(), bytes.size()};
+        while (!remaining.empty()) {
+            auto [status, rest] = co_await client_.send(remaining);
+            if (status == coro::net::tls::send_status::ok) {
+                if (rest.size() == remaining.size())
+                    throw std::runtime_error{"TLS write made no progress"};
+                remaining = rest;
+                continue;
+            }
+
+            throw std::runtime_error{
+                "TLS write: " + coro::net::tls::to_string(status)};
+        }
+    }
+
+    nxt::task<> shutdown()
+    {
+        co_await client_.shutdown(std::chrono::seconds{5});
+    }
+
+private:
+    std::shared_ptr<coro::net::tls::context> ctx_;
+    coro::net::tls::client client_;
+};
+
 struct http_url
 {
+    bool tls = false;
     std::string host;
-    std::string port = "80";
+    std::string port;
     std::string target = "/";
 };
 
 http_url parse_url(std::string_view text)
 {
-    constexpr auto scheme = std::string_view{"http://"};
-    if (!text.starts_with(scheme))
-        throw std::runtime_error{"only http:// URLs are supported"};
+    auto tls = false;
+    if (text.starts_with("http://")) {
+        text.remove_prefix(std::string_view{"http://"}.size());
+    } else if (text.starts_with("https://")) {
+        text.remove_prefix(std::string_view{"https://"}.size());
+        tls = true;
+    } else {
+        throw std::runtime_error{
+            "only http:// and https:// URLs are supported"};
+    }
 
-    text.remove_prefix(scheme.size());
     auto slash = text.find('/');
     auto authority = text.substr(0, slash);
     auto target = slash == std::string_view::npos ? std::string_view{"/"}
@@ -81,6 +146,8 @@ http_url parse_url(std::string_view text)
         throw std::runtime_error{"URL host is empty"};
 
     http_url url;
+    url.tls = tls;
+    url.port = tls ? "443" : "80";
     url.target = target;
 
     auto colon = authority.rfind(':');
@@ -107,13 +174,18 @@ uint16_t parse_port(std::string_view text)
     return static_cast<uint16_t>(port);
 }
 
-nxt::task<tcp_transport> connect_tcp(
+struct resolved_target
+{
+    std::vector<coro::net::ip_address> addresses;
+    uint16_t port = 0;
+};
+
+nxt::task<resolved_target> resolve_target(
     std::unique_ptr<nxt::io_scheduler> & sched,
     std::string_view host,
     std::string_view port)
 {
     auto port_number = parse_port(port);
-    auto last_status = coro::net::connect_status::error;
     auto resolver = coro::net::dns::resolver<nxt::io_scheduler>{
         sched,
         std::chrono::milliseconds{5000},
@@ -126,8 +198,22 @@ nxt::task<tcp_transport> connect_tcp(
         throw std::runtime_error{"DNS lookup failed"};
     }
 
-    for (auto const & address : dns->ip_addresses()) {
-        auto endpoint = coro::net::socket_address{address, port_number};
+    co_return resolved_target{
+        .addresses = dns->ip_addresses(),
+        .port = port_number,
+    };
+}
+
+nxt::task<tcp_transport> connect_tcp(
+    std::unique_ptr<nxt::io_scheduler> & sched,
+    std::string_view host,
+    std::string_view port)
+{
+    auto target = co_await resolve_target(sched, host, port);
+    auto last_status = coro::net::connect_status::error;
+
+    for (auto const & address : target.addresses) {
+        auto endpoint = coro::net::socket_address{address, target.port};
         auto client = coro::net::tcp::client{
             sched,
             endpoint,
@@ -139,6 +225,33 @@ nxt::task<tcp_transport> connect_tcp(
 
     throw std::runtime_error{
         "connect: " + coro::net::to_string(last_status)};
+}
+
+nxt::task<tls_transport> connect_tls(
+    std::unique_ptr<nxt::io_scheduler> & sched,
+    std::string_view host,
+    std::string_view port)
+{
+    auto target = co_await resolve_target(sched, host, port);
+    auto last_status = coro::net::tls::connection_status::error;
+    auto ctx = std::make_shared<coro::net::tls::context>(
+        coro::net::tls::verify_peer_t::yes);
+
+    for (auto const & address : target.addresses) {
+        auto endpoint = coro::net::socket_address{address, target.port};
+        auto client = coro::net::tls::client{
+            sched,
+            ctx,
+            endpoint,
+            std::string{host},
+        };
+        last_status = co_await client.connect();
+        if (last_status == coro::net::tls::connection_status::connected)
+            co_return tls_transport{ctx, std::move(client)};
+    }
+
+    throw std::runtime_error{
+        "TLS connect: " + coro::net::tls::to_string(last_status)};
 }
 
 char ascii_lower(char c)
@@ -225,8 +338,9 @@ response_head parse_response_head(std::span<const std::byte> bytes)
     return head;
 }
 
+template<typename Transport>
 nxt::task<> read_until_eof(
-    tcp_transport & transport,
+    Transport & transport,
     std::span<char> buffer,
     std::span<const std::byte> initial,
     auto on_chunk)
@@ -242,11 +356,16 @@ nxt::task<> read_until_eof(
     }
 }
 
-nxt::task<> fetch(std::unique_ptr<nxt::io_scheduler> & sched, http_url url)
+bool is_default_port(http_url const & url)
 {
-    auto transport = co_await connect_tcp(sched, url.host, url.port);
+    return (!url.tls && url.port == "80") || (url.tls && url.port == "443");
+}
+
+template<typename Transport>
+nxt::task<> fetch_over(Transport & transport, http_url const & url)
+{
     auto host_header =
-        url.port == "80" ? url.host : url.host + ":" + url.port;
+        is_default_port(url) ? url.host : url.host + ":" + url.port;
     auto request = std::string{
         "GET " + url.target + " HTTP/1.1\r\n"
         "Host: " + host_header + "\r\n"
@@ -290,12 +409,25 @@ nxt::task<> fetch(std::unique_ptr<nxt::io_scheduler> & sched, http_url url)
     }
 }
 
+nxt::task<> fetch(std::unique_ptr<nxt::io_scheduler> & sched, http_url url)
+{
+    if (url.tls) {
+        auto transport = co_await connect_tls(sched, url.host, url.port);
+        co_await fetch_over(transport, url);
+        co_await transport.shutdown();
+        co_return;
+    }
+
+    auto transport = co_await connect_tcp(sched, url.host, url.port);
+    co_await fetch_over(transport, url);
+}
+
 } // namespace
 
 int main(int argc, char ** argv)
 {
     if (argc != 2) {
-        std::cerr << "usage: nxthttp http://host[:port]/path\n";
+        std::cerr << "usage: nxthttp http[s]://host[:port]/path\n";
         return EXIT_FAILURE;
     }
 
