@@ -3,6 +3,7 @@
 #include "nxt/units.hpp"
 
 #include <cstdio>
+#include <format>
 #include <iostream>
 #include <iterator>
 #include <poll.h>
@@ -40,7 +41,7 @@ void Writer::csi(std::string_view params, char final_byte)
         // No ANSI output
         break;
     case Mode::debug:
-        fmt::format_to(
+        std::format_to(
             std::back_inserter(buf_),
             "{}{}{}⟩",
             CSI_DEBUG,
@@ -48,7 +49,7 @@ void Writer::csi(std::string_view params, char final_byte)
             final_byte);
         break;
     case Mode::enabled:
-        fmt::format_to(
+        std::format_to(
             std::back_inserter(buf_), "{}{}{}", CSI, params, final_byte);
         break;
     }
@@ -60,7 +61,7 @@ Writer & Writer::move_to(const ansi_row_t row, const ansi_col_t col)
     // ansi_origin directly gives us the 1-based ANSI coordinate.
     const auto row_num = (row - ansi_origin_v).count();
     const auto col_num = (col - ansi_origin).count();
-    csi(fmt::format("{};{}", row_num, col_num), 'H');
+    csi(std::format("{};{}", row_num, col_num), 'H');
     return *this;
 }
 
@@ -73,7 +74,7 @@ Writer & Writer::move_up(const height_t n)
 {
     const auto rows = n.count();
     if (rows > 0)
-        csi(fmt::format("{}", rows), 'A');
+        csi(std::format("{}", rows), 'A');
     return *this;
 }
 
@@ -81,7 +82,7 @@ Writer & Writer::move_down(const height_t n)
 {
     const auto rows = n.count();
     if (rows > 0)
-        csi(fmt::format("{}", rows), 'B');
+        csi(std::format("{}", rows), 'B');
     return *this;
 }
 
@@ -89,7 +90,7 @@ Writer & Writer::move_right(const width_t n)
 {
     const auto cols = n.count();
     if (cols > 0)
-        csi(fmt::format("{}", cols), 'C');
+        csi(std::format("{}", cols), 'C');
     return *this;
 }
 
@@ -97,7 +98,7 @@ Writer & Writer::move_left(const width_t n)
 {
     const auto cols = n.count();
     if (cols > 0)
-        csi(fmt::format("{}", cols), 'D');
+        csi(std::format("{}", cols), 'D');
     return *this;
 }
 
@@ -111,7 +112,7 @@ Writer & Writer::move(const Size delta)
 Writer & Writer::move_to_column(const ansi_col_t col)
 {
     const auto col_num = (col - ansi_origin).count();
-    csi(fmt::format("{}", col_num), 'G');
+    csi(std::format("{}", col_num), 'G');
     return *this;
 }
 
@@ -156,7 +157,7 @@ Writer & Writer::set_scroll_region(const row_t top, const row_t bottom)
     // Convert terminal row_t to 1-based ANSI row via ansi_origin_v
     const auto top_row = (top - ansi_origin_v).count();
     const auto bottom_row = (bottom - ansi_origin_v).count();
-    csi(fmt::format("{};{}", top_row, bottom_row), 'r');
+    csi(std::format("{};{}", top_row, bottom_row), 'r');
     return *this;
 }
 
@@ -170,7 +171,7 @@ Writer & Writer::scroll_up(const height_t n)
 {
     const auto rows = n.count();
     if (rows > 0)
-        csi(fmt::format("{}", rows), 'S');
+        csi(std::format("{}", rows), 'S');
     return *this;
 }
 
@@ -178,7 +179,7 @@ Writer & Writer::scroll_down(const height_t n)
 {
     const auto rows = n.count();
     if (rows > 0)
-        csi(fmt::format("{}", rows), 'T');
+        csi(std::format("{}", rows), 'T');
     return *this;
 }
 
@@ -225,60 +226,50 @@ Writer & Writer::request_cursor_position()
     return *this;
 }
 
-Writer & Writer::fg(const rgb color)
+Writer & Writer::fg(const Rgb8 color)
 {
     return fg(color.r, color.g, color.b);
 }
 
 Writer & Writer::fg(std::uint8_t r, std::uint8_t g, std::uint8_t b)
 {
-    csi(fmt::format("38;2;{};{};{}", r, g, b), 'm');
+    csi(std::format("38;2;{};{};{}", r, g, b), 'm');
     return *this;
 }
 
-Writer & Writer::fg(const color c)
-{
-    return fg(rgb(c));
-}
-
-Writer & Writer::bg(const rgb color)
+Writer & Writer::bg(const Rgb8 color)
 {
     return bg(color.r, color.g, color.b);
 }
 
 Writer & Writer::bg(std::uint8_t r, std::uint8_t g, std::uint8_t b)
 {
-    csi(fmt::format("48;2;{};{};{}", r, g, b), 'm');
+    csi(std::format("48;2;{};{};{}", r, g, b), 'm');
     return *this;
 }
 
-Writer & Writer::bg(const color c)
+Writer & Writer::fg(TerminalColor c)
 {
-    return bg(rgb(c));
-}
-
-Writer & Writer::fg(terminal_color c)
-{
-    csi(fmt::format("{}", static_cast<int>(c)), 'm');
+    csi(std::format("{}", static_cast<int>(c)), 'm');
     return *this;
 }
 
-Writer & Writer::bg(terminal_color c)
+Writer & Writer::bg(TerminalColor c)
 {
     // Background colors are +10 from foreground
-    csi(fmt::format("{}", static_cast<int>(c) + 10), 'm');
+    csi(std::format("{}", static_cast<int>(c) + 10), 'm');
     return *this;
 }
 
 Writer & Writer::fg_palette(std::uint8_t index)
 {
-    csi(fmt::format("38;5;{}", index), 'm');
+    csi(std::format("38;5;{}", index), 'm');
     return *this;
 }
 
 Writer & Writer::bg_palette(std::uint8_t index)
 {
-    csi(fmt::format("48;5;{}", index), 'm');
+    csi(std::format("48;5;{}", index), 'm');
     return *this;
 }
 
@@ -294,40 +285,23 @@ Writer & Writer::bg_default()
     return *this;
 }
 
-Writer & Writer::style(emphasis e)
+Writer & Writer::style(Emphasis e)
 {
-    // fmt::emphasis is a bitmask, emit all set bits
-    if ((static_cast<std::uint8_t>(e)
-         & static_cast<std::uint8_t>(emphasis::bold))
-        != 0)
+    if (has_emphasis(e, Emphasis::bold))
         csi("1", 'm');
-    if ((static_cast<std::uint8_t>(e)
-         & static_cast<std::uint8_t>(emphasis::faint))
-        != 0)
+    if (has_emphasis(e, Emphasis::faint))
         csi("2", 'm');
-    if ((static_cast<std::uint8_t>(e)
-         & static_cast<std::uint8_t>(emphasis::italic))
-        != 0)
+    if (has_emphasis(e, Emphasis::italic))
         csi("3", 'm');
-    if ((static_cast<std::uint8_t>(e)
-         & static_cast<std::uint8_t>(emphasis::underline))
-        != 0)
+    if (has_emphasis(e, Emphasis::underline))
         csi("4", 'm');
-    if ((static_cast<std::uint8_t>(e)
-         & static_cast<std::uint8_t>(emphasis::blink))
-        != 0)
+    if (has_emphasis(e, Emphasis::blink))
         csi("5", 'm');
-    if ((static_cast<std::uint8_t>(e)
-         & static_cast<std::uint8_t>(emphasis::reverse))
-        != 0)
+    if (has_emphasis(e, Emphasis::reverse))
         csi("7", 'm');
-    if ((static_cast<std::uint8_t>(e)
-         & static_cast<std::uint8_t>(emphasis::conceal))
-        != 0)
+    if (has_emphasis(e, Emphasis::conceal))
         csi("8", 'm');
-    if ((static_cast<std::uint8_t>(e)
-         & static_cast<std::uint8_t>(emphasis::strikethrough))
-        != 0)
+    if (has_emphasis(e, Emphasis::strikethrough))
         csi("9", 'm');
     return *this;
 }
@@ -340,32 +314,32 @@ Writer & Writer::reset()
 
 Writer & Writer::bold()
 {
-    return style(emphasis::bold);
+    return style(Emphasis::bold);
 }
 
 Writer & Writer::dim()
 {
-    return style(emphasis::faint);
+    return style(Emphasis::faint);
 }
 
 Writer & Writer::italic()
 {
-    return style(emphasis::italic);
+    return style(Emphasis::italic);
 }
 
 Writer & Writer::underline()
 {
-    return style(emphasis::underline);
+    return style(Emphasis::underline);
 }
 
 Writer & Writer::reverse()
 {
-    return style(emphasis::reverse);
+    return style(Emphasis::reverse);
 }
 
 Writer & Writer::text(std::string_view str)
 {
-    fmt::format_to(std::back_inserter(buf_), "{}", str);
+    buf_.append(str);
     return *this;
 }
 
@@ -376,20 +350,27 @@ Writer & Writer::text(std::string_view str)
 namespace {
 /// Print a CSI sequence based on current mode
 template<typename... Args>
-void print_csi(fmt::format_string<Args...> fmt_str, Args &&... args)
+void print_csi(std::format_string<Args...> fmt_str, Args &&... args)
 {
+    std::string buf;
     switch (mode) {
     case Mode::disabled:
         // No ANSI output
         break;
     case Mode::debug:
-        fmt::print("{}", CSI_DEBUG);
-        fmt::print(fmt_str, std::forward<Args>(args)...);
-        fmt::print("⟩");
+        buf.append(CSI_DEBUG);
+        std::format_to(
+            std::back_inserter(buf), fmt_str, std::forward<Args>(args)...);
+        buf.append("⟩");
+        std::cout.write(buf.data(), static_cast<std::streamsize>(buf.size()));
+        std::cout.flush();
         break;
     case Mode::enabled:
-        fmt::print("{}", CSI);
-        fmt::print(fmt_str, std::forward<Args>(args)...);
+        buf.append(CSI);
+        std::format_to(
+            std::back_inserter(buf), fmt_str, std::forward<Args>(args)...);
+        std::cout.write(buf.data(), static_cast<std::streamsize>(buf.size()));
+        std::cout.flush();
         break;
     }
 }
@@ -429,7 +410,7 @@ void show_cursor()
 
 void begin_synchronized_update()
 {
-    fmt::memory_buffer buf;
+    std::string buf;
     Writer w(buf);
     w.begin_synchronized_update();
     std::cout.write(buf.data(), static_cast<std::streamsize>(buf.size()));
@@ -438,7 +419,7 @@ void begin_synchronized_update()
 
 void end_synchronized_update()
 {
-    fmt::memory_buffer buf;
+    std::string buf;
     Writer w(buf);
     w.end_synchronized_update();
     std::cout.write(buf.data(), static_cast<std::streamsize>(buf.size()));
@@ -491,8 +472,8 @@ std::optional<Pos> query_cursor_position()
         return std::nullopt;
 
     // Send DSR 6 query
-    fmt::print("{}6n", CSI);
-    std::fflush(stdout);
+    std::cout << CSI << "6n";
+    std::cout.flush();
 
     // Read response: ESC [ row ; col R
     char buf[32];
@@ -566,7 +547,7 @@ TerminalGuard::~TerminalGuard()
         term_width = ws.ws_col * ch;
 
     // Save cursor before scroll region reset (which moves to home)
-    fmt::memory_buffer buf;
+    std::string buf;
     Writer w(buf);
     w.save_cursor();
     w.reset_scroll_region();

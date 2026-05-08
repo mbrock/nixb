@@ -2,6 +2,7 @@
 #include <unistd.h>
 #include <csignal>
 #include <iostream>
+#include <string>
 
 #include "nxtio/app.hpp"
 #include "nxt/ansi.hpp"
@@ -97,7 +98,7 @@ void UIRuntime::println(std::string_view line)
         : term_h - 1 * ln;
     auto has_trailing_newline = !line.empty() && line.back() == '\n';
 
-    fmt::memory_buffer buf;
+    std::string buf;
     ansi::Writer w(buf);
     w.move_to(Pos::at(0 * ch, scroll_bottom));
     w.reset(); // Avoid HUD styling leaking into log output
@@ -120,7 +121,7 @@ void UIRuntime::cleanup()
         return;
 
     // Clear HUD region plus spacer row above, preserving cursor position
-    fmt::memory_buffer buf;
+    std::string buf;
     ansi::Writer w(buf);
     w.save_cursor();
 

@@ -6,6 +6,7 @@
 #include <atomic>
 #include <chrono>
 #include <cmath>
+#include <iostream>
 
 #include "nxt/ansi.hpp"
 #include "nxtio/async.hpp"
@@ -285,7 +286,7 @@ int run(State initial_state, BuildUI build_ui, Update update)
         runtime.cleanup();
     } catch (const std::exception & e) {
         runtime.cleanup();
-        fmt::print(stderr, "Error: {}\n", e.what());
+        std::cerr << "Error: " << e.what() << '\n';
         std::exit(1);
     } catch (...) {
         runtime.cleanup();

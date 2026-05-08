@@ -3,7 +3,7 @@
 #include "nxt/tui.hpp"
 #include "nxt/units.hpp"
 
-#include <fmt/core.h>
+#include <format>
 #include <random>
 #include <vector>
 
@@ -64,13 +64,13 @@ int example(int argc, char * argv[])
                     [](const auto & act) {
                         return row(
                             text(
-                                fmt::format("{:<20}", act.label),
+                                std::format("{:<20}", act.label),
                                 act.progress >= 100 * percent
                                     ? (fg(Rgba8::green()) | bold)
                                     : fg(Rgba8::blue())),
                             progress_bar(act.progress),
                             text(
-                                fmt::format(
+                                std::format(
                                     "{:>4.0f}%",
                                     act.progress.value()),
                                 (act.progress >= 1 * one
@@ -102,7 +102,7 @@ int example(int argc, char * argv[])
                 // Print a fake log message every few frames
                 if (frame % 5 == 0) {
                     auto & msg = fake_logs[log_dist(rng)];
-                    runtime.println(fmt::format("[{:3}] {}", frame, msg));
+                    runtime.println(std::format("[{:3}] {}", frame, msg));
                 }
 
                 co_await runtime.scheduler().yield_for(32ms);

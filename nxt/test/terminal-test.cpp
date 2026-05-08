@@ -4,6 +4,7 @@
 #include <nxt/tui.hpp>
 
 #include <boost/ut.hpp>
+#include <format>
 #include <sstream>
 
 namespace nxt::test {
@@ -53,7 +54,7 @@ void check_display(
         while (!actual.empty() && actual.back() == ' ')
             actual.pop_back();
         expect(actual == expected[i])
-            << fmt::format("row {}: '{}' != '{}'", i, actual, expected[i]);
+            << std::format("row {}: '{}' != '{}'", i, actual, expected[i]);
     }
 }
 
@@ -68,24 +69,24 @@ std::string separator_row(std::size_t columns)
 void write_at(vterm::Terminal & term, row_t row, std::string_view text)
 {
     ansi::mode = ansi::Mode::enabled;
-    fmt::memory_buffer buf;
+    std::string buf;
     nxt::ansi::Writer w(buf);
     w.move_to(Pos{terminal_origin + 0 * ch, row});
     w.text(text);
-    term.write(std::string_view(buf.data(), buf.size()));
+    term.write(buf);
 }
 
 /// Emit a line at the scroll region bottom (simulates println).
 void println_at(vterm::Terminal & term, row_t row, std::string_view text)
 {
     ansi::mode = ansi::Mode::enabled;
-    fmt::memory_buffer buf;
+    std::string buf;
     nxt::ansi::Writer w(buf);
     w.move_to(Pos{terminal_origin + 0 * ch, row});
     w.text(text);
     w.clear_line_from_cursor();
     w.text("\n");
-    term.write(std::string_view(buf.data(), buf.size()));
+    term.write(buf);
 }
 
 // ============================================================================
@@ -157,6 +158,22 @@ suite compositor_tests = [] {
 
         auto cell = term.get_cell(0, 0);
         expect(cell.has_value() && cell->bold);
+    };
+
+    "combines emphasis styles"_test = [] {
+        GlyphTable glyphs;
+        ui::TerminalCompositor compositor({20 * ch, 1 * ln}, glyphs);
+        vterm::Terminal term(1, 20);
+
+        term.write(render_to_string(
+            compositor,
+            tui::text("Both", tui::bold | tui::underline),
+            {20 * ch, 1 * ln}));
+
+        auto cell = term.get_cell(0, 0);
+        expect(cell.has_value());
+        expect(cell->bold);
+        expect(cell->underline);
     };
 };
 
@@ -312,11 +329,11 @@ suite scroll_region_tests = [] {
         term.write(render_to_string(compositor, hud, {20 * ch, 2 * ln}));
 
         // Set scroll region
-        fmt::memory_buffer buf;
+        std::string buf;
         nxt::ansi::Writer sw(buf);
         sw.set_scroll_region(
             terminal_origin_v + 0 * ln, terminal_origin_v + 2 * ln);
-        term.write(std::string_view(buf.data(), buf.size()));
+        term.write(buf);
 
         // Initial state
         // clang-format off

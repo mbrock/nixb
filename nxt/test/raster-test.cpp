@@ -4,6 +4,7 @@
 #include <nxt/units.hpp>
 
 #include <boost/ut.hpp>
+#include <format>
 
 namespace nxt::test {
 
@@ -63,7 +64,7 @@ struct RenderChecker
             while (!actual.empty() && actual.back() == ' ')
                 actual.pop_back();
 
-            expect(actual == expected[row_idx]) << fmt::format(
+            expect(actual == expected[row_idx]) << std::format(
                 "row {}: '{}' != '{}'", row_idx, actual, expected[row_idx]);
         }
     }
@@ -108,6 +109,12 @@ suite layout_tests = [] {
                 filled++;
         expect(filled == 5_i) << "hrule fills width";
     };
+
+    "style combines emphasis"_test = [] {
+        const auto style = bold | underline;
+        expect(has_emphasis(style.em, Emphasis::bold));
+        expect(has_emphasis(style.em, Emphasis::underline));
+    };
 };
 
 // ============================================================================
@@ -121,7 +128,7 @@ suite glyph_table_tests = [] {
         std::vector<std::string> labels;
 
         for (int i = 0; i < 500; ++i) {
-            labels.push_back(fmt::format("glyph-{}", i));
+            labels.push_back(std::format("glyph-{}", i));
             ids.push_back(glyphs.intern(labels.back()));
         }
 
@@ -257,11 +264,11 @@ suite ansi_tests = [] {
         auto saved = ansi::mode;
         ansi::mode = ansi::Mode::debug;
 
-        fmt::memory_buffer buf;
+        std::string buf;
         ansi::Writer w(buf);
         w.move_to(Pos::at(5 * ch, 3 * ln));
 
-        std::string_view out(buf.data(), buf.size());
+        std::string_view out(buf);
         expect(out.find("⟨CSI:") != std::string_view::npos);
         expect(out.find("\x1b[") == std::string_view::npos);
 
@@ -272,12 +279,12 @@ suite ansi_tests = [] {
         auto saved = ansi::mode;
         ansi::mode = ansi::Mode::enabled;
 
-        fmt::memory_buffer buf;
+        std::string buf;
         ansi::Writer w(buf);
         w.begin_synchronized_update();
         w.end_synchronized_update();
 
-        std::string_view out(buf.data(), buf.size());
+        std::string_view out(buf);
         expect(out == std::string_view{"\x1b[?2026h\x1b[?2026l"});
 
         ansi::mode = saved;

@@ -140,7 +140,7 @@ struct Style
         return {
             other.fg != DEFAULT_COLOR ? other.fg : fg,
             other.bg != DEFAULT_COLOR ? other.bg : bg,
-            other.em != DEFAULT_EMPHASIS ? other.em : em,
+            em | other.em,
         };
     }
 };

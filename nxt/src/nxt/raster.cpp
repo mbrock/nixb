@@ -1,10 +1,8 @@
 #include <algorithm>
 #include <array>
+#include <iomanip>
 
 #include <experimental/mdspan>
-
-#include <fmt/core.h>
-#include <fmt/ostream.h>
 
 #include "nxt/raster.hpp"
 
@@ -33,13 +31,15 @@ auto row_major_mapping(const std::size_t rows, const std::size_t cols)
 // Rgba8 output formatting
 std::ostream & operator<<(std::ostream & os, const Rgba8 & c)
 {
-    fmt::print(
-        os,
-        "rgba8({:02x},{:02x},{:02x},{:02x})",
-        c.r(),
-        c.g(),
-        c.b(),
-        c.a());
+    auto flags = os.flags();
+    auto fill = os.fill();
+    os << "rgba8(" << std::hex << std::setfill('0')
+       << std::setw(2) << static_cast<int>(c.r()) << ','
+       << std::setw(2) << static_cast<int>(c.g()) << ','
+       << std::setw(2) << static_cast<int>(c.b()) << ','
+       << std::setw(2) << static_cast<int>(c.a()) << ')';
+    os.flags(flags);
+    os.fill(fill);
     return os;
 }
 

@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <iostream>
+#include <string>
 #include <string_view>
 
 namespace nxt::ui {
@@ -100,7 +101,7 @@ void TerminalCompositor::resize(nxt::Size size)
 
     // Clear the compositor-owned region, preserving cursor position. The next
     // render will redraw the separator at the resized width.
-    fmt::memory_buffer buf;
+    std::string buf;
     ansi::Writer w(buf);
     w.save_cursor();
 
@@ -156,7 +157,7 @@ void TerminalCompositor::set_hud_height(
     // Note: DECSTBM (set scroll region) moves cursor to home, so
     // save/restore
     {
-        fmt::memory_buffer buf;
+        std::string buf;
         ansi::Writer wr(buf);
         wr.save_cursor();
         wr.reset();
@@ -249,7 +250,7 @@ void TerminalCompositor::present_frame()
 
 void TerminalCompositor::present_frame(std::ostream & out)
 {
-    fmt::memory_buffer buf;
+    std::string buf;
     ansi::Writer w(buf);
 
     // Save cursor so HUD rendering doesn't disturb log output position
@@ -324,9 +325,9 @@ void TerminalCompositor::present_frame(std::ostream & out)
             current_fg = run.fg_change;
         }
 
-        // Apply new emphasis (cast to fmt::emphasis)
+        // Apply new emphasis.
         if (run.em_change)
-            w.style(static_cast<ansi::emphasis>(*run.em_change));
+            w.style(*run.em_change);
 
         for (const auto gid : run.glyphs)
             if (auto text = glyphs_.get(gid))

@@ -1,6 +1,8 @@
 #pragma once
 
+#include <cstdint>
 #include <optional>
+#include <ostream>
 #include <ranges>
 #include <span>
 #include <string_view>
@@ -8,13 +10,17 @@
 
 #include <experimental/mdspan>
 
-#include <fmt/base.h>
-#include <fmt/color.h>
-
 #include "nxt/glyph-table.hpp"
 #include "nxt/units.hpp"
 
 namespace nxt {
+
+struct Rgb8
+{
+    std::uint8_t r;
+    std::uint8_t g;
+    std::uint8_t b;
+};
 
 /// Terminal color: packed into 32 bits.
 ///
@@ -48,15 +54,9 @@ struct Rgba8
     {
     }
 
-    /// Construct from fmt::rgb (opaque true color)
-    constexpr Rgba8(fmt::rgb rgb, std::uint8_t a = 255) noexcept
+    /// Construct from RGB components (opaque true color)
+    constexpr Rgba8(Rgb8 rgb, std::uint8_t a = 255) noexcept
         : value(rgb.r | (rgb.g << 8) | (rgb.b << 16) | (a << 24))
-    {
-    }
-
-    /// Construct from fmt::color (opaque true color)
-    constexpr Rgba8(fmt::color c, std::uint8_t a = 255) noexcept
-        : Rgba8(fmt::rgb(c), a)
     {
     }
 
@@ -225,10 +225,10 @@ struct Rgba8
         return (value >> 24) & 0xFF;
     }
 
-    /// Convert to fmt::rgb (only meaningful for true color)
-    [[nodiscard]] constexpr fmt::rgb to_rgb() const noexcept
+    /// Convert to RGB (only meaningful for true color)
+    [[nodiscard]] constexpr Rgb8 to_rgb() const noexcept
     {
-        return fmt::rgb(r(), g(), b());
+        return Rgb8{r(), g(), b()};
     }
 
     // ==========================================================================

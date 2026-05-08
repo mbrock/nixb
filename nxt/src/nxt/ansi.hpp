@@ -1,11 +1,10 @@
 #pragma once
 
-#include <fmt/base.h>
-#include <fmt/color.h>
-
 #include <optional>
+#include <string>
 #include <string_view>
 
+#include "nxt/raster.hpp"
 #include "nxt/units.hpp"
 
 namespace nxt::ansi {
@@ -27,17 +26,30 @@ void init();
 /// Check if stdout is connected to a real TTY
 [[nodiscard]] bool is_tty();
 
-// Re-export fmt's types for convenience
-using rgb = fmt::rgb;
-using color = fmt::color;
-using terminal_color = fmt::terminal_color;
-using emphasis = fmt::emphasis;
+enum class TerminalColor : int {
+    black = 30,
+    red = 31,
+    green = 32,
+    yellow = 33,
+    blue = 34,
+    magenta = 35,
+    cyan = 36,
+    white = 37,
+    bright_black = 90,
+    bright_red = 91,
+    bright_green = 92,
+    bright_yellow = 93,
+    bright_blue = 94,
+    bright_magenta = 95,
+    bright_cyan = 96,
+    bright_white = 97,
+};
 
-/// ANSI escape sequence builder that writes to a fmt::memory_buffer
+/// ANSI escape sequence builder that writes to a string buffer.
 class Writer
 {
 public:
-    explicit Writer(fmt::memory_buffer & buf)
+    explicit Writer(std::string & buf)
         : buf_(buf)
     {
     }
@@ -87,16 +99,14 @@ public:
     Writer & request_cursor_position();
 
     /// Colors (24-bit RGB)
-    Writer & fg(rgb color);
+    Writer & fg(Rgb8 color);
     Writer & fg(std::uint8_t r, std::uint8_t g, std::uint8_t b);
-    Writer & fg(color c); // Named color (e.g., fmt::color::red)
-    Writer & bg(rgb color);
+    Writer & bg(Rgb8 color);
     Writer & bg(std::uint8_t r, std::uint8_t g, std::uint8_t b);
-    Writer & bg(color c); // Named color
 
     /// Terminal colors (16-color palette)
-    Writer & fg(terminal_color c);
-    Writer & bg(terminal_color c);
+    Writer & fg(TerminalColor c);
+    Writer & bg(TerminalColor c);
 
     /// 256-color palette
     Writer & fg_palette(std::uint8_t index);
@@ -106,8 +116,8 @@ public:
     Writer & fg_default();
     Writer & bg_default();
 
-    /// Text emphasis (uses fmt's emphasis enum)
-    Writer & style(emphasis e);
+    /// Text emphasis.
+    Writer & style(Emphasis e);
     Writer & reset();
     Writer & bold();
     Writer & dim();
@@ -125,19 +135,18 @@ public:
         return *this;
     }
 
-    /// Get the underlying buffer
-    [[nodiscard]] fmt::memory_buffer & buffer()
+    [[nodiscard]] std::string & buffer()
     {
         return buf_;
     }
 
-    [[nodiscard]] const fmt::memory_buffer & buffer() const
+    [[nodiscard]] const std::string & buffer() const
     {
         return buf_;
     }
 
 private:
-    fmt::memory_buffer & buf_;
+    std::string & buf_;
 
     /// Helper: write CSI sequence
     void csi(std::string_view params, char final_byte);

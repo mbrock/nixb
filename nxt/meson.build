@@ -1,4 +1,3 @@
-nxt_fmt_dep = dependency('fmt')
 nxt_libcoro_dep = dependency('libcoro')
 
 nxt_mdspan_args = [
@@ -11,9 +10,7 @@ nxt_inc = include_directories(
   'subprojects/mdspan/include',
 )
 
-nxt_core_deps = [
-  nxt_fmt_dep,
-]
+nxt_core_deps = []
 
 nxt_core_sources = files(
   'src/nxt/ansi.cpp',
