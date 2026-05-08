@@ -1,21 +1,18 @@
 nxt_fmt_dep = dependency('fmt')
 nxt_libcoro_dep = dependency('libcoro')
 
-nxt_mdspan_dep = dependency('mdspan',
-                            method : 'cmake',
-                            modules : ['std::mdspan'])
-
 nxt_mdspan_args = [
   '-DMDSPAN_USE_BRACKET_OPERATOR=1',
   '-DMDSPAN_USE_PAREN_OPERATOR=0',
-  '-DMDSPAN_HAS_CXX_17=1',
 ]
 
-nxt_inc = include_directories('src')
+nxt_inc = include_directories(
+  'src',
+  'subprojects/mdspan/include',
+)
 
 nxt_core_deps = [
   nxt_fmt_dep,
-  nxt_mdspan_dep,
 ]
 
 nxt_core_sources = files(

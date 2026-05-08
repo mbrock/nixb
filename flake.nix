@@ -69,21 +69,6 @@
             ];
           };
 
-          mdspan = mkDerivation {
-            pname = "mdspan";
-            version = "0.6.0";
-            src = pkgs.fetchFromGitHub {
-              owner = "kokkos";
-              repo = "mdspan";
-              rev = "mdspan-0.6.0";
-              hash = "sha256-bwE+NO/n9XsWOp3GjgLHz3s0JR0CzNDernfLHVqU9Z8=";
-            };
-            nativeBuildInputs = [ pkgs.cmake ];
-            cmakeFlags = [
-              "-DMDSPAN_ENABLE_TESTS=OFF"
-              "-DMDSPAN_ENABLE_BENCHMARKS=OFF"
-            ];
-          };
           fmtVersion = { version, hash } : with pkgs;
               stdenv.mkDerivation {
       pname = "fmt";
@@ -156,7 +141,6 @@
 
               libcoro
               mp-units
-              mdspan
               fmt
               pkgs.cli11
 
