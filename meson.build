@@ -109,6 +109,7 @@ nxb_sources = files(
 # Suppress warnings from nix headers
 nix_warning_args = [
   '-Wno-unused-parameter',
+  '-Wno-missing-field-initializers',
   '-Wno-missing-designated-field-initializers',
 ]
 
