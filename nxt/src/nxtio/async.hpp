@@ -19,7 +19,7 @@
 #include <coro/task.hpp>
 #include <coro/when_any.hpp>
 
-namespace nxb {
+namespace nxt {
 
 template<typename T = void>
 using task = coro::task<T>;
@@ -32,7 +32,7 @@ using generator = coro::generator<T>;
 
 // coro::semaphore<max_value> is a counting semaphore with compile-time max
 // Use directly when you know the max at compile time:
-//   nxb::semaphore<16> slots;
+//   nxt::semaphore<16> slots;
 template<std::ptrdiff_t max_value>
 using semaphore = coro::semaphore<max_value>;
 
@@ -61,4 +61,4 @@ inline auto start(io_scheduler & sched, task<> t)
     return sched.schedule(std::move(t));
 }
 
-} // namespace nxb
+} // namespace nxt

@@ -6,18 +6,18 @@
 
 #include <iosfwd>
 
-namespace nxb::ui {
+namespace nxt::ui {
 
 /// Double-buffered terminal compositor with HUD/scroll region support.
 class TerminalCompositor
 {
 public:
-    TerminalCompositor(nxb::Size size, GlyphTable & glyphs);
-    void resize(nxb::Size size);
+    TerminalCompositor(nxt::Size size, GlyphTable & glyphs);
+    void resize(nxt::Size size);
 
     Raster & back_buffer() noexcept;
     GlyphTable & glyphs() const noexcept;
-    nxb::Size size() const noexcept;
+    nxt::Size size() const noexcept;
 
     /// Set HUD height. In HUD mode, one separator row is reserved above the
     /// HUD and the scroll region ends above that separator. If the HUD plus
@@ -41,4 +41,4 @@ private:
         terminal_origin_v + 0 * ln}; // row where HUD starts
 };
 
-} // namespace nxb::ui
+} // namespace nxt::ui

@@ -6,7 +6,7 @@
 #include <ranges>
 #include <span>
 
-namespace nxb {
+namespace nxt {
 
 // ============================================================================
 // Data types
@@ -152,4 +152,4 @@ void diff_rasters(const Raster & front, const Raster & back, F && emit)
         emit(style(raw));
 }
 
-} // namespace nxb
+} // namespace nxt

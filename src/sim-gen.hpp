@@ -23,7 +23,7 @@
 
 #include <fmt/format.h>
 
-#include <nxt/async.hpp>
+#include <nxtio/async.hpp>
 #include "drv-graph.hpp"
 #include "nix-log-adapter.hpp"
 
@@ -326,7 +326,7 @@ inline SimTime estimate_sub_duration(
 // The Generator
 // ============================================================================
 
-inline nxb::generator<NixLogEvent> generate_events(drv::Graph& graph, Config config = {})
+inline nxt::generator<NixLogEvent> generate_events(drv::Graph& graph, Config config = {})
 {
     if (graph.nodes.empty())
         co_return;
@@ -478,7 +478,7 @@ inline nxb::generator<NixLogEvent> generate_events(drv::Graph& graph, Config con
 // Timed generator - yields events with virtual timestamps
 // ============================================================================
 
-inline nxb::generator<TimedEvent> generate_timed_events(drv::Graph& graph, Config config = {})
+inline nxt::generator<TimedEvent> generate_timed_events(drv::Graph& graph, Config config = {})
 {
     if (graph.nodes.empty())
         co_return;

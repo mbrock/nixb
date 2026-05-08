@@ -6,7 +6,7 @@
 #include <iostream>
 #include <string_view>
 
-namespace nxb::ui {
+namespace nxt::ui {
 namespace {
 
 constexpr auto separator_height = 1 * ln;
@@ -80,7 +80,7 @@ constexpr std::string_view separator_glyph = "▔";
 } // namespace
 
 TerminalCompositor::TerminalCompositor(
-    const nxb::Size size, GlyphTable & glyphs)
+    const nxt::Size size, GlyphTable & glyphs)
     : front_(size.w, size.h, glyphs)
     , back_(size.w, size.h, glyphs)
     , glyphs_(glyphs)
@@ -90,7 +90,7 @@ TerminalCompositor::TerminalCompositor(
 {
 }
 
-void TerminalCompositor::resize(nxb::Size size)
+void TerminalCompositor::resize(nxt::Size size)
 {
     // In HUD mode, the raster only covers HUD rows; fullscreen layouts use
     // the whole terminal.
@@ -237,7 +237,7 @@ GlyphTable & TerminalCompositor::glyphs() const noexcept
     return glyphs_;
 }
 
-nxb::Size TerminalCompositor::size() const noexcept
+nxt::Size TerminalCompositor::size() const noexcept
 {
     return {back_.width(), back_.height()};
 }
@@ -344,4 +344,4 @@ void TerminalCompositor::present_frame(std::ostream & out)
     back_ = front_;
 }
 
-} // namespace nxb::ui
+} // namespace nxt::ui

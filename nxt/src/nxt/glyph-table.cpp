@@ -2,7 +2,7 @@
 
 #include <stdexcept>
 
-namespace nxb {
+namespace nxt {
 
 GlyphTable::GlyphTable()
 {
@@ -95,4 +95,4 @@ void GlyphTable::clear()
     init_ascii();
 }
 
-} // namespace nxb
+} // namespace nxt

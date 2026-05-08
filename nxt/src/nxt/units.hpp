@@ -12,7 +12,7 @@
 
 #include <mp-units/framework.h>
 
-namespace nxb {
+namespace nxt {
 
 using namespace mp_units;
 
@@ -244,4 +244,4 @@ struct Pos
     return to_ansi(pos.y);
 }
 
-} // namespace nxb
+} // namespace nxt

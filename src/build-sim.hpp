@@ -10,7 +10,7 @@
 //
 // Usage:
 //   auto graph = nxb::drv::build_graph(ctx, roots);
-//   nxb::queue<nxb::sim::Event> events;
+//   nxt::queue<nxb::sim::Event> events;
 //   nxb::sim::Simulator sim(runtime, graph, events);
 //   co_await runtime.run(
 //       sim.build(root_indices),
@@ -28,9 +28,9 @@
 #include <variant>
 #include <vector>
 
-#include <nxt/async.hpp>
-#include <nxt/scope.hpp>
-#include <nxt/app.hpp>
+#include <nxtio/async.hpp>
+#include <nxtio/scope.hpp>
+#include <nxtio/app.hpp>
 
 #include "drv-graph.hpp"
 
@@ -141,7 +141,7 @@ public:
     {
     }
 
-    nxb::task<> acquire()
+    nxt::task<> acquire()
     {
         while (count_ == 0) {
             co_await event_;
@@ -166,7 +166,7 @@ public:
 
 private:
     std::size_t count_;
-    nxb::event event_;
+    nxt::event event_;
 };
 
 // ============================================================================
@@ -178,7 +178,7 @@ class Simulator
 public:
     Config config;
 
-    Simulator(nxb::ui::UIRuntime& runtime, drv::Graph& graph, std::shared_ptr<nxb::publication<Event>> events)
+    Simulator(nxt::ui::UIRuntime& runtime, drv::Graph& graph, std::shared_ptr<nxt::publication<Event>> events)
         : runtime_(runtime)
         , graph_(graph)
         , events_(std::move(events))
@@ -189,7 +189,7 @@ public:
     }
 
     // Build the given root nodes - returns when all complete
-    nxb::task<> build(const std::vector<NodeIndex>& /* roots */)
+    nxt::task<> build(const std::vector<NodeIndex>& /* roots */)
     {
         // Reset state
         build_slots_.reset(config.max_jobs);
@@ -218,11 +218,11 @@ public:
 
         // Create completion events for all nodes
         for (std::size_t i = 0; i < graph_.nodes.size(); ++i) {
-            goal_complete_.emplace_back(std::make_unique<nxb::event>());
+            goal_complete_.emplace_back(std::make_unique<nxt::event>());
         }
 
         // Build a vector of all goal tasks
-        std::vector<nxb::task<>> goal_tasks;
+        std::vector<nxt::task<>> goal_tasks;
         goal_tasks.reserve(graph_.nodes.size());
         for (std::size_t i = 0; i < graph_.nodes.size(); ++i) {
             goal_tasks.push_back(run_goal(i));
@@ -230,7 +230,7 @@ public:
 
         // Run all goals concurrently using when_all
         // This actually drives the coroutines
-        co_await nxb::when_all(std::move(goal_tasks));
+        co_await nxt::when_all(std::move(goal_tasks));
     }
 
     // Stats
@@ -241,14 +241,14 @@ public:
 
 private:
     // Returns false if we should stop (cancelled/disconnected)
-    nxb::task<bool> emit(Event ev)
+    nxt::task<bool> emit(Event ev)
     {
         try {
             co_await events_->push(std::move(ev));
             co_return true;
-        } catch (const nxb::cancelled &) {
+        } catch (const nxt::cancelled &) {
             co_return false;
-        } catch (const nxb::disconnected &) {
+        } catch (const nxt::disconnected &) {
             co_return false;
         }
     }
@@ -341,7 +341,7 @@ private:
     }
 
     // A single goal coroutine - mirrors Nix's DerivationGoal
-    nxb::task<> run_goal(NodeIndex idx)
+    nxt::task<> run_goal(NodeIndex idx)
     {
         auto* node = graph_.get(idx);
 
@@ -444,9 +444,9 @@ private:
         co_await emit(GoalComplete{idx, true});
     }
 
-    nxb::ui::UIRuntime& runtime_;
+    nxt::ui::UIRuntime& runtime_;
     drv::Graph& graph_;
-    std::shared_ptr<nxb::publication<Event>> events_;
+    std::shared_ptr<nxt::publication<Event>> events_;
     std::mt19937 rng_;
 
     Semaphore build_slots_;
@@ -454,7 +454,7 @@ private:
 
     std::vector<bool> will_substitute_;
     std::vector<SimTime> durations_;
-    std::vector<std::unique_ptr<nxb::event>> goal_complete_;
+    std::vector<std::unique_ptr<nxt::event>> goal_complete_;
 
     std::atomic<std::size_t> completed_count_{0};
 };

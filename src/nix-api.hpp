@@ -110,7 +110,7 @@ public:
     }
 
     // Use TrivialStore with UI runtime for integration
-    NixContext(ui::UIRuntime & runtime)
+    NixContext(nxt::ui::UIRuntime & runtime)
         : eval_settings_(read_only_mode_)
     {
         nix::initGC();

@@ -1,4 +1,4 @@
-#include "nxt/signal-pipe.hpp"
+#include "nxtio/signal-pipe.hpp"
 
 #include <cerrno>
 #include <csignal>
@@ -6,7 +6,7 @@
 #include <stdexcept>
 #include <unistd.h>
 
-namespace nxb::ui {
+namespace nxt::ui {
 
 int SignalPipe::s_write_fd = -1;
 
@@ -91,4 +91,4 @@ void SignalPipe::install_handler(const int sig)
     sigaction(sig, &sa, nullptr);
 }
 
-} // namespace nxb::ui
+} // namespace nxt::ui

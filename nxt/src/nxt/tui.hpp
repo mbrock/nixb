@@ -9,7 +9,7 @@
 #include <string>
 #include <string_view>
 
-namespace nxb::tui {
+namespace nxt::tui {
 
 // ============================================================================
 // Core Types
@@ -622,4 +622,4 @@ auto list(const std::vector<T> & items, ViewFn && view)
     return list(std::span<const T>(items), std::forward<ViewFn>(view));
 }
 
-} // namespace nxb::tui
+} // namespace nxt::tui

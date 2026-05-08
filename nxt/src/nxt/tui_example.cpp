@@ -1,5 +1,5 @@
-#include "nxt/app.hpp"
-#include "nxt/async.hpp"
+#include "nxtio/app.hpp"
+#include "nxtio/async.hpp"
 #include "nxt/tui.hpp"
 #include "nxt/units.hpp"
 
@@ -7,9 +7,9 @@
 #include <random>
 #include <vector>
 
-namespace nxb::tui_example {
+namespace nxt::tui_example {
 
-using namespace nxb::tui;
+using namespace nxt::tui;
 
 struct Activity
 {
@@ -44,27 +44,21 @@ const std::vector<std::string> fake_logs = {
 int example(int argc, char * argv[])
 {
     using namespace std::chrono_literals;
-    using namespace nxb::tui_example;
-    using nxb::percent;
+    using namespace nxt::tui_example;
+    using nxt::percent;
 
     int steps = 100;
     if (argc > 1 && std::string_view(argv[1]) == "--steps")
         steps = std::stoi(argv[2]);
 
-    return nxb::ui::run(
+    return nxt::ui::run(
         std::vector<Activity>({
             {"nixpkgs.tar.gz"},
             {"rustc.tar.xz"},
             {"llvm-17.src.tar.xz"},
         }),
         [](auto & state) {
-            // Fixed-height HUD: header + hrule + 3 activities + hrule = 6
-            // rows No flex-grow means scroll region above for logs
             return column(
-                // styled_text(
-                //     span("Build ", fg(Rgba8::magenta()) | bold),
-                //     span("Progress", fg(Rgba8::blue()) | italic)),
-                // hrule(),
                 list(
                     state,
                     [](const auto & act) {
@@ -87,12 +81,11 @@ int example(int argc, char * argv[])
                                      : fg(Rgba8::white()))
                                     | bold));
                     })
-                // hrule()
             );
         },
         [n = steps](
-            nxb::ui::UIRuntime & runtime,
-            std::vector<Activity> & state) -> nxb::task<> {
+            nxt::ui::UIRuntime & runtime,
+            std::vector<Activity> & state) -> nxt::task<> {
             std::mt19937 rng(42);
             std::uniform_int_distribution<std::size_t> log_dist(
                 0, fake_logs.size() - 1);
@@ -122,9 +115,9 @@ int example(int argc, char * argv[])
         });
 }
 
-} // namespace nxb::tui_example
+} // namespace nxt::tui_example
 
 int main(int argc, char * argv[])
 {
-    return nxb::tui_example::example(argc, argv);
+    return nxt::tui_example::example(argc, argv);
 }

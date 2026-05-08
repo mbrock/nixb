@@ -3,7 +3,7 @@
 #include <array>
 #include <optional>
 
-namespace nxb::ui {
+namespace nxt::ui {
 
 /// Portable async-signal-safe signal delivery via pipe.
 /// Write end is written to from signal handlers (async-signal-safe).
@@ -56,4 +56,4 @@ private:
     static int s_write_fd;
 };
 
-} // namespace nxb::ui
+} // namespace nxt::ui

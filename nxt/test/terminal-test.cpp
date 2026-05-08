@@ -1,15 +1,15 @@
-#include "../vterm-wrapper.hpp"
+#include "vterm-wrapper.hpp"
 #include <nxt/ansi.hpp>
-#include <nxt/app.hpp>
+#include <nxtio/app.hpp>
 #include <nxt/tui.hpp>
 
 #include <boost/ut.hpp>
 #include <sstream>
 
-namespace nxb::test {
+namespace nxt::test {
 
 using namespace boost::ut;
-namespace tui = nxb::tui;
+namespace tui = nxt::tui;
 
 // ============================================================================
 // Test helpers
@@ -69,7 +69,7 @@ void write_at(vterm::Terminal & term, row_t row, std::string_view text)
 {
     ansi::mode = ansi::Mode::enabled;
     fmt::memory_buffer buf;
-    nxb::ansi::Writer w(buf);
+    nxt::ansi::Writer w(buf);
     w.move_to(Pos{terminal_origin + 0 * ch, row});
     w.text(text);
     term.write(std::string_view(buf.data(), buf.size()));
@@ -80,7 +80,7 @@ void println_at(vterm::Terminal & term, row_t row, std::string_view text)
 {
     ansi::mode = ansi::Mode::enabled;
     fmt::memory_buffer buf;
-    nxb::ansi::Writer w(buf);
+    nxt::ansi::Writer w(buf);
     w.move_to(Pos{terminal_origin + 0 * ch, row});
     w.text(text);
     w.clear_line_from_cursor();
@@ -313,7 +313,7 @@ suite scroll_region_tests = [] {
 
         // Set scroll region
         fmt::memory_buffer buf;
-        nxb::ansi::Writer sw(buf);
+        nxt::ansi::Writer sw(buf);
         sw.set_scroll_region(
             terminal_origin_v + 0 * ln, terminal_origin_v + 2 * ln);
         term.write(std::string_view(buf.data(), buf.size()));
@@ -397,7 +397,7 @@ suite diff_tests = [] {
     };
 };
 
-} // namespace nxb::test
+} // namespace nxt::test
 
 int main()
 {

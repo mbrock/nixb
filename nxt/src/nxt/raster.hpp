@@ -14,7 +14,7 @@
 #include "nxt/glyph-table.hpp"
 #include "nxt/units.hpp"
 
-namespace nxb {
+namespace nxt {
 
 /// Terminal color: packed into 32 bits.
 ///
@@ -675,4 +675,4 @@ inline auto zip_rows(const Raster & front, const Raster & back)
              });
 }
 
-} // namespace nxb
+} // namespace nxt

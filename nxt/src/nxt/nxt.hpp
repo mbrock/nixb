@@ -3,6 +3,6 @@
 
 #pragma once
 
-#include "nxt/app.hpp"   // Application runtime
+#include "nxtio/app.hpp"   // Application runtime
 #include "nxt/tui.hpp"   // Declarative layout framework
 #include "nxt/units.hpp" // Type-safe coordinate system

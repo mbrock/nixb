@@ -12,7 +12,7 @@
 #include <string_view>
 #include <vector>
 
-namespace nxb::vterm {
+namespace nxt::vterm {
 
 /// Wrapper for VTermColor with convenient constructors
 struct Color
@@ -346,4 +346,4 @@ private:
     VTermScreen * screen_ = nullptr;
 };
 
-} // namespace nxb::vterm
+} // namespace nxt::vterm

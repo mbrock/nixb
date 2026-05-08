@@ -9,12 +9,12 @@
 // 4. Keep it minimal - don't duplicate what libcoro already does well
 //
 // Usage pattern:
-//   nxb::scope s(scheduler);            // Creates a cancellation scope
-//   nxb::channel<Event> ch;             // Channel for producer-consumer
+//   nxt::scope s(scheduler);            // Creates a cancellation scope
+//   nxt::channel<Event> ch;             // Channel for producer-consumer
 //
 //   co_await s.run(                     // Runs tasks until one completes, then cancels
-//       producer(nxb::publish(ch, s)),  // Producer gets publication handle
-//       consumer(nxb::subscribe(ch, s)) // Consumer gets subscription handle
+//       producer(nxt::publish(ch, s)),  // Producer gets publication handle
+//       consumer(nxt::subscribe(ch, s)) // Consumer gets subscription handle
 //   );
 //
 // When producer finishes: channel closes, consumer sees nullopt
@@ -29,9 +29,9 @@
 
 #include <coro/when_any.hpp>
 
-#include "nxt/async.hpp"
+#include "nxtio/async.hpp"
 
-namespace nxb {
+namespace nxt {
 
 /// Exception thrown when an operation is cancelled.
 struct cancelled : std::exception
@@ -122,7 +122,7 @@ public:
     void check() const
     {
         if (cancelled())
-            throw nxb::cancelled{};
+            throw nxt::cancelled{};
     }
 
     /// Run tasks until one completes, then cancel the scope.
@@ -353,4 +353,4 @@ template<typename T>
     return publication<T>(ch, s);
 }
 
-} // namespace nxb
+} // namespace nxt

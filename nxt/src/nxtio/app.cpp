@@ -3,17 +3,17 @@
 #include <csignal>
 #include <iostream>
 
-#include "nxt/app.hpp"
+#include "nxtio/app.hpp"
 #include "nxt/ansi.hpp"
-#include "nxt/async.hpp"
-#include "nxt/scope.hpp"
+#include "nxtio/async.hpp"
+#include "nxtio/scope.hpp"
 #include "nxt/units.hpp"
 
-namespace nxb::ui {
+namespace nxt::ui {
 
 UIRuntime::UIRuntime()
     : scheduler_(
-          nxb::io_scheduler::make_shared(nxb::io_scheduler::options{}))
+          nxt::io_scheduler::make_shared(nxt::io_scheduler::options{}))
 {
     signals_.watch(SIGINT, SIGTERM, SIGWINCH);
     refresh_terminal_size();
@@ -56,12 +56,12 @@ TermSize UIRuntime::terminal_size() const noexcept
     return TermSize{terminal_width(), terminal_height()};
 }
 
-nxb::width_t UIRuntime::terminal_width() const noexcept
+nxt::width_t UIRuntime::terminal_width() const noexcept
 {
     return term_width_.load(std::memory_order_acquire);
 }
 
-nxb::height_t UIRuntime::terminal_height() const noexcept
+nxt::height_t UIRuntime::terminal_height() const noexcept
 {
     return term_height_.load(std::memory_order_acquire);
 }
@@ -146,11 +146,11 @@ TerminalCompositor & UIRuntime::compositor() noexcept
     return *compositor_;
 }
 
-nxb::task<> UIRuntime::signal_loop()
+nxt::task<> UIRuntime::signal_loop()
 {
     while (!shutdown_requested()) {
         // Poll the signal pipe for readability
-        co_await scheduler_->poll(signals_.read_fd(), nxb::poll_op::read);
+        co_await scheduler_->poll(signals_.read_fd(), nxt::poll_op::read);
 
         // Drain all pending signals
         while (auto sig = signals_.try_read()) {
@@ -180,4 +180,4 @@ nxb::task<> UIRuntime::signal_loop()
     co_return;
 }
 
-} // namespace nxb::ui
+} // namespace nxt::ui

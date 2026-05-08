@@ -8,7 +8,7 @@
 
 #include "nxt/units.hpp"
 
-namespace nxb::ansi {
+namespace nxt::ansi {
 
 /// ANSI output modes
 enum class Mode {
@@ -189,4 +189,4 @@ private:
     bool enabled_{false};
 };
 
-} // namespace nxb::ansi
+} // namespace nxt::ansi

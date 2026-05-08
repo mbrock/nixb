@@ -1,5 +1,5 @@
 #include "log-replay.hpp"
-#include "nxt/app.hpp"
+#include "nxtio/app.hpp"
 
 #include <charconv>
 #include <ext/stdio_filebuf.h>
@@ -135,7 +135,7 @@ ParsedLine parse_line(std::string_view line)
 } // anonymous namespace
 
 coro::task<> replay_file(
-    nxb::ui::UIRuntime & runtime,
+    nxt::ui::UIRuntime & runtime,
     std::istream & input,
     coro::queue<Event> & queue,
     bool realtime,
@@ -174,7 +174,7 @@ coro::task<> replay_file(
 }
 
 coro::task<> replay_file(
-    nxb::ui::UIRuntime & runtime,
+    nxt::ui::UIRuntime & runtime,
     const std::string & path,
     coro::queue<Event> & queue,
     bool realtime,

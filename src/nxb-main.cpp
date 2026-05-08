@@ -10,7 +10,7 @@
 #include "drv-graph.hpp"
 #include "nix-api.hpp"
 #include "nix-log-adapter.hpp"
-#include "nxt/app.hpp"
+#include "nxtio/app.hpp"
 #include "nxt/tui.hpp"
 #include "sim-gen.hpp"
 
@@ -68,7 +68,7 @@ struct TuiSimState
         int64_t id = 0;
         std::string label;
         bool substitution = false;
-        nxb::percent_t progress{0.0 * nxb::percent};
+        nxt::percent_t progress{0.0 * nxt::percent};
     };
 
     std::size_t total = 0;
@@ -91,12 +91,12 @@ std::string fit_label(std::string text, std::size_t width)
     return text.substr(0, width - 1) + "…";
 }
 
-nxb::percent_t percent_of(int64_t done, int64_t total)
+nxt::percent_t percent_of(int64_t done, int64_t total)
 {
     if (total <= 0)
-        return 0.0 * nxb::percent;
+        return 0.0 * nxt::percent;
     return (100.0 * static_cast<double>(done)
-            / static_cast<double>(total)) * nxb::percent;
+            / static_cast<double>(total)) * nxt::percent;
 }
 
 std::vector<TuiSimState::ActiveItem>::iterator
@@ -107,8 +107,8 @@ find_active(TuiSimState& state, int64_t id)
     });
 }
 
-nxb::task<> run_tui_simulation(
-    nxb::ui::UIRuntime& runtime,
+nxt::task<> run_tui_simulation(
+    nxt::ui::UIRuntime& runtime,
     nxb::drv::Graph& graph,
     nxb::sim::Config config,
     float speed,
@@ -142,7 +142,7 @@ nxb::task<> run_tui_simulation(
                 started->id.value,
                 event_label(timed.event),
                 is_sub,
-                0.0 * nxb::percent});
+                0.0 * nxt::percent});
             if (is_build_start(timed.event))
                 ++state.active_builds;
             else if (is_sub)
@@ -187,7 +187,7 @@ int run_tui_simulation_app(
     nxb::sim::Config config,
     float speed)
 {
-    using namespace nxb::tui;
+    using namespace nxt::tui;
 
     TuiSimState initial{
         .total = graph.nodes.size(),
@@ -195,14 +195,14 @@ int run_tui_simulation_app(
         .max_substitutions = config.max_substitutions,
     };
 
-    return nxb::ui::run(
+    return nxt::ui::run(
         std::move(initial),
         [](const TuiSimState& state) {
             return column(
                 list(state.active, [](const auto& item) {
                     const auto color = item.substitution
-                                           ? nxb::Rgba8::cyan()
-                                           : nxb::Rgba8::yellow();
+                                           ? nxt::Rgba8::cyan()
+                                           : nxt::Rgba8::yellow();
                     return row(
                         text(fmt::format("{:<28}", fit_label(item.label, 28)),
                              fg(color)),
@@ -210,13 +210,13 @@ int run_tui_simulation_app(
                         text(fmt::format(" {:>3.0f}%",
                                          item.progress
                                              .force_numerical_value_in(
-                                                 nxb::percent)),
+                                                 nxt::percent)),
                              fg(color) | bold));
                 }));
         },
         [&graph, config, speed](
-            nxb::ui::UIRuntime& runtime,
-            TuiSimState& state) -> nxb::task<> {
+            nxt::ui::UIRuntime& runtime,
+            TuiSimState& state) -> nxt::task<> {
             co_await run_tui_simulation(
                 runtime, graph, config, speed, state);
         });

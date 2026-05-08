@@ -10,7 +10,7 @@
 #include <termios.h>
 #include <unistd.h>
 
-namespace nxb::ansi {
+namespace nxt::ansi {
 
 Mode mode = Mode::disabled;
 
@@ -594,4 +594,4 @@ SynchronizedUpdate::~SynchronizedUpdate()
         end_synchronized_update();
 }
 
-} // namespace nxb::ansi
+} // namespace nxt::ansi

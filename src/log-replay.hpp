@@ -6,7 +6,7 @@
 #include <istream>
 #include <string>
 
-#include "nxt/app.hpp"
+#include "nxtio/app.hpp"
 #include "nix-log-adapter.hpp"
 
 #include <nxt/units.hpp>
@@ -23,7 +23,7 @@ using Event = nix_event::NixLogEvent;
 /// timestamps. If speed > 1.0, playback is faster; if < 1.0,
 /// slower. Pass a stop_token to enable cancellation.
 coro::task<> replay_file(
-    nxb::ui::UIRuntime & runtime,
+    nxt::ui::UIRuntime & runtime,
     int fd,
     std::istream & input,
     coro::queue<Event> & queue,
@@ -32,7 +32,7 @@ coro::task<> replay_file(
 
 /// Replay from a file path (opens/closes the file).
 coro::task<> replay_file(
-    nxb::ui::UIRuntime & runtime,
+    nxt::ui::UIRuntime & runtime,
     const std::string & path,
     coro::queue<Event> & queue,
     bool realtime = true,

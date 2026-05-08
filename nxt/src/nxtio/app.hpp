@@ -8,11 +8,11 @@
 #include <cmath>
 
 #include "nxt/ansi.hpp"
-#include "nxt/async.hpp"
+#include "nxtio/async.hpp"
 #include "nxt/compositor.hpp"
 #include "nxt/glyph-table.hpp"
 #include "nxt/raster.hpp"
-#include "nxt/signal-pipe.hpp"
+#include "nxtio/signal-pipe.hpp"
 #include "nxt/units.hpp"
 
 #include <mp-units/framework.h>
@@ -21,9 +21,9 @@
 #include <mp-units/systems/si/chrono.h>
 #include <mp-units/systems/si/units.h>
 
-namespace nxb::ui {
+namespace nxt::ui {
 
-using TermSize = nxb::Size;
+using TermSize = nxt::Size;
 
 // Re-export TerminalGuard for convenience
 using ansi::TerminalGuard;
@@ -44,7 +44,7 @@ public:
     UIRuntime & operator=(UIRuntime &&) = delete;
 
     /// Access the scheduler.
-    [[nodiscard]] nxb::io_scheduler & scheduler() noexcept
+    [[nodiscard]] nxt::io_scheduler & scheduler() noexcept
     {
         return *scheduler_;
     }
@@ -65,14 +65,14 @@ public:
     void request_shutdown();
 
     /// Run a task, then request shutdown when it completes.
-    nxb::task<> shutdown_after(nxb::task<> t)
+    nxt::task<> shutdown_after(nxt::task<> t)
     {
         co_await t;
         request_shutdown();
     }
 
     template<class rep_type, class period_type>
-    nxb::task<> sleep(std::chrono::duration<rep_type, period_type> duration)
+    nxt::task<> sleep(std::chrono::duration<rep_type, period_type> duration)
     {
         co_await scheduler().yield_for(duration);
     }
@@ -97,7 +97,7 @@ public:
         for (auto & task : {std::forward<Tasks>(tasks)...}) {
             scheduler().schedule(std::move(task));
         }
-        return nxb::when_all(std::forward<Tasks>(tasks)...);
+        return nxt::when_all(std::forward<Tasks>(tasks)...);
     }
 
     // =========================================================================
@@ -127,7 +127,7 @@ public:
     /// Note: pass by value to avoid dangling references in
     /// coroutine.
     template<typename BuildUI>
-    nxb::task<> run_render_loop(
+    nxt::task<> run_render_loop(
         BuildUI build_ui,
         std::chrono::milliseconds frame_time = std::chrono::milliseconds{
             16})
@@ -170,20 +170,20 @@ public:
 
     /// Coroutine that handles signals from the pipe.
     /// Should be run as part of the main task group.
-    nxb::task<> signal_loop();
+    nxt::task<> signal_loop();
 
     // =========================================================================
     // Low-level access (for advanced use)
     // =========================================================================
 
     /// Channel for resize notifications.
-    nxb::queue<TermSize> & resize_channel() noexcept
+    nxt::queue<TermSize> & resize_channel() noexcept
     {
         return resize_queue_;
     }
 
     /// Event signaled when damage occurs.
-    nxb::event & damage_event() noexcept
+    nxt::event & damage_event() noexcept
     {
         return damage_event_;
     }
@@ -245,16 +245,16 @@ private:
         });
     }
 
-    std::shared_ptr<nxb::io_scheduler> scheduler_;
+    std::shared_ptr<nxt::io_scheduler> scheduler_;
     GlyphTable glyphs_;
     std::unique_ptr<TerminalCompositor> compositor_;
     SignalPipe signals_;
 
-    nxb::event damage_event_;
-    nxb::queue<TermSize> resize_queue_;
+    nxt::event damage_event_;
+    nxt::queue<TermSize> resize_queue_;
 
-    std::atomic<nxb::width_t> term_width_{80 * ch};
-    std::atomic<nxb::height_t> term_height_{24 * ln};
+    std::atomic<nxt::width_t> term_width_{80 * ch};
+    std::atomic<nxt::height_t> term_height_{24 * ln};
     std::atomic<std::uint64_t> damage_counter_{0};
     bool has_smoothed_hud_height_{false};
     double smoothed_hud_rows_{0.0};
@@ -270,7 +270,7 @@ private:
 /// Run a TUI application.
 /// - initial_state: the starting state
 /// - build_ui: (const State&) → Layout
-/// - update: (UIRuntime&, State&) → nxb::task<> (should call
+/// - update: (UIRuntime&, State&) → nxt::task<> (should call
 /// request_shutdown)
 template<typename State, typename BuildUI, typename Update>
 int run(State initial_state, BuildUI build_ui, Update update)
@@ -278,7 +278,7 @@ int run(State initial_state, BuildUI build_ui, Update update)
     UIRuntime runtime;
     State state = std::move(initial_state);
 
-    std::vector<nxb::task<>> tasks;
+    std::vector<nxt::task<>> tasks;
     try {
         TerminalGuard guard;
 
@@ -287,7 +287,7 @@ int run(State initial_state, BuildUI build_ui, Update update)
             [&state, build_ui] { return build_ui(state); }));
         tasks.push_back(update(runtime, state));
 
-        nxb::sync_wait(nxb::when_all(std::move(tasks)));
+        nxt::sync_wait(nxt::when_all(std::move(tasks)));
         runtime.cleanup();
     } catch (const std::exception & e) {
         runtime.cleanup();
@@ -301,4 +301,4 @@ int run(State initial_state, BuildUI build_ui, Update update)
     return 0;
 }
 
-} // namespace nxb::ui
+} // namespace nxt::ui

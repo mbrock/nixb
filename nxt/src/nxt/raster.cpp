@@ -8,7 +8,7 @@
 
 #include "nxt/raster.hpp"
 
-namespace nxb {
+namespace nxt {
 
 namespace {
 
@@ -248,4 +248,4 @@ const_emphasis_view_t Raster::ems_2d() const noexcept
         ems_storage_.data(), row_major_mapping(rows, cols));
 }
 
-} // namespace nxb
+} // namespace nxt

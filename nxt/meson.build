@@ -1,0 +1,120 @@
+nxt_fmt_dep = dependency('fmt')
+nxt_boost_dep = dependency('boost')
+nxt_libcoro_dep = dependency('libcoro')
+nxt_tbb_dep = dependency('tbb')
+
+nxt_mpunits_dep = dependency('mp-units',
+                             method : 'cmake',
+                             modules : ['mp-units::mp-units'])
+nxt_mdspan_dep = dependency('mdspan',
+                            method : 'cmake',
+                            modules : ['std::mdspan'])
+
+nxt_mdspan_args = [
+  '-DMDSPAN_USE_BRACKET_OPERATOR=1',
+  '-DMDSPAN_USE_PAREN_OPERATOR=0',
+  '-DMDSPAN_HAS_CXX_17=1',
+]
+
+nxt_inc = include_directories('src')
+
+nxt_core_deps = [
+  nxt_fmt_dep,
+  nxt_boost_dep,
+  nxt_mpunits_dep,
+  nxt_mdspan_dep,
+  nxt_tbb_dep,
+]
+
+nxt_core_sources = files(
+  'src/nxt/ansi.cpp',
+  'src/nxt/compositor.cpp',
+  'src/nxt/glyph-table.cpp',
+  'src/nxt/raster.cpp',
+)
+
+nxt_core_lib = static_library('nxt-core',
+  nxt_core_sources,
+  include_directories : nxt_inc,
+  dependencies : nxt_core_deps,
+  cpp_args : nxt_mdspan_args,
+)
+
+nxt_core_dep = declare_dependency(
+  link_with : nxt_core_lib,
+  include_directories : nxt_inc,
+  dependencies : nxt_core_deps,
+  compile_args : nxt_mdspan_args,
+)
+
+nxt_runtime_deps = [
+  nxt_core_dep,
+  nxt_libcoro_dep,
+]
+
+nxt_runtime_sources = files(
+  'src/nxtio/app.cpp',
+  'src/nxtio/signal-pipe.cpp',
+)
+
+nxt_lib = static_library('nxt',
+  nxt_runtime_sources,
+  include_directories : nxt_inc,
+  dependencies : nxt_runtime_deps,
+)
+
+nxt_dep = declare_dependency(
+  link_with : nxt_lib,
+  include_directories : nxt_inc,
+  dependencies : nxt_runtime_deps,
+)
+
+executable('tui_example',
+  'src/nxt/tui_example.cpp',
+  include_directories : nxt_inc,
+  dependencies : [nxt_dep],
+)
+
+nxt_test_inc = include_directories('test')
+
+nxt_libvterm_sources = files(
+  'subprojects/libvterm/src/encoding.c',
+  'subprojects/libvterm/src/keyboard.c',
+  'subprojects/libvterm/src/mouse.c',
+  'subprojects/libvterm/src/parser.c',
+  'subprojects/libvterm/src/pen.c',
+  'subprojects/libvterm/src/screen.c',
+  'subprojects/libvterm/src/state.c',
+  'subprojects/libvterm/src/unicode.c',
+  'subprojects/libvterm/src/vterm.c',
+)
+
+nxt_libvterm = static_library('vterm',
+  nxt_libvterm_sources,
+  include_directories : include_directories(
+    'subprojects/libvterm/include',
+    'subprojects/libvterm/src'
+  ),
+  c_args : ['-I' + meson.current_build_dir()],
+  override_options : ['warning_level=0'],
+)
+
+nxt_libvterm_dep = declare_dependency(
+  link_with : nxt_libvterm,
+  include_directories : include_directories('subprojects/libvterm/include'),
+)
+
+nxt_raster_test = executable('raster-test',
+  'test/raster-test.cpp',
+  include_directories : [nxt_inc, nxt_test_inc],
+  dependencies : [nxt_core_dep],
+)
+
+nxt_terminal_test = executable('terminal-test',
+  'test/terminal-test.cpp',
+  include_directories : [nxt_inc, nxt_test_inc],
+  dependencies : [nxt_dep, nxt_libvterm_dep],
+)
+
+test('raster-test', nxt_raster_test)
+test('terminal-test', nxt_terminal_test)

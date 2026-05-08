@@ -5,13 +5,13 @@
 
 #include <boost/ut.hpp>
 
-namespace nxb::test {
+namespace nxt::test {
 
 using namespace boost::ut;
-using nxb::ChangeRun;
-using nxb::GlyphTable;
-using nxb::Raster;
-using nxb::Rgba8;
+using nxt::ChangeRun;
+using nxt::GlyphTable;
+using nxt::Raster;
+using nxt::Rgba8;
 
 // ============================================================================
 // Test helper: renders(layout) | "row1" | "row2" | "row3";
@@ -284,7 +284,7 @@ suite ansi_tests = [] {
     };
 };
 
-} // namespace nxb::test
+} // namespace nxt::test
 
 int main()
 {

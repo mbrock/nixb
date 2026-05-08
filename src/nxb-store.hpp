@@ -18,7 +18,7 @@
 #include <ranges>
 #include <vector>
 
-#include "nxt/app.hpp"
+#include "nxtio/app.hpp"
 
 namespace nxb {
 
@@ -57,7 +57,7 @@ struct TrivialStore : virtual nix::Store
     using Config = TrivialStoreConfig;
     nix::ref<const Config> config;
 
-    ui::UIRuntime & runtime;
+    nxt::ui::UIRuntime & runtime;
 
     struct StoredPath
     {
@@ -77,7 +77,7 @@ struct TrivialStore : virtual nix::Store
 
     mutable std::mutex storage_mutex;
 
-    TrivialStore(nix::ref<const Config> config, ui::UIRuntime & runtime)
+    TrivialStore(nix::ref<const Config> config, nxt::ui::UIRuntime & runtime)
         : nix::Store{*config}
         , config(config)
         , runtime(runtime)
@@ -284,7 +284,7 @@ inline nix::ref<nix::Store> TrivialStoreConfig::openStore() const
 
 // Helper to create a TrivialStore with UIRuntime reference
 inline std::shared_ptr<TrivialStore>
-makeTrivialStore(ui::UIRuntime & runtime)
+makeTrivialStore(nxt::ui::UIRuntime & runtime)
 {
     auto config =
         std::make_shared<TrivialStoreConfig>(nix::StoreConfig::Params{});
