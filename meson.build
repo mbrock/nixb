@@ -28,6 +28,7 @@ nix_cmd_dep = dependency('nix-cmd')
 fmt_dep = dependency('fmt')
 nlohmann_json_dep = dependency('nlohmann_json')
 tbb_dep = dependency('tbb')
+duckdb_dep = dependency('DuckDB', method : 'cmake')
 
 #add_project_arguments('-ftime-trace', language : 'cpp')
 
@@ -71,3 +72,10 @@ executable('nix-log-to-md',
   dependencies : [nlohmann_json_dep, fmt_dep],
   install : true,
 )
+
+duckdb_test = executable('duckdb-test',
+  'test/duckdb-test.cpp',
+  dependencies : [duckdb_dep],
+)
+
+test('duckdb-test', duckdb_test)

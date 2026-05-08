@@ -33,6 +33,17 @@ std::string body_from(const std::vector<http::event> & events)
     return body;
 }
 
+std::vector<http::server_sent_event>
+sse_from(const std::vector<http::event> & events)
+{
+    std::vector<http::server_sent_event> out;
+    for (const auto & ev : events) {
+        if (ev.kind == http::event_kind::sse)
+            out.push_back(ev.sse);
+    }
+    return out;
+}
+
 suite http_tests = [] {
     "serializes minimal request"_test = [] {
         http::request req{
@@ -129,6 +140,73 @@ suite http_tests = [] {
             std::make_move_iterator(closing.end()));
 
         expect(body_from(events) == "data: one\n\ndata: two\n\n");
+        expect(events.back().kind == http::event_kind::complete);
+        expect(parser.done());
+    };
+
+    "parses sse response body across arbitrary boundaries"_test = [] {
+        http::response_parser parser{http::response_body_mode::sse};
+        auto events = feed_all(
+            parser,
+            {
+                "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\n\r\n",
+                ": keepalive\n",
+                "event: build\nid: 7\ndata: start",
+                "\ndata: line two\n\n",
+                "data: done\n\n",
+            });
+
+        expect(!parser.done());
+        auto closing = parser.close();
+        events.insert(
+            events.end(),
+            std::make_move_iterator(closing.begin()),
+            std::make_move_iterator(closing.end()));
+
+        auto sse = sse_from(events);
+        expect(sse.size() == 2_ul);
+        expect(sse[0].type == "build");
+        expect(sse[0].id == "7");
+        expect(sse[0].data == "start\nline two");
+        expect(sse[1].type == "message");
+        expect(sse[1].id == "7");
+        expect(sse[1].data == "done");
+        expect(body_from(events).empty());
+        expect(events.back().kind == http::event_kind::complete);
+        expect(parser.done());
+    };
+
+    "parses chunked sse response after removing chunk framing"_test = [] {
+        http::response_parser parser{http::response_body_mode::sse};
+        auto events = feed_all(
+            parser,
+            {
+                "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n",
+                "b\r\ndata: one\n\n\r\n",
+                "b\r\ndata: two\n\n\r\n",
+                "0\r\n\r\n",
+            });
+
+        auto sse = sse_from(events);
+        expect(sse.size() == 2_ul);
+        expect(sse[0].data == "one");
+        expect(sse[1].data == "two");
+        expect(events.back().kind == http::event_kind::complete);
+        expect(parser.done());
+    };
+
+    "flushes final sse response event at eof"_test = [] {
+        http::response_parser parser{http::response_body_mode::sse};
+        auto events = feed_all(
+            parser,
+            {
+                "HTTP/1.1 200 OK\r\nContent-Length: 11\r\n\r\n",
+                "data: final",
+            });
+
+        auto sse = sse_from(events);
+        expect(sse.size() == 1_ul);
+        expect(sse[0].data == "final");
         expect(events.back().kind == http::event_kind::complete);
         expect(parser.done());
     };

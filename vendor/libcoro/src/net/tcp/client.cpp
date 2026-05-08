@@ -103,7 +103,7 @@ auto client::connect(std::chrono::milliseconds timeout) -> coro::task<connect_st
         // when the connection is established.
         if (errno == EAGAIN || errno == EINPROGRESS)
         {
-            auto pstatus = co_await m_scheduler->poll(m_socket, poll_op::write, timeout);
+            auto pstatus = co_await m_scheduler->poll(m_socket.native_handle(), poll_op::write, timeout);
             if (pstatus == poll_status::write)
             {
                 int       result{0};

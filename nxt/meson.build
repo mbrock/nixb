@@ -42,11 +42,13 @@ nxt_runtime_deps = [
   nxt_libcares_dep,
   nxt_libssl_dep,
   nxt_libcrypto_dep,
+  nlohmann_json_dep,
 ]
 
 nxt_runtime_sources = files(
   'src/nxtio/app.cpp',
   'src/nxtio/http.cpp',
+  'src/nxtio/net.cpp',
   'src/nxtio/signal-pipe.cpp',
 )
 
@@ -70,6 +72,12 @@ executable('tui_example',
 
 executable('nxthttp',
   'src/nxtio/nxthttp.cpp',
+  include_directories : nxt_inc,
+  dependencies : [nxt_dep],
+)
+
+executable('nxtllm',
+  'src/nxtio/nxtllm.cpp',
   include_directories : nxt_inc,
   dependencies : [nxt_dep],
 )
@@ -121,6 +129,18 @@ nxt_http_io_test = executable('http-io-test',
   dependencies : [nxt_dep],
 )
 
+nxt_llm_test = executable('llm-test',
+  'test/llm-test.cpp',
+  include_directories : [nxt_inc, nxt_test_inc],
+  dependencies : [nxt_dep],
+)
+
+nxt_net_include_test = executable('net-include-test',
+  'test/net-include-test.cpp',
+  include_directories : [nxt_inc, nxt_test_inc],
+  dependencies : [nxt_dep],
+)
+
 nxt_terminal_test = executable('terminal-test',
   'test/terminal-test.cpp',
   include_directories : [nxt_inc, nxt_test_inc],
@@ -130,4 +150,6 @@ nxt_terminal_test = executable('terminal-test',
 test('raster-test', nxt_raster_test)
 test('http-test', nxt_http_test)
 test('http-io-test', nxt_http_io_test)
+test('llm-test', nxt_llm_test)
+test('net-include-test', nxt_net_include_test)
 test('terminal-test', nxt_terminal_test)

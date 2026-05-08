@@ -142,6 +142,7 @@
               mp-units
               fmt
               pkgs.cli11
+              pkgs.duckdb
 
               pkgs.nixd
 #              pkgs.llvmPackages_20.clang

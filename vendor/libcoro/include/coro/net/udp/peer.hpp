@@ -158,7 +158,7 @@ private:
     auto poll(poll_op op, std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
         -> coro::task<coro::poll_status>
     {
-        co_return co_await m_scheduler->poll(m_socket, op, timeout);
+        co_return co_await m_scheduler->poll(m_socket.native_handle(), op, timeout);
     }
 
     /**

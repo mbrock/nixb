@@ -36,10 +36,25 @@ struct request
     std::string body;
 };
 
+enum class response_body_mode
+{
+    bytes,
+    sse,
+};
+
+struct server_sent_event
+{
+    std::string type = "message";
+    std::string data;
+    std::string id;
+    std::optional<int> retry_ms;
+};
+
 enum class event_kind
 {
     response_head,
     body,
+    sse,
     complete,
 };
 
@@ -48,6 +63,7 @@ struct event
     event_kind kind;
     nxt::http::response_head response;
     std::string body;
+    server_sent_event sse;
 };
 
 struct parse_error : std::runtime_error
@@ -55,9 +71,126 @@ struct parse_error : std::runtime_error
     using std::runtime_error::runtime_error;
 };
 
+class server_sent_event_parser
+{
+public:
+    [[nodiscard]] std::vector<server_sent_event> feed(std::string_view body)
+    {
+        std::vector<server_sent_event> events;
+        for (auto c : body) {
+            if (c == '\r') {
+                process_line(events, line_);
+                line_.clear();
+                previous_was_cr_ = true;
+                continue;
+            }
+
+            if (c == '\n') {
+                if (previous_was_cr_) {
+                    previous_was_cr_ = false;
+                    continue;
+                }
+
+                process_line(events, line_);
+                line_.clear();
+                continue;
+            }
+
+            previous_was_cr_ = false;
+            line_ += c;
+        }
+
+        return events;
+    }
+
+    [[nodiscard]] std::vector<server_sent_event> close()
+    {
+        std::vector<server_sent_event> events;
+        previous_was_cr_ = false;
+        if (!line_.empty()) {
+            process_line(events, line_);
+            line_.clear();
+        }
+        dispatch(events);
+        return events;
+    }
+
+private:
+    void
+    process_line(std::vector<server_sent_event> & events, std::string_view line)
+    {
+        if (line.empty()) {
+            dispatch(events);
+            return;
+        }
+
+        if (line.front() == ':')
+            return;
+
+        auto colon = line.find(':');
+        auto field = colon == std::string_view::npos ? line
+                                                     : line.substr(0, colon);
+        auto value = colon == std::string_view::npos
+                         ? std::string_view{}
+                         : line.substr(colon + 1);
+        if (!value.empty() && value.front() == ' ')
+            value.remove_prefix(1);
+
+        if (field == "data") {
+            pending_.data += value;
+            pending_.data += '\n';
+        } else if (field == "event") {
+            pending_.type = value.empty() ? "message" : std::string{value};
+        } else if (field == "id") {
+            if (value.find('\0') == std::string_view::npos) {
+                pending_.id = value;
+                pending_has_id_ = true;
+            }
+        } else if (field == "retry") {
+            auto retry = 0;
+            auto * first = value.data();
+            auto * last = value.data() + value.size();
+            auto [ptr, ec] = std::from_chars(first, last, retry);
+            if (!value.empty() && ec == std::errc{} && ptr == last)
+                pending_.retry_ms = retry;
+        }
+    }
+
+    void dispatch(std::vector<server_sent_event> & events)
+    {
+        if (pending_has_id_)
+            last_id_ = pending_.id;
+
+        if (!pending_.data.empty()) {
+            if (pending_.data.back() == '\n')
+                pending_.data.pop_back();
+
+            if (!pending_has_id_)
+                pending_.id = last_id_;
+
+            events.push_back(pending_);
+        }
+
+        pending_ = server_sent_event{};
+        pending_has_id_ = false;
+    }
+
+    std::string line_;
+    bool previous_was_cr_ = false;
+    server_sent_event pending_;
+    bool pending_has_id_ = false;
+    std::string last_id_;
+};
+
 class response_parser
 {
 public:
+    explicit response_parser(
+        response_body_mode body_mode = response_body_mode::bytes)
+        : body_mode_(body_mode)
+    {
+    }
+
     [[nodiscard]] std::vector<event> feed(std::string_view bytes)
     {
         if (state_ == state::done && !bytes.empty())
@@ -78,11 +211,7 @@ public:
         switch (state_) {
         case state::until_eof:
             if (!buffer_.empty()) {
-                events.push_back(event{
-                    .kind = event_kind::body,
-                    .response = {},
-                    .body = std::exchange(buffer_, {}),
-                });
+                emit_body(events, std::exchange(buffer_, {}));
             }
             finish(events);
             break;
@@ -193,6 +322,7 @@ private:
                 .kind = event_kind::response_head,
                 .response = head_,
                 .body = {},
+                .sse = {},
             });
 
             if (state_ == state::done)
@@ -200,6 +330,7 @@ private:
                     .kind = event_kind::complete,
                     .response = {},
                     .body = {},
+                    .sse = {},
                 });
 
             return true;
@@ -227,11 +358,7 @@ private:
             return false;
 
         auto n = std::min(remaining_, buffer_.size());
-        events.push_back(event{
-            .kind = event_kind::body,
-            .response = {},
-            .body = take_bytes(n),
-        });
+        emit_body(events, take_bytes(n));
         remaining_ -= n;
 
         if (remaining_ == 0)
@@ -273,11 +400,7 @@ private:
         if (buffer_.size() < remaining_)
             return false;
 
-        events.push_back(event{
-            .kind = event_kind::body,
-            .response = {},
-            .body = take_bytes(remaining_),
-        });
+        emit_body(events, take_bytes(remaining_));
         remaining_ = 0;
         state_ = state::chunk_crlf;
         return true;
@@ -313,11 +436,7 @@ private:
         if (buffer_.empty())
             return false;
 
-        events.push_back(event{
-            .kind = event_kind::body,
-            .response = {},
-            .body = std::exchange(buffer_, {}),
-        });
+        emit_body(events, std::exchange(buffer_, {}));
         return false;
     }
 
@@ -339,12 +458,134 @@ private:
 
     void finish(std::vector<event> & events)
     {
+        if (body_mode_ == response_body_mode::sse)
+            flush_sse(events);
+
         state_ = state::done;
         events.push_back(event{
             .kind = event_kind::complete,
             .response = {},
             .body = {},
+            .sse = {},
         });
+    }
+
+    void emit_body(std::vector<event> & events, std::string body)
+    {
+        if (body.empty())
+            return;
+
+        if (body_mode_ == response_body_mode::bytes) {
+            events.push_back(event{
+                .kind = event_kind::body,
+                .response = {},
+                .body = std::move(body),
+                .sse = {},
+            });
+            return;
+        }
+
+        feed_sse(events, body);
+    }
+
+    void feed_sse(std::vector<event> & events, std::string_view body)
+    {
+        for (auto c : body) {
+            if (c == '\r') {
+                process_sse_line(events, sse_line_);
+                sse_line_.clear();
+                sse_previous_was_cr_ = true;
+                continue;
+            }
+
+            if (c == '\n') {
+                if (sse_previous_was_cr_) {
+                    sse_previous_was_cr_ = false;
+                    continue;
+                }
+
+                process_sse_line(events, sse_line_);
+                sse_line_.clear();
+                continue;
+            }
+
+            sse_previous_was_cr_ = false;
+            sse_line_ += c;
+        }
+    }
+
+    void flush_sse(std::vector<event> & events)
+    {
+        sse_previous_was_cr_ = false;
+        if (!sse_line_.empty()) {
+            process_sse_line(events, sse_line_);
+            sse_line_.clear();
+        }
+        dispatch_sse(events);
+    }
+
+    void
+    process_sse_line(std::vector<event> & events, std::string_view line)
+    {
+        if (line.empty()) {
+            dispatch_sse(events);
+            return;
+        }
+
+        if (line.front() == ':')
+            return;
+
+        auto colon = line.find(':');
+        auto field = colon == std::string_view::npos ? line
+                                                     : line.substr(0, colon);
+        auto value = colon == std::string_view::npos
+                         ? std::string_view{}
+                         : line.substr(colon + 1);
+        if (!value.empty() && value.front() == ' ')
+            value.remove_prefix(1);
+
+        if (field == "data") {
+            pending_sse_.data += value;
+            pending_sse_.data += '\n';
+        } else if (field == "event") {
+            pending_sse_.type = value.empty() ? "message" : std::string{value};
+        } else if (field == "id") {
+            if (value.find('\0') == std::string_view::npos) {
+                pending_sse_.id = value;
+                pending_sse_has_id_ = true;
+            }
+        } else if (field == "retry") {
+            auto retry = 0;
+            auto * first = value.data();
+            auto * last = value.data() + value.size();
+            auto [ptr, ec] = std::from_chars(first, last, retry);
+            if (!value.empty() && ec == std::errc{} && ptr == last)
+                pending_sse_.retry_ms = retry;
+        }
+    }
+
+    void dispatch_sse(std::vector<event> & events)
+    {
+        if (pending_sse_has_id_)
+            last_sse_id_ = pending_sse_.id;
+
+        if (!pending_sse_.data.empty()) {
+            if (pending_sse_.data.back() == '\n')
+                pending_sse_.data.pop_back();
+
+            if (!pending_sse_has_id_)
+                pending_sse_.id = last_sse_id_;
+
+            events.push_back(event{
+                .kind = event_kind::sse,
+                .response = {},
+                .body = {},
+                .sse = pending_sse_,
+            });
+        }
+
+        pending_sse_ = server_sent_event{};
+        pending_sse_has_id_ = false;
     }
 
     [[nodiscard]] std::optional<std::string> take_line()
@@ -429,9 +670,15 @@ private:
     }
 
     state state_ = state::status_line;
+    response_body_mode body_mode_ = response_body_mode::bytes;
     std::string buffer_;
     response_head head_;
     std::size_t remaining_ = 0;
+    std::string sse_line_;
+    bool sse_previous_was_cr_ = false;
+    server_sent_event pending_sse_;
+    bool pending_sse_has_id_ = false;
+    std::string last_sse_id_;
 };
 
 [[nodiscard]] inline std::string serialize(const request & req)

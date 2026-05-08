@@ -2,6 +2,7 @@
 /meson-logs/
 /meson-private/
 /.direnv/
+.env
 *.o
 *.a
 *.so

@@ -99,7 +99,8 @@ private:
      */
     auto poll(std::chrono::milliseconds timeout = std::chrono::milliseconds{0}) -> coro::task<coro::poll_status>
     {
-        return m_scheduler->poll(m_accept_socket, coro::poll_op::read, timeout, m_cancel_trigger.get_token());
+        return m_scheduler->poll(
+            m_accept_socket.native_handle(), coro::poll_op::read, timeout, m_cancel_trigger.get_token());
     }
 
     /**
