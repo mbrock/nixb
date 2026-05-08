@@ -102,6 +102,12 @@ nxt_http_test = executable('http-test',
   dependencies : [nxt_core_dep],
 )
 
+nxt_http_coro_test = executable('http-coro-test',
+  'test/http-coro-test.cpp',
+  include_directories : [nxt_inc, nxt_test_inc],
+  dependencies : [nxt_core_dep],
+)
+
 nxt_terminal_test = executable('terminal-test',
   'test/terminal-test.cpp',
   include_directories : [nxt_inc, nxt_test_inc],
@@ -110,4 +116,5 @@ nxt_terminal_test = executable('terminal-test',
 
 test('raster-test', nxt_raster_test)
 test('http-test', nxt_http_test)
+test('http-coro-test', nxt_http_coro_test)
 test('terminal-test', nxt_terminal_test)
