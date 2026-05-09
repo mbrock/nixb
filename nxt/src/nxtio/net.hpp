@@ -15,6 +15,7 @@
 #include <cstdint>
 #include <memory>
 #include <span>
+#include <stop_token>
 #include <string_view>
 #include <vector>
 
@@ -38,6 +39,8 @@ public:
     explicit tcp_transport(coro::net::tcp::client client);
 
     nxt::task<std::size_t> read_some(std::span<char> dst);
+    nxt::task<std::size_t>
+    read_some(std::span<char> dst, std::stop_token stop);
     nxt::task<> write_all(std::string_view bytes);
 
 private:
@@ -52,6 +55,8 @@ public:
         coro::net::tls::client client);
 
     nxt::task<std::size_t> read_some(std::span<char> dst);
+    nxt::task<std::size_t>
+    read_some(std::span<char> dst, std::stop_token stop);
     nxt::task<> write_all(std::string_view bytes);
     nxt::task<> shutdown(std::chrono::seconds timeout = std::chrono::seconds{5});
 

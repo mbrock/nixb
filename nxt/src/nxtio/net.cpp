@@ -14,6 +14,19 @@
 
 namespace nxt::io::net {
 
+namespace {
+
+constexpr auto cancellable_read_poll_interval =
+    std::chrono::milliseconds{100};
+
+void throw_if_stopped(std::stop_token stop)
+{
+    if (stop.stop_requested())
+        throw std::runtime_error{"operation cancelled"};
+}
+
+} // namespace
+
 tcp_transport::tcp_transport(coro::net::tcp::client client)
     : client_(std::move(client))
 {
@@ -31,6 +44,28 @@ nxt::task<std::size_t> tcp_transport::read_some(std::span<char> dst)
         co_return 0;
 
     throw std::runtime_error{"read: " + status.message()};
+}
+
+nxt::task<std::size_t>
+tcp_transport::read_some(std::span<char> dst, std::stop_token stop)
+{
+    if (dst.empty())
+        co_return 0;
+
+    while (true) {
+        throw_if_stopped(stop);
+        auto [status, bytes] = co_await client_.read_some(
+            dst,
+            cancellable_read_poll_interval);
+        if (status.is_ok())
+            co_return bytes.size();
+        if (status.is_closed())
+            co_return 0;
+        if (status.is_timeout())
+            continue;
+
+        throw std::runtime_error{"read: " + status.message()};
+    }
 }
 
 nxt::task<> tcp_transport::write_all(std::string_view bytes)
@@ -64,6 +99,31 @@ nxt::task<std::size_t> tls_transport::read_some(std::span<char> dst)
 
     throw std::runtime_error{
         "TLS read: " + coro::net::tls::to_string(status)};
+}
+
+nxt::task<std::size_t>
+tls_transport::read_some(std::span<char> dst, std::stop_token stop)
+{
+    if (dst.empty())
+        co_return 0;
+
+    while (true) {
+        throw_if_stopped(stop);
+        auto [status, bytes] = co_await client_.recv(
+            dst,
+            cancellable_read_poll_interval);
+        if (status == coro::net::tls::recv_status::ok)
+            co_return bytes.size();
+        if (status == coro::net::tls::recv_status::closed)
+            co_return 0;
+        if (status == coro::net::tls::recv_status::timeout)
+            continue;
+        if (status == coro::net::tls::recv_status::cancelled)
+            throw std::runtime_error{"operation cancelled"};
+
+        throw std::runtime_error{
+            "TLS read: " + coro::net::tls::to_string(status)};
+    }
 }
 
 nxt::task<> tls_transport::write_all(std::string_view bytes)
@@ -154,7 +214,7 @@ nxt::task<tls_transport> connect_tls(
             socket_endpoint,
             std::string{target.host},
         };
-        last_status = co_await client.connect();
+        last_status = co_await client.connect(timeout);
         if (last_status == coro::net::tls::connection_status::connected)
             co_return tls_transport{ctx, std::move(client)};
     }

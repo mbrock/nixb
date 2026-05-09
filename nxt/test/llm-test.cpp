@@ -23,6 +23,7 @@ suite llm_tests = [] {
             .input = "Say ok.",
             .max_output_tokens = 64,
             .reasoning_effort = "minimal",
+            .reasoning_summary = "auto",
             .store = false,
         };
 
@@ -38,6 +39,7 @@ suite llm_tests = [] {
         expect(body["stream"] == true);
         expect(body["store"] == false);
         expect(body["reasoning"]["effort"] == "minimal");
+        expect(body["reasoning"]["summary"] == "auto");
         expect(wire.find("Authorization: Bearer test-key\r\n") != std::string::npos);
     };
 
@@ -70,6 +72,7 @@ suite llm_tests = [] {
                 .model = "gpt-5-mini",
                 .input = "Say ok.",
                 .max_output_tokens = 64,
+                .reasoning_summary = "",
             },
             on_event));
 

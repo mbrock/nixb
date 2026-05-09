@@ -178,6 +178,26 @@ read_some_bytes(Source & source, std::span<std::byte> dst)
     }
 }
 
+template<typename Source>
+nxt::task<std::size_t>
+read_some_bytes(
+    Source & source,
+    std::span<std::byte> dst,
+    std::stop_token stop)
+{
+    if constexpr (requires { source.read_some(dst, stop); }) {
+        co_return co_await source.read_some(dst, std::move(stop));
+    } else if constexpr (
+        requires { source.read_some(as_writable_chars(dst), stop); }) {
+        co_return co_await source.read_some(
+            as_writable_chars(dst),
+            std::move(stop));
+    } else {
+        check_cancelled(stop);
+        co_return co_await read_some_bytes(source, dst);
+    }
+}
+
 template<typename Sink>
 nxt::task<> write_all_bytes(Sink & sink, std::span<const std::byte> bytes)
 {
@@ -414,7 +434,7 @@ private:
         if (dst.empty())
             throw buffer_error{"reader buffer is full"};
 
-        auto n = co_await detail::read_some_bytes(*source_, dst);
+        auto n = co_await detail::read_some_bytes(*source_, dst, stop_);
         if (n > dst.size())
             throw buffer_error{"source overfilled read buffer"};
         end_ += n;

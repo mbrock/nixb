@@ -79,13 +79,8 @@ executable('nxthttp',
 executable('nxtllm',
   'src/nxtio/nxtllm.cpp',
   include_directories : nxt_inc,
-  dependencies : [nxt_dep],
-)
-
-executable('nxtllm-hud',
-  'src/nxtio/nxtllm-hud.cpp',
-  include_directories : nxt_inc,
-  dependencies : [nxt_dep],
+  dependencies : [nxt_dep, duckdb_dep],
+  cpp_args : ['-Wno-unused-parameter'],
 )
 
 nxt_test_inc = include_directories('test')

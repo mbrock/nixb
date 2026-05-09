@@ -10,6 +10,7 @@
 #include <cstddef>
 #include <span>
 #include <stdexcept>
+#include <stop_token>
 #include <string>
 #include <utility>
 
@@ -35,6 +36,7 @@ struct openai_responses_request
     std::string input;
     std::size_t max_output_tokens = 512;
     std::string reasoning_effort = "minimal";
+    std::string reasoning_summary;
     bool store = false;
 };
 
@@ -56,10 +58,14 @@ openai_responses_body(const openai_responses_request & request)
         {"max_output_tokens", request.max_output_tokens},
     };
 
-    if (!request.reasoning_effort.empty()) {
-        body["reasoning"] = {
-            {"effort", request.reasoning_effort},
-        };
+    if (!request.reasoning_effort.empty()
+        || !request.reasoning_summary.empty()) {
+        auto reasoning = nlohmann::json::object();
+        if (!request.reasoning_effort.empty())
+            reasoning["effort"] = request.reasoning_effort;
+        if (!request.reasoning_summary.empty())
+            reasoning["summary"] = request.reasoning_summary;
+        body["reasoning"] = std::move(reasoning);
     }
 
     return body;
@@ -114,7 +120,8 @@ template<typename Transport, typename OnEvent>
 nxt::task<> stream_openai_responses_over(
     Transport & transport,
     const openai_responses_request & request,
-    OnEvent on_event)
+    OnEvent on_event,
+    std::stop_token stop = {})
 {
     if (request.api_key.empty())
         throw protocol_error{"OPENAI_API_KEY is empty"};
@@ -122,7 +129,8 @@ nxt::task<> stream_openai_responses_over(
         throw protocol_error{"OpenAI Responses input is empty"};
 
     auto response_buffer = std::array<std::byte, 16 * 1024>{};
-    auto reader = nxt::io::byte_reader{transport, std::span{response_buffer}};
+    auto reader =
+        nxt::io::byte_reader{transport, std::span{response_buffer}, stop};
     auto response = co_await nxt::io::http::send_request(
         transport, reader, openai_responses_http_request(request));
     auto status = nxt::io::http::response_status_text(response.head);
