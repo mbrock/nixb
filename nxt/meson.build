@@ -48,6 +48,7 @@ nxt_runtime_deps = [
 nxt_runtime_sources = files(
   'src/nxtio/app.cpp',
   'src/nxtio/http.cpp',
+  'src/nxtio/input.cpp',
   'src/nxtio/net.cpp',
   'src/nxtio/signal-pipe.cpp',
 )
@@ -66,6 +67,12 @@ nxt_dep = declare_dependency(
 
 executable('tui_example',
   'src/nxt/tui_example.cpp',
+  include_directories : nxt_inc,
+  dependencies : [nxt_dep],
+)
+
+executable('input_hud_example',
+  'src/nxt/input_hud_example.cpp',
   include_directories : nxt_inc,
   dependencies : [nxt_dep],
 )
@@ -136,6 +143,12 @@ nxt_buffers_test = executable('buffers-test',
   dependencies : [nxt_dep],
 )
 
+nxt_input_test = executable('input-test',
+  'test/input-test.cpp',
+  include_directories : [nxt_inc, nxt_test_inc],
+  dependencies : [nxt_dep],
+)
+
 nxt_llm_test = executable('llm-test',
   'test/llm-test.cpp',
   include_directories : [nxt_inc, nxt_test_inc],
@@ -158,6 +171,7 @@ test('raster-test', nxt_raster_test)
 test('http-test', nxt_http_test)
 test('http-io-test', nxt_http_io_test)
 test('buffers-test', nxt_buffers_test)
+test('input-test', nxt_input_test)
 test('llm-test', nxt_llm_test)
 test('net-include-test', nxt_net_include_test)
 test('terminal-test', nxt_terminal_test)

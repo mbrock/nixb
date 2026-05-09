@@ -42,6 +42,8 @@ using latch = coro::latch;
 using io_scheduler = coro::scheduler;
 
 using poll_op = coro::poll_op;
+using poll_status = coro::poll_status;
+using poll_stop_source = coro::poll_stop_source;
 
 inline auto sync_wait(auto && awaitable)
 {

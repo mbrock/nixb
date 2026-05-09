@@ -1,12 +1,15 @@
 #include <sys/ioctl.h>
 #include <unistd.h>
 #include <csignal>
+#include <array>
+#include <cerrno>
 #include <iostream>
 #include <string>
 
 #include "nxtio/app.hpp"
 #include "nxt/ansi.hpp"
 #include "nxtio/async.hpp"
+#include "nxtio/input.hpp"
 #include "nxt/units.hpp"
 
 namespace nxt::ui {
@@ -16,7 +19,7 @@ UIRuntime::UIRuntime()
           nxt::io_scheduler::make_unique(nxt::io_scheduler::options{}))
 {
     signals_.watch(SIGINT, SIGTERM, SIGWINCH);
-    refresh_terminal_size();
+    (void) refresh_terminal_size();
 
     // Create compositor with initial terminal size
     compositor_ =
@@ -25,14 +28,20 @@ UIRuntime::UIRuntime()
 
 UIRuntime::~UIRuntime() = default;
 
-void UIRuntime::refresh_terminal_size() noexcept
+bool UIRuntime::refresh_terminal_size() noexcept
 {
     struct winsize ws{};
     if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_col > 0
         && ws.ws_row > 0) {
-        term_width_.store(ws.ws_col * ch, std::memory_order_release);
-        term_height_.store(ws.ws_row * ln, std::memory_order_release);
+        auto width = ws.ws_col * ch;
+        auto height = ws.ws_row * ln;
+        auto old_width = terminal_width();
+        auto old_height = terminal_height();
+        term_width_.store(width, std::memory_order_release);
+        term_height_.store(height, std::memory_order_release);
+        return width != old_width || height != old_height;
     }
+    return false;
 }
 
 void UIRuntime::request_shutdown()
@@ -43,6 +52,7 @@ void UIRuntime::request_shutdown()
     stop_source_.request_stop();
     damage_event_.set();   // Wake present_loop
     SignalPipe::notify(0); // Wake signal_loop
+    input_poll_stop_.signal_stop();
 }
 
 void UIRuntime::signal_damage()
@@ -193,10 +203,11 @@ nxt::task<> UIRuntime::signal_loop()
                 break;
 
             case SIGWINCH:
-                refresh_terminal_size();
-                scrollback_cursor_initialized_ = false;
-                co_await resize_queue_.push(terminal_size());
-                signal_damage();
+                if (refresh_terminal_size()) {
+                    scrollback_cursor_initialized_ = false;
+                    co_await resize_queue_.push(terminal_size());
+                    signal_damage();
+                }
                 break;
 
             default:
@@ -204,6 +215,69 @@ nxt::task<> UIRuntime::signal_loop()
             }
         }
     }
+
+    co_return;
+}
+
+nxt::task<> UIRuntime::input_loop()
+{
+    if (!isatty(STDIN_FILENO))
+        co_return;
+
+    nxt::input::Parser parser;
+    std::array<char, 256> buffer{};
+    constexpr auto pending_timeout = std::chrono::milliseconds{25};
+    auto publish = [this](nxt::input::KeyEvent event) -> nxt::task<> {
+        auto shutdown = event.is_ctrl_c();
+        co_await input_queue_.push(std::move(event));
+        if (shutdown)
+            request_shutdown();
+    };
+
+    while (!shutdown_requested()) {
+        auto status = co_await scheduler_->poll(
+            STDIN_FILENO,
+            nxt::poll_op::read,
+            parser.has_pending() ? pending_timeout
+                                 : std::chrono::milliseconds{0},
+            input_poll_stop_.get_token());
+
+        if (status == nxt::poll_status::cancelled)
+            break;
+        if (status == nxt::poll_status::timeout) {
+            for (auto & event : parser.flush())
+                co_await publish(std::move(event));
+            continue;
+        }
+        if (status != nxt::poll_status::read)
+            co_return;
+
+        while (!shutdown_requested()) {
+            auto n = ::read(STDIN_FILENO, buffer.data(), buffer.size());
+            if (n > 0) {
+                auto bytes = std::string_view{
+                    buffer.data(),
+                    static_cast<std::size_t>(n)};
+                for (auto & event : parser.feed(bytes))
+                    co_await publish(std::move(event));
+                continue;
+            }
+
+            if (n == 0)
+                break;
+
+            if (errno == EINTR)
+                continue;
+            if (errno == EAGAIN || errno == EWOULDBLOCK)
+                break;
+
+            co_return;
+        }
+    }
+
+    for (auto & event : parser.flush())
+        co_await publish(std::move(event));
+    co_await input_queue_.shutdown();
 
     co_return;
 }

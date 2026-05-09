@@ -8,12 +8,14 @@
 #include <cmath>
 #include <iostream>
 #include <memory>
+#include <optional>
 #include <vector>
 
 #include "nxt/ansi.hpp"
 #include "nxtio/async.hpp"
 #include "nxt/compositor.hpp"
 #include "nxt/glyph-table.hpp"
+#include "nxtio/input.hpp"
 #include "nxt/raster.hpp"
 #include "nxtio/signal-pipe.hpp"
 #include "nxt/units.hpp"
@@ -166,9 +168,17 @@ public:
             {
                 ansi::SynchronizedUpdate synchronized_update;
 
-                // Process any pending resizes
+                std::optional<TermSize> resize_to;
+                if (refresh_terminal_size()) {
+                    scrollback_cursor_initialized_ = false;
+                    resize_to = terminal_size();
+                }
+
+                // Process any pending resizes, keeping only the newest size.
                 while (auto sz = resize_queue_.try_pop())
-                    compositor_->resize(*sz);
+                    resize_to = *sz;
+                if (resize_to)
+                    compositor_->resize(*resize_to);
 
                 render_frame(build_ui());
             }
@@ -181,6 +191,19 @@ public:
     /// Should be run as part of the main task group.
     nxt::task<> signal_loop();
 
+    /// Coroutine that reads stdin and publishes decoded keyboard events.
+    nxt::task<> input_loop();
+
+    /// Wait for the next keyboard event. Returns nullopt if the channel
+    /// shuts down.
+    nxt::task<std::optional<nxt::input::KeyEvent>> next_input()
+    {
+        auto event = co_await input_queue_.pop();
+        if (event.has_value())
+            co_return std::move(event.value());
+        co_return std::nullopt;
+    }
+
     // =========================================================================
     // Low-level access (for advanced use)
     // =========================================================================
@@ -189,6 +212,12 @@ public:
     nxt::queue<TermSize> & resize_channel() noexcept
     {
         return resize_queue_;
+    }
+
+    /// Channel for keyboard input events.
+    nxt::queue<nxt::input::KeyEvent> & input_channel() noexcept
+    {
+        return input_queue_;
     }
 
     /// Event signaled when damage occurs.
@@ -201,7 +230,7 @@ public:
     [[nodiscard]] TerminalCompositor & compositor() noexcept;
 
 private:
-    void refresh_terminal_size() noexcept;
+    bool refresh_terminal_size() noexcept;
     void render_impl(std::function<void(RasterView &, Size)> render_fn);
     void update_hud_height(height_t hud_h);
 
@@ -261,6 +290,8 @@ private:
 
     nxt::event damage_event_;
     nxt::queue<TermSize> resize_queue_;
+    nxt::queue<nxt::input::KeyEvent> input_queue_;
+    nxt::poll_stop_source input_poll_stop_;
 
     std::atomic<nxt::width_t> term_width_{80 * ch};
     std::atomic<nxt::height_t> term_height_{24 * ln};
@@ -291,8 +322,10 @@ int run(State initial_state, BuildUI build_ui, Update update)
     std::vector<nxt::task<>> tasks;
     try {
         TerminalGuard guard;
+        nxt::input::InputModeGuard input_guard;
 
         tasks.push_back(runtime.signal_loop());
+        tasks.push_back(runtime.input_loop());
         tasks.push_back(runtime.run_render_loop(
             [&state, build_ui] { return build_ui(state); }));
         tasks.push_back(update(runtime, state));
