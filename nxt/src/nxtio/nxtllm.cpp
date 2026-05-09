@@ -193,9 +193,9 @@ private:
 struct cli_options
 {
     std::string input = "Say ok in one word.";
-    std::string model = "gpt-5-mini";
-    std::size_t max_output_tokens = 128;
-    std::string reasoning_effort = "minimal";
+    std::string model = "gpt-5.3";
+    std::size_t max_output_tokens = 1000;
+    std::string reasoning_effort = "medium";
     std::string reasoning_summary = "auto";
     std::optional<std::string> trace_path;
     std::optional<std::string> playback_path;

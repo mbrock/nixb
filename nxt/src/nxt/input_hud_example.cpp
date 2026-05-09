@@ -284,21 +284,8 @@ auto input_hud(const State & state)
 
     return leaf(
         WidthHint::grow(),
-        HeightHint::fixed(4 * ln),
+        HeightHint::fixed(1 * ln),
         [=](RasterView & r, Size size) {
-            std::ranges::fill(r.glyphs(), 32);
-            std::ranges::fill(r.fgs(), Rgba8::white());
-            std::ranges::fill(r.bgs(), Rgba8(26, 28, 32));
-            std::ranges::fill(r.ems(), DEFAULT_EMPHASIS);
-
-            r.write_text(
-                Pos::origin(),
-                std::format(
-                    "input_hud_example   events={}   bytes={}",
-                    events_seen,
-                    text.size()));
-            r.write_text(Pos::at(0 * ch, 1 * ln), hrule_string(size.w));
-
             if (size.w.count() == 0)
                 return;
 
@@ -315,20 +302,17 @@ auto input_hud(const State & state)
             auto visible = text.substr(start_byte, end_byte - start_byte);
             auto visible_cursor = cursor_cell - scroll_cell;
 
-            r.write_text(Pos::at(0 * ch, 2 * ln), ">");
-            r.write_text(Pos::at(1 * ch, 2 * ln), visible);
+            r.write_text(Pos::at(0 * ch, 0 * ln), " ");
+            r.write_text(Pos::at(1 * ch, 0 * ln), visible);
 
-            for (std::size_t x = 1; x < size.w.count(); ++x)
-                r.set_bg(Pos::at(x * ch, 2 * ln), Rgba8(42, 47, 54));
+            for (std::size_t x = 0; x < size.w.count(); ++x)
+                r.set_bg(Pos::at(x * ch, 0 * ln), Rgba8(42, 47, 54));
 
             auto cursor_x = std::min(visible_cursor + 1, size.w.count() - 1);
-            r.set_em(Pos::at(cursor_x * ch, 2 * ln), Emphasis::reverse);
+            r.set_em(Pos::at(cursor_x * ch, 0 * ln), Emphasis::reverse);
             if (cursor_cell == total_cells)
-                r.set_char(Pos::at(cursor_x * ch, 2 * ln), ' ');
+                r.set_char(Pos::at(cursor_x * ch, 0 * ln), ' ');
 
-            r.write_text(
-                Pos::at(0 * ch, 3 * ln),
-                "Esc exits; Ctrl-C is a structured key event and default shutdown.");
         });
 }
 

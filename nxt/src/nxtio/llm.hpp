@@ -34,8 +34,8 @@ struct openai_responses_request
     std::string api_key;
     std::string model = "gpt-5-mini";
     std::string input;
-    std::size_t max_output_tokens = 512;
-    std::string reasoning_effort = "minimal";
+    std::size_t max_output_tokens = 6000;
+    std::string reasoning_effort = "medium";
     std::string reasoning_summary;
     bool store = false;
 };

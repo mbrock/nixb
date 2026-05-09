@@ -261,10 +261,10 @@ void TerminalCompositor::present_frame(std::ostream & out)
             terminal_origin + 0 * ch,
             separator_row_for(hud_height_, term_height_)});
         w.reset();
-        for (std::size_t col = 0;
-             col < back_.width().count();
-             ++col)
-            w.text(separator_glyph);
+//        for (std::size_t col = 0;
+//             col < back_.width().count();
+//             ++col)
+//            w.text(separator_glyph);
         w.reset();
     }
 
