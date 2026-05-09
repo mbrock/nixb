@@ -1,4 +1,5 @@
 #include <nxtio/async.hpp>
+#include <nxtio/buffers.hpp>
 #include <nxtio/http.hpp>
 #include <nxtio/net.hpp>
 
@@ -30,15 +31,13 @@ fetch_over(Transport & transport, nxt::io::http::url const & url)
 
     co_await transport.write_all(request);
 
-    auto head_buffer = std::array<char, 16 * 1024>{};
-    auto head = co_await nxt::io::http::async_grab(
-        transport, head_buffer, nxt::io::http::slurp("\r\n\r\n"));
-    auto response = nxt::io::http::parse_response_head(head.bytes);
+    auto read_buffer = std::array<std::byte, 16 * 1024>{};
+    auto reader = nxt::io::byte_reader{transport, std::span{read_buffer}};
+    auto head = co_await reader.take_until("\r\n\r\n");
+    auto response = nxt::io::http::parse_response_head(head);
 
-    std::cerr << response.status_line << '\n';
+    std::cerr << nxt::io::http::response_status_text(response) << '\n';
 
-    auto body_buffer = std::array<char, 16 * 1024>{};
-    auto line_buffer = std::array<char, 1024>{};
     auto on_chunk = [](std::span<const std::byte> chunk) -> nxt::task<> {
         auto text = nxt::io::http::as_text(chunk);
         std::cout.write(
@@ -47,19 +46,16 @@ fetch_over(Transport & transport, nxt::io::http::url const & url)
         co_return;
     };
 
-    if (response.chunked) {
-        co_await nxt::io::http::read_chunked(
-            transport, line_buffer, body_buffer, head.leftover, on_chunk);
-    } else if (response.content_length) {
+    if (nxt::io::http::response_is_chunked(response)) {
+        co_await nxt::io::http::read_chunked(reader, on_chunk);
+    } else if (auto content_length =
+                   nxt::io::http::response_content_length(response)) {
         co_await nxt::io::http::read_content_length(
-            transport,
-            body_buffer,
-            head.leftover,
-            *response.content_length,
+            reader,
+            *content_length,
             on_chunk);
     } else {
-        co_await nxt::io::http::read_until_eof(
-            transport, body_buffer, head.leftover, on_chunk);
+        co_await nxt::io::http::read_until_eof(reader, on_chunk);
     }
 }
 

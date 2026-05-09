@@ -2,8 +2,12 @@
 
 #include <algorithm>
 #include <charconv>
+#include <cstddef>
 #include <iterator>
+#include <optional>
 #include <ranges>
+#include <string>
+#include <string_view>
 
 namespace nxt::io::http {
 
@@ -20,14 +24,6 @@ bool iequals(std::string_view a, std::string_view b)
 {
     return a.size() == b.size()
            && std::ranges::equal(a, b, {}, ascii_lower, ascii_lower);
-}
-
-bool icontains(std::string_view haystack, std::string_view needle)
-{
-    return std::ranges::search(
-               haystack, needle, {}, ascii_lower, ascii_lower)
-               .begin()
-           != haystack.end();
 }
 
 std::string_view trim_ascii(std::string_view text)
@@ -95,10 +91,10 @@ bool is_default_port(const url & url)
     return (!url.tls && url.port == "80") || (url.tls && url.port == "443");
 }
 
-response_head parse_response_head(std::span<const std::byte> bytes)
+nxt::http::response_head parse_response_head(std::span<const std::byte> bytes)
 {
     auto text = as_text(bytes);
-    auto head = response_head{};
+    auto head = nxt::http::response_head{};
     auto first = true;
 
     while (!text.empty()) {
@@ -109,7 +105,32 @@ response_head parse_response_head(std::span<const std::byte> bytes)
                                              : text.substr(eol + 2);
 
         if (first) {
-            head.status_line = line;
+            auto first_space = line.find(' ');
+            if (first_space == std::string_view::npos)
+                throw protocol_error{"malformed HTTP status line"};
+
+            auto second_space = line.find(' ', first_space + 1);
+            auto status_text = line.substr(
+                first_space + 1,
+                second_space == std::string_view::npos
+                    ? std::string_view::npos
+                    : second_space - first_space - 1);
+
+            auto status = 0;
+            auto [ptr, ec] = std::from_chars(
+                status_text.data(),
+                status_text.data() + status_text.size(),
+                status,
+                10);
+            if (ec != std::errc{}
+                || ptr != status_text.data() + status_text.size())
+                throw protocol_error{"malformed HTTP status code"};
+
+            head.version = line.substr(0, first_space);
+            head.status = status;
+            head.reason = second_space == std::string_view::npos
+                              ? std::string{}
+                              : std::string{line.substr(second_space + 1)};
             first = false;
             continue;
         }
@@ -118,24 +139,13 @@ response_head parse_response_head(std::span<const std::byte> bytes)
         if (colon == std::string_view::npos)
             continue;
 
-        auto name = trim_ascii(line.substr(0, colon));
-        auto value = trim_ascii(line.substr(colon + 1));
-
-        if (iequals(name, "content-length")) {
-            auto parsed = std::size_t{0};
-            auto [ptr, ec] = std::from_chars(
-                value.data(), value.data() + value.size(), parsed, 10);
-            if (ec != std::errc{} || ptr != value.data() + value.size())
-                throw protocol_error{"invalid Content-Length"};
-            head.content_length = parsed;
-        } else if (
-            iequals(name, "transfer-encoding")
-            && icontains(value, "chunked")) {
-            head.chunked = true;
-        }
+        head.headers.push_back(nxt::http::header{
+            .name = std::string{trim_ascii(line.substr(0, colon))},
+            .value = std::string{trim_ascii(line.substr(colon + 1))},
+        });
     }
 
-    if (head.status_line.empty())
+    if (head.version.empty())
         throw protocol_error{"missing response status line"};
 
     return head;
@@ -147,34 +157,83 @@ std::string_view as_text(std::span<const std::byte> bytes)
         reinterpret_cast<const char *>(bytes.data()), bytes.size_bytes()};
 }
 
-char as_char(std::byte byte)
+std::optional<std::string_view>
+header_value(const nxt::http::response_head & response, std::string_view name)
 {
-    return static_cast<char>(byte);
+    for (const auto & h : response.headers) {
+        if (iequals(h.name, name))
+            return h.value;
+    }
+    return std::nullopt;
 }
 
-slurper::slurper(std::span<const std::byte> needle)
-    : needle_(needle)
+bool has_header_token(
+    const nxt::http::response_head & response,
+    std::string_view name,
+    std::string_view token)
 {
+    auto value = header_value(response, name);
+    if (!value)
+        return false;
+
+    auto rest = *value;
+    while (true) {
+        auto comma = rest.find(',');
+        auto part = trim_ascii(rest.substr(0, comma));
+        if (iequals(part, token))
+            return true;
+        if (comma == std::string_view::npos)
+            return false;
+        rest.remove_prefix(comma + 1);
+    }
 }
 
-std::span<const std::byte>
-slurper::operator()(std::span<const std::byte> bytes) const
+std::optional<std::size_t>
+response_content_length(const nxt::http::response_head & response)
 {
-    auto match = std::ranges::search(bytes, needle_);
-    auto size = static_cast<std::size_t>(
-        std::distance(bytes.begin(), match.begin()));
+    auto value = header_value(response, "content-length");
+    if (!value)
+        return std::nullopt;
 
-    return bytes.first(size);
+    auto parsed = std::size_t{0};
+    auto [ptr, ec] = std::from_chars(
+        value->data(), value->data() + value->size(), parsed, 10);
+    if (ec != std::errc{} || ptr != value->data() + value->size())
+        throw protocol_error{"invalid Content-Length"};
+
+    return parsed;
 }
 
-std::size_t slurper::kerf() const
+bool response_is_chunked(const nxt::http::response_head & response)
 {
-    return needle_.size_bytes();
+    return has_header_token(response, "transfer-encoding", "chunked");
 }
 
-slurper slurp(std::string_view needle)
+bool response_status_is_success(const nxt::http::response_head & response)
 {
-    return slurper{std::as_bytes(std::span(needle))};
+    return response.status >= 200 && response.status < 300;
+}
+
+bool response_content_type_is(
+    const nxt::http::response_head & response,
+    std::string_view expected)
+{
+    auto value = header_value(response, "content-type");
+    if (!value)
+        return false;
+
+    auto media_type = trim_ascii(value->substr(0, value->find(';')));
+    return iequals(media_type, expected);
+}
+
+std::string response_status_text(const nxt::http::response_head & response)
+{
+    auto text = response.version + " " + std::to_string(response.status);
+    if (!response.reason.empty()) {
+        text += " ";
+        text += response.reason;
+    }
+    return text;
 }
 
 std::size_t parse_chunk_size(std::span<const std::byte> line)

@@ -7,7 +7,6 @@
 #include "nxtio/app.hpp"
 #include "nxt/ansi.hpp"
 #include "nxtio/async.hpp"
-#include "nxtio/scope.hpp"
 #include "nxt/units.hpp"
 
 namespace nxt::ui {
@@ -109,6 +108,33 @@ void UIRuntime::println(std::string_view line)
 
     std::cout.write(buf.data(), static_cast<std::streamsize>(buf.size()));
     std::cout.flush();
+    scrollback_cursor_initialized_ = true;
+}
+
+void UIRuntime::print(std::string_view text)
+{
+    auto hud_h = compositor_->hud_height();
+    auto term_h = terminal_height();
+
+    // No scroll region in full-screen mode. HUD mode reserves one separator
+    // row above the HUD.
+    if (hud_h > 0 * ln && hud_h + 1 * ln >= term_h)
+        return;
+
+    auto scroll_bottom = hud_h > 0 * ln
+        ? term_h - hud_h - 2 * ln
+        : term_h - 1 * ln;
+
+    std::string buf;
+    ansi::Writer w(buf);
+    if (!scrollback_cursor_initialized_)
+        w.move_to(Pos::at(0 * ch, scroll_bottom));
+    w.reset();
+    w.text(text);
+
+    std::cout.write(buf.data(), static_cast<std::streamsize>(buf.size()));
+    std::cout.flush();
+    scrollback_cursor_initialized_ = true;
 }
 
 void UIRuntime::cleanup()
@@ -168,6 +194,7 @@ nxt::task<> UIRuntime::signal_loop()
 
             case SIGWINCH:
                 refresh_terminal_size();
+                scrollback_cursor_initialized_ = false;
                 co_await resize_queue_.push(terminal_size());
                 signal_damage();
                 break;

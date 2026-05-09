@@ -1,15 +1,17 @@
 #pragma once
 
+#include <nxt/http.hpp>
+#include <nxtio/buffers.hpp>
+
 #include <algorithm>
-#include <concepts>
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <optional>
 #include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <utility>
 
 #include "nxtio/async.hpp"
 
@@ -28,256 +30,191 @@ struct url
     std::string target = "/";
 };
 
-struct response_head
-{
-    std::string_view status_line;
-    std::optional<std::size_t> content_length;
-    bool chunked = false;
-};
-
 url parse_url(std::string_view text);
 std::uint16_t parse_port(std::string_view text);
 bool is_default_port(const url & url);
-response_head parse_response_head(std::span<const std::byte> bytes);
+
+nxt::http::response_head parse_response_head(std::span<const std::byte> bytes);
 std::string_view as_text(std::span<const std::byte> bytes);
-char as_char(std::byte byte);
 
-template<typename F>
-concept byte_slicer = requires(F slicer, std::span<const std::byte> bytes) {
-    { slicer(bytes) } -> std::same_as<std::span<const std::byte>>;
-    { slicer.kerf() } -> std::convertible_to<std::size_t>;
+std::optional<std::string_view>
+header_value(const nxt::http::response_head & response, std::string_view name);
+
+bool has_header_token(
+    const nxt::http::response_head & response,
+    std::string_view name,
+    std::string_view token);
+
+std::optional<std::size_t>
+response_content_length(const nxt::http::response_head & response);
+
+bool response_is_chunked(const nxt::http::response_head & response);
+bool response_status_is_success(const nxt::http::response_head & response);
+
+bool response_content_type_is(
+    const nxt::http::response_head & response,
+    std::string_view expected);
+
+std::string response_status_text(const nxt::http::response_head & response);
+
+struct response_start
+{
+    nxt::http::response_head head;
 };
 
-class parse_buffer
-{
-public:
-    explicit parse_buffer(std::span<const std::byte> text)
-        : rest_(text)
-    {
-    }
-
-    explicit parse_buffer(std::string_view sv)
-        : rest_(std::as_bytes(std::span(sv)))
-    {
-    }
-
-    [[nodiscard]] std::span<const std::byte> remaining() const noexcept
-    {
-        return rest_;
-    }
-
-    void consume(std::size_t n)
-    {
-        if (n > rest_.size())
-            throw protocol_error{"parser consumed past end of input"};
-        rest_ = rest_.subspan(n);
-    }
-
-    template<byte_slicer Slicer>
-    std::span<const std::byte> grab(const Slicer & slicer)
-    {
-        auto slice = slicer(rest_);
-        if (slice.data() != rest_.data() || slice.size() > rest_.size())
-            throw protocol_error{"slicer returned bytes outside input"};
-        if (slice.size() + slicer.kerf() > rest_.size())
-            throw protocol_error{"slicer delimiter was absent"};
-        consume(slice.size() + slicer.kerf());
-        return slice;
-    }
-
-private:
-    std::span<const std::byte> rest_;
-};
-
-class slurper
-{
-public:
-    explicit slurper(std::span<const std::byte> needle);
-    [[nodiscard]] std::span<const std::byte>
-    operator()(std::span<const std::byte> bytes) const;
-    std::size_t kerf() const;
-
-private:
-    std::span<const std::byte> needle_;
-};
-
-slurper slurp(std::string_view needle);
-
-class bytes_as_chars
-{
-public:
-    std::string_view operator()(std::span<const std::byte> bytes) const
-    {
-        return as_text(bytes);
-    }
-};
-
-struct grab_result
-{
-    std::span<const std::byte> bytes;
-    std::span<const std::byte> leftover;
-};
-
-template<typename Transport, byte_slicer Slicer>
-nxt::task<grab_result> async_grab(
-    Transport & transport,
-    std::span<char> buffer,
-    std::span<const std::byte> initial,
-    const Slicer & slicer)
-{
-    if (initial.size() > buffer.size())
-        throw protocol_error{"initial input exceeded grab buffer"};
-
-    if (!initial.empty())
-        std::memmove(buffer.data(), initial.data(), initial.size());
-    auto used = initial.size();
-    while (true) {
-        auto bytes = std::as_bytes(buffer.first(used));
-        if (slicer(bytes).size() + slicer.kerf() <= bytes.size()) {
-            parse_buffer input{bytes};
-            auto grabbed = input.grab(slicer);
-            co_return grab_result{
-                .bytes = grabbed,
-                .leftover = input.remaining(),
-            };
-        }
-
-        if (used == buffer.size())
-            throw protocol_error{"buffer filled before delimiter"};
-
-        auto n = co_await transport.read_some(buffer.subspan(used));
-        if (n == 0)
-            throw protocol_error{"unexpected end of input"};
-        if (n > buffer.size() - used)
-            throw protocol_error{"transport overfilled read buffer"};
-
-        used += n;
-    }
-}
-
-template<typename Transport, byte_slicer Slicer>
-nxt::task<grab_result> async_grab(
-    Transport & transport, std::span<char> buffer, const Slicer & slicer)
-{
-    return async_grab(
-        transport, buffer, std::span<const std::byte>{}, slicer);
-}
-
-template<typename Transport, typename OnChunk>
+template<typename Reader, typename OnChunk>
 nxt::task<> read_content_length(
-    Transport & transport,
-    std::span<char> buffer,
-    std::span<const std::byte> initial,
+    Reader & reader,
     std::size_t content_length,
     OnChunk on_chunk)
 {
-    if (buffer.empty() && content_length > initial.size())
-        throw protocol_error{"empty body read buffer"};
-
     auto remaining = content_length;
-    if (!initial.empty() && remaining > 0) {
-        auto n = std::min(remaining, initial.size());
-        co_await on_chunk(initial.first(n));
-        remaining -= n;
-    }
-
     while (remaining > 0) {
-        auto request = buffer.first(std::min(buffer.size(), remaining));
-        auto n = co_await transport.read_some(request);
-        if (n == 0)
-            throw protocol_error{"unexpected end of input"};
-        if (n > request.size())
-            throw protocol_error{"transport overfilled read buffer"};
+        auto available = reader.buffered();
+        if (!available.empty()) {
+            auto n = std::min(remaining, available.size());
+            co_await on_chunk(available.first(n));
+            reader.toss(n);
+            remaining -= n;
+            continue;
+        }
 
-        co_await on_chunk(std::as_bytes(request.first(n)));
-        remaining -= n;
+        if (co_await reader.fill_more() == 0)
+            throw protocol_error{"unexpected end of input"};
     }
 }
 
 std::size_t parse_chunk_size(std::span<const std::byte> line);
 
-template<typename Transport>
-nxt::task<std::span<const std::byte>> read_expected_crlf(
-    Transport & transport,
-    std::span<char> line_buffer,
-    std::span<const std::byte> initial)
+template<typename Reader>
+nxt::task<> read_expected_crlf(Reader & reader)
 {
-    auto crlf =
-        co_await async_grab(transport, line_buffer, initial, slurp("\r\n"));
-    if (!crlf.bytes.empty())
+    auto crlf = co_await reader.take_until("\r\n");
+    if (!crlf.empty())
         throw protocol_error{"chunk data was not followed by CRLF"};
-
-    co_return crlf.leftover;
 }
 
-template<typename Transport, typename OnChunk>
+template<typename Reader, typename OnChunk>
 nxt::task<> read_chunked(
-    Transport & transport,
-    std::span<char> line_buffer,
-    std::span<char> body_buffer,
-    std::span<const std::byte> initial,
+    Reader & reader,
     OnChunk on_chunk)
 {
-    if (body_buffer.empty())
-        throw protocol_error{"empty chunk read buffer"};
-
-    auto pending = initial;
     while (true) {
-        auto line = co_await async_grab(
-            transport, line_buffer, pending, slurp("\r\n"));
-        auto chunk_size = parse_chunk_size(line.bytes);
-        pending = line.leftover;
+        auto line = co_await reader.take_until("\r\n");
+        auto chunk_size = parse_chunk_size(line);
 
         if (chunk_size == 0) {
-            auto trailers = co_await async_grab(
-                transport, line_buffer, pending, slurp("\r\n"));
-            if (!trailers.bytes.empty())
+            auto trailers = co_await reader.take_until("\r\n");
+            if (!trailers.empty())
                 throw protocol_error{"chunk trailers are not supported"};
             co_return;
         }
 
-        auto remaining = chunk_size;
-        if (!pending.empty()) {
-            auto n = std::min(remaining, pending.size());
-            co_await on_chunk(pending.first(n));
-            pending = pending.subspan(n);
-            remaining -= n;
-        }
-
-        while (remaining > 0) {
-            auto request =
-                body_buffer.first(std::min(body_buffer.size(), remaining));
-            auto n = co_await transport.read_some(request);
-            if (n == 0)
-                throw protocol_error{"unexpected end of input"};
-            if (n > request.size())
-                throw protocol_error{"transport overfilled read buffer"};
-
-            co_await on_chunk(std::as_bytes(request.first(n)));
-            remaining -= n;
-        }
-
-        pending =
-            co_await read_expected_crlf(transport, line_buffer, pending);
+        co_await read_content_length(reader, chunk_size, on_chunk);
+        co_await read_expected_crlf(reader);
     }
 }
 
-template<typename Transport, typename OnChunk>
-nxt::task<> read_until_eof(
-    Transport & transport,
-    std::span<char> buffer,
-    std::span<const std::byte> initial,
+template<typename Reader, typename OnChunk>
+nxt::task<> read_until_eof(Reader & reader, OnChunk on_chunk)
+{
+    while (true) {
+        auto available = reader.buffered();
+        if (!available.empty()) {
+            co_await on_chunk(available);
+            reader.toss(available.size());
+            continue;
+        }
+
+        if (co_await reader.fill_more() == 0)
+            co_return;
+    }
+}
+
+template<typename Reader, typename OnChunk>
+nxt::task<> read_response_body_chunks(
+    Reader & reader,
+    const nxt::http::response_head & response,
     OnChunk on_chunk)
 {
-    if (!initial.empty())
-        co_await on_chunk(initial);
-
-    while (true) {
-        auto n = co_await transport.read_some(buffer);
-        if (n == 0)
-            co_return;
-        co_await on_chunk(std::as_bytes(buffer.first(n)));
+    // Body-stage dispatcher.  The byte reader owns read-ahead from the response
+    // head stage, and this layer strips only HTTP transfer framing.
+    if (response_is_chunked(response)) {
+        co_await read_chunked(reader, on_chunk);
+    } else if (auto length = response_content_length(response)) {
+        co_await read_content_length(reader, *length, on_chunk);
+    } else {
+        co_await read_until_eof(reader, on_chunk);
     }
+}
+
+template<typename Transport, typename Reader>
+nxt::task<response_start> send_request(
+    Transport & transport,
+    Reader & reader,
+    const nxt::http::request & request)
+{
+    co_await transport.write_all(nxt::http::serialize(request));
+
+    // Stage 1: parse only through the response head.  Any bytes already read
+    // beyond the "\r\n\r\n" boundary stay buffered in reader for the selected
+    // body parser.
+    auto head = co_await reader.take_until("\r\n\r\n");
+    auto response = parse_response_head(head);
+
+    co_return response_start{
+        .head = std::move(response),
+    };
+}
+
+template<typename Reader, typename OnChunk>
+nxt::task<> read_response_body(
+    Reader & reader,
+    const response_start & response,
+    OnChunk on_chunk)
+{
+    co_await read_response_body_chunks(
+        reader,
+        response.head,
+        on_chunk);
+}
+
+template<typename Reader>
+nxt::task<std::string> read_response_text(
+    Reader & reader,
+    const response_start & response)
+{
+    // Convenience semantic stage for callers that know the body should be
+    // treated as opaque bytes/text, commonly error responses.
+    auto body = std::string{};
+    auto collect = [&](std::span<const std::byte> chunk) -> nxt::task<> {
+        body += as_text(chunk);
+        co_return;
+    };
+
+    co_await read_response_body(reader, response, collect);
+    co_return body;
+}
+
+template<typename Reader, typename OnEvent>
+nxt::task<> read_sse_response(
+    Reader & reader,
+    const response_start & response,
+    OnEvent on_event)
+{
+    // Convenience semantic stage for callers that already decided this response
+    // is an SSE stream.  The HTTP transfer framing is stripped by
+    // read_response_body; only complete SSE events are emitted here.
+    auto parser = nxt::http::server_sent_event_parser{};
+    auto on_chunk = [&](std::span<const std::byte> chunk) -> nxt::task<> {
+        for (auto & event : parser.feed(as_text(chunk)))
+            co_await on_event(std::move(event));
+    };
+
+    co_await read_response_body(reader, response, on_chunk);
+
+    for (auto & event : parser.close())
+        co_await on_event(std::move(event));
 }
 
 } // namespace nxt::io::http

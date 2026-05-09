@@ -3,7 +3,7 @@
 #include <boost/ut.hpp>
 #include <nlohmann/json.hpp>
 
-#include <algorithm>
+#include <array>
 #include <span>
 #include <string>
 #include <string_view>
@@ -12,51 +12,6 @@
 namespace nxt::test {
 
 using namespace boost::ut;
-
-class scripted_transport
-{
-public:
-    explicit scripted_transport(std::vector<std::string_view> chunks)
-        : chunks_(std::move(chunks))
-    {
-    }
-
-    nxt::task<std::size_t> read_some(std::span<char> dst)
-    {
-        if (chunk_ == chunks_.size())
-            co_return 0;
-
-        auto src = chunks_[chunk_];
-        auto rest = src.substr(offset_);
-        auto n = std::min(dst.size(), rest.size());
-        std::ranges::copy(rest.substr(0, n), dst.begin());
-
-        offset_ += n;
-        if (offset_ == src.size()) {
-            ++chunk_;
-            offset_ = 0;
-        }
-
-        co_return n;
-    }
-
-    nxt::task<> write_all(std::string_view bytes)
-    {
-        written_ += bytes;
-        co_return;
-    }
-
-    [[nodiscard]] const std::string & written() const noexcept
-    {
-        return written_;
-    }
-
-private:
-    std::vector<std::string_view> chunks_;
-    std::size_t chunk_ = 0;
-    std::size_t offset_ = 0;
-    std::string written_;
-};
 
 suite llm_tests = [] {
     using namespace std::literals;
@@ -71,7 +26,9 @@ suite llm_tests = [] {
             .store = false,
         };
 
-        auto wire = nxt::io::llm::openai_responses_http_request(request);
+        auto wire =
+            nxt::http::serialize(
+                nxt::io::llm::openai_responses_http_request(request));
         auto body_start = wire.find("\r\n\r\n");
         expect(body_start != std::string::npos);
 
@@ -97,7 +54,8 @@ suite llm_tests = [] {
             "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\n"
             "Content-Length: "
             + std::to_string(sse.size()) + "\r\n\r\n" + sse;
-        scripted_transport transport{{response}};
+        auto chunks = std::array{std::string_view{response}};
+        nxt::io::string_transport transport{std::span{chunks}};
 
         std::vector<nxt::io::llm::stream_event> events;
         auto on_event = [&](nxt::io::llm::stream_event event) -> nxt::task<> {

@@ -7,6 +7,8 @@
 #include <chrono>
 #include <cmath>
 #include <iostream>
+#include <memory>
+#include <vector>
 
 #include "nxt/ansi.hpp"
 #include "nxtio/async.hpp"
@@ -42,6 +44,13 @@ public:
     [[nodiscard]] nxt::io_scheduler & scheduler() noexcept
     {
         return *scheduler_;
+    }
+
+    /// Access the scheduler owner for libcoro networking APIs.
+    [[nodiscard]] std::unique_ptr<nxt::io_scheduler> &
+    scheduler_handle() noexcept
+    {
+        return scheduler_;
     }
 
     /// Access the glyph table.
@@ -112,6 +121,11 @@ public:
     /// Print a line to the scroll region (only works when HUD
     /// height < terminal). In full-screen mode, this is a no-op.
     void println(std::string_view line);
+
+    /// Write text to the scroll region cursor. HUD rendering preserves this
+    /// cursor, so long-running streams can emit incremental text while the HUD
+    /// keeps redrawing below.
+    void print(std::string_view text);
 
     /// Clean up before exit - clears HUD region.
     void cleanup();
@@ -251,6 +265,7 @@ private:
     std::atomic<nxt::width_t> term_width_{80 * ch};
     std::atomic<nxt::height_t> term_height_{24 * ln};
     std::atomic<std::uint64_t> damage_counter_{0};
+    bool scrollback_cursor_initialized_{false};
     bool has_smoothed_hud_height_{false};
     double smoothed_hud_rows_{0.0};
     double hud_shrink_alpha_{0.05};

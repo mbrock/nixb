@@ -76,6 +76,7 @@ executable('nix-log-to-md',
 duckdb_test = executable('duckdb-test',
   'test/duckdb-test.cpp',
   dependencies : [duckdb_dep],
+  cpp_args : ['-Wno-unused-parameter'],
 )
 
 test('duckdb-test', duckdb_test)

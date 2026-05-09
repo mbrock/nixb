@@ -82,6 +82,12 @@ executable('nxtllm',
   dependencies : [nxt_dep],
 )
 
+executable('nxtllm-hud',
+  'src/nxtio/nxtllm-hud.cpp',
+  include_directories : nxt_inc,
+  dependencies : [nxt_dep],
+)
+
 nxt_test_inc = include_directories('test')
 
 nxt_libvterm_sources = files(
@@ -129,6 +135,12 @@ nxt_http_io_test = executable('http-io-test',
   dependencies : [nxt_dep],
 )
 
+nxt_buffers_test = executable('buffers-test',
+  'test/buffers-test.cpp',
+  include_directories : [nxt_inc, nxt_test_inc],
+  dependencies : [nxt_dep],
+)
+
 nxt_llm_test = executable('llm-test',
   'test/llm-test.cpp',
   include_directories : [nxt_inc, nxt_test_inc],
@@ -150,6 +162,7 @@ nxt_terminal_test = executable('terminal-test',
 test('raster-test', nxt_raster_test)
 test('http-test', nxt_http_test)
 test('http-io-test', nxt_http_io_test)
+test('buffers-test', nxt_buffers_test)
 test('llm-test', nxt_llm_test)
 test('net-include-test', nxt_net_include_test)
 test('terminal-test', nxt_terminal_test)
